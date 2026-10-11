@@ -4,6 +4,6 @@ dependencies:
   version: 9.1.4
 - name: mailu
   repository: https://apps.openshift.eu
-  version: 0.1.4
-digest: sha256:ca808d1684655bcdbb89dec3d15dc801683118f7925995a50a4c27086c83b3f4
-generated: "2026-10-11T15:19:09.255834121Z"
+  version: 0.1.5
+digest: sha256:9f3dd6808a212c8d2073c0bfb48b0661fe223680fd9e5988c82107c483ebcef5
+generated: "2026-10-11T16:27:44.731918843Z"

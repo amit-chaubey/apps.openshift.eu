@@ -2,7 +2,7 @@ apiVersion: v2
 name: nextcloud
 description: Nextcloud files, calendar and contacts with OnlyOffice document editing, Talk, an AI assistant, whiteboard, push and a MariaDB database with backup
 type: application
-version: 0.4.7
+version: 0.4.8
 appVersion: "33.0.8"
 home: https://apps.openshift.eu
 icon: https://raw.githubusercontent.com/nextcloud/promo/master/nextcloud-icon.svg
@@ -24,6 +24,6 @@ dependencies:
   version: 9.1.4
   repository: https://nextcloud.github.io/helm/
 - name: mailu
-  version: 0.1.4
+  version: 0.1.5
   repository: https://apps.openshift.eu
   condition: mailu.enabled
