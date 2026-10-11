@@ -18,6 +18,7 @@ for c in charts/*/; do
     bad=$(echo "$out" | grep -E '^kind: (Namespace|ClusterRole|ClusterRoleBinding|ClusterPolicy|CustomResourceDefinition|Subscription|OperatorGroup|SecurityContextConstraints)$' || true)
     [ -z "$bad" ] || { echo "FAIL $n: forbidden kind in $mode render: $bad"; fail=1; }
     if echo "$out" | grep -q 'system:openshift:scc:'; then echo "FAIL $n: SCC binding"; fail=1; fi
+    lab=$(echo "$out" | python3 ci/check_labels.py "$n") || { echo "FAIL $n: labels in $mode render:"; echo "$lab" | sed 's/^/  /'; fail=1; }
   done
   id=$(grep -rniE 'grncloud|grn\.cloud|hoolia|berry|146\.19\.|openshift\.eu|panther' "$c/templates" "$c/values.yaml" || true)
   [ -z "$id" ] || { echo "FAIL $n: platform identity: $id"; fail=1; }

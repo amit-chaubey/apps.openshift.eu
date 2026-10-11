@@ -22,7 +22,10 @@ portable to an arbitrary Kubernetes cluster.
 - `secrets.type` selects `kubernetes` (default) or `externalSecret`. With `kubernetes`,
   a machine-to-machine secret left empty is generated once and kept on upgrade.
 - `README.md` has the sections Purpose, Install and Delivery instructions.
+- Every object carries the `app` and `app.kubernetes.io` labels.
 - `ci/check.sh` passes.
+
+The full rules for a pull request are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 A chart is released when the `version` in its `Chart.yaml` changes on `main`. While the
 release workflow cannot run, `ci/release.sh <chart>` produces the same release by hand.
