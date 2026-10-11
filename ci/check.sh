@@ -8,6 +8,10 @@ for c in charts/*/; do
   c=${c%/}
   n=$(basename "$c")
   if grep -q '^dependencies:' "$c/Chart.yaml" && [ ! -d "$c/charts" ]; then
+    # helm builds only from repositories it knows by name
+    for r in $(grep -E '^\s+repository: https://' "$c/Chart.yaml" | awk '{print $2}'); do
+      helm repo add "dep-$(echo "$r" | cksum | cut -d' ' -f1)" "$r" >/dev/null
+    done
     helm dependency build "$c" >/dev/null || { echo "FAIL $n: helm dependency build"; fail=1; continue; }
   fi
   helm lint "$c" >/dev/null || { echo "FAIL $n: helm lint"; fail=1; }
