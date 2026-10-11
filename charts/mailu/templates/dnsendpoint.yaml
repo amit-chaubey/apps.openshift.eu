@@ -5,6 +5,8 @@ apiVersion: externaldns.k8s.io/v1alpha1
 kind: DNSEndpoint
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}
+  labels:
+    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "dns") | nindent 4 }}
 spec:
   endpoints:
   - dnsName: {{ $domain }}

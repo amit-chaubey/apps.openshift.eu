@@ -144,6 +144,10 @@ global:
 upstream:
   nameOverride: mailu
   fullnameOverride: mailu
+  # on every object of the upstream chart; they do not reach pods or selectors
+  commonLabels:
+    app: '{{ include "mailu.names.fullname" . }}'
+    app.kubernetes.io/part-of: '{{ .Release.Name }}'
 
   domain: example.org
   hostnames:

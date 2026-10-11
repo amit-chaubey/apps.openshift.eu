@@ -3,6 +3,8 @@ apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
   name: {{ include "omniroute.fullname" . }}
+  labels:
+    {{- include "omniroute.labels" (dict "root" $ "component" "build") | nindent 4 }}
 spec:
   source:
     type: Git

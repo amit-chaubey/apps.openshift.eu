@@ -11,6 +11,7 @@ metadata:
     app.kubernetes.io/name: onlyoffice
     app.kubernetes.io/instance: onlyoffice
     {{- include "wrapper.topologyLabels" "onlyoffice" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "onlyoffice" "component" "office" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
 spec:
   replicas: 1
   selector:
@@ -77,6 +78,7 @@ metadata:
   labels:
     app.kubernetes.io/name: onlyoffice
     app.kubernetes.io/instance: onlyoffice
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "onlyoffice" "component" "office" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -95,6 +97,7 @@ metadata:
   labels:
     app.kubernetes.io/name: onlyoffice
     app.kubernetes.io/instance: onlyoffice
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "onlyoffice" "component" "route" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
   {{- with include "wrapper.routeAnnotations" (dict "root" .) | fromYaml }}
   annotations:
     {{- toYaml . | nindent 4 }}

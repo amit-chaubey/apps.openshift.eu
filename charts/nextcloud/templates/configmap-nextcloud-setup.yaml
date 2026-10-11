@@ -4,6 +4,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nextcloud-setup
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud" "component" "config") | nindent 4 }}
 data:
   # Nextcloud checks the header on its own web server, behind the Route
   hsts.conf: |

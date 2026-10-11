@@ -5,6 +5,10 @@ metadata:
   labels:
     app.kubernetes.io/name: gitlab
     app.kubernetes.io/component: database
+    {{- include "instance.labels" (dict "root" $ "app" "gitlab-postgres" "component" "database" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/component")) | nindent 4 }}
+    app.openshift.io/runtime: postgresql
+  annotations:
+    app.openshift.io/vcs-uri: https://github.com/postgres/postgres
 spec:
   instances: {{ .Values.postgres.instances }}
   {{- if .Values.postgres.imageName }}

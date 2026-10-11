@@ -6,6 +6,7 @@ metadata:
   name: nextcloud-talk-recording
   labels:
     {{- include "wrapper.labels" "nextcloud-talk-recording" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-talk-recording" "component" "recording" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
 spec:
   accessModes:
   - ReadWriteOnce
@@ -27,6 +28,7 @@ metadata:
   labels:
     {{- include "wrapper.labels" "nextcloud-talk-recording" | nindent 4 }}
     {{- include "wrapper.topologyLabels" "nextcloud-talk-recording" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-talk-recording" "component" "recording" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
 spec:
   replicas: 1
   strategy:
@@ -104,6 +106,7 @@ metadata:
   name: nextcloud-talk-recording
   labels:
     {{- include "wrapper.labels" "nextcloud-talk-recording" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-talk-recording" "component" "recording" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
 spec:
   type: ClusterIP
   ports:

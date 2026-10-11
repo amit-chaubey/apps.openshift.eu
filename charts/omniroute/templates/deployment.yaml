@@ -2,13 +2,18 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "omniroute.fullname" . }}
-  {{- if .Values.build.enabled }}
+  labels:
+    {{- include "omniroute.labels" (dict "root" $ "component" "server") | nindent 4 }}
+    app.openshift.io/runtime: nodejs
   annotations:
+    app.openshift.io/vcs-uri: https://github.com/diegosouzapw/OmniRoute
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"{{ include "omniroute.fullname" . }}-redis"}]'
+    {{- if .Values.build.enabled }}
     image.openshift.io/triggers: |
       [{"from":{"kind":"ImageStreamTag","name":"{{ include "omniroute.fullname" . }}:latest"},
         "fieldPath":"spec.template.spec.containers[?(@.name==\"omniroute\")].image",
         "paused":false}]
-  {{- end }}
+    {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:

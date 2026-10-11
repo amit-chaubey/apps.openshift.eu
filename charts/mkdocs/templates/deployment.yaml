@@ -2,11 +2,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "mkdocs.fullname" . }}
-  {{- if and .Values.source.gitRepo .Values.source.webhook }}
+  labels:
+    {{- include "mkdocs.labels" (dict "root" $ "component" "web") | nindent 4 }}
+    app.openshift.io/runtime: nginx
   annotations:
+    app.openshift.io/vcs-uri: https://github.com/mkdocs/mkdocs
+    {{- if and .Values.source.gitRepo .Values.source.webhook }}
     # restarts the site after a build; a GitOps tool must ignore the image field
     image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"{{ include "mkdocs.fullname" . }}:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"mkdocs\")].image"}]'
-  {{- end }}
+    {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:

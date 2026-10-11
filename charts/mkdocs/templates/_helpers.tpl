@@ -40,3 +40,10 @@ cluster, else a new random one.
 {{- randAlphaNum (int .length) | b64enc -}}
 {{- end -}}
 {{- end -}}
+
+{{/* Labels of one object. A key the object sets itself is left out with skip. */}}
+{{- define "mkdocs.labels" -}}
+{{- $l := dict "app" (.app | default (include "mkdocs.fullname" .root)) "app.kubernetes.io/name" (.name | default .root.Chart.Name) "app.kubernetes.io/component" .component "app.kubernetes.io/part-of" .root.Release.Name "app.kubernetes.io/version" .root.Chart.AppVersion -}}
+{{- range .skip }}{{- $_ := unset $l . }}{{- end -}}
+{{- toYaml $l -}}
+{{- end -}}

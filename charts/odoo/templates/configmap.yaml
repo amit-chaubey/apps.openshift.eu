@@ -5,6 +5,11 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: odoo-config
+  {{- /* .checksum: rendered for the pod checksum, which leaves the labels out */}}
+  {{- if not .checksum }}
+  labels:
+    {{- include "odoo.labels" (dict "root" $ "component" "config") | nindent 4 }}
+  {{- end }}
 data:
   odoo.conf: |
     [options]

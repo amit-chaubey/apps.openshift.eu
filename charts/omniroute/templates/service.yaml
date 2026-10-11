@@ -2,6 +2,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "omniroute.fullname" . }}
+  labels:
+    {{- include "omniroute.labels" (dict "root" $ "component" "server") | nindent 4 }}
 spec:
   selector:
     app: {{ include "omniroute.fullname" . }}

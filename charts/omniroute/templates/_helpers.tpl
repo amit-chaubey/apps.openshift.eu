@@ -26,3 +26,15 @@ cluster, else a new random one. hex=true gives 64 hex characters.
 {{- randAlphaNum (int .length) | b64enc -}}
 {{- end -}}
 {{- end -}}
+
+{{/* Labels of one object. A key the object sets itself is left out with skip. */}}
+{{- define "omniroute.labels" -}}
+{{- $l := dict "app" (.app | default (include "omniroute.fullname" .root)) "app.kubernetes.io/name" (.name | default .root.Chart.Name) "app.kubernetes.io/component" .component "app.kubernetes.io/part-of" .root.Release.Name "app.kubernetes.io/version" .root.Chart.AppVersion -}}
+{{- range .skip }}{{- $_ := unset $l . }}{{- end -}}
+{{- toYaml $l -}}
+{{- end -}}
+
+{{/* Labels of the objects of the Redis store. */}}
+{{- define "omniroute.redisLabels" -}}
+{{- include "omniroute.labels" (dict "root" . "app" (printf "%s-redis" (include "omniroute.fullname" .)) "name" "redis" "component" "cache") -}}
+{{- end -}}

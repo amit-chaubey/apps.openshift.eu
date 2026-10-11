@@ -3,6 +3,13 @@ apiVersion: k8s.mariadb.com/v1alpha1
 kind: MariaDB
 metadata:
   name: nextcloud-mariadb
+  {{- with include "wrapper.topologyAnnotations" "nextcloud-mariadb" }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-mariadb" "name" "mariadb" "component" "database" "skip" (list "app.kubernetes.io/part-of")) | nindent 4 }}
+    {{- include "wrapper.topologyLabels" "nextcloud-mariadb" | nindent 4 }}
 spec:
   image: {{ .Values.database.image }}
   replicas: {{ .Values.database.replicas }}

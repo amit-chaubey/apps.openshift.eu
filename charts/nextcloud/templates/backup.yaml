@@ -5,6 +5,8 @@ apiVersion: objectbucket.io/v1alpha1
 kind: ObjectBucketClaim
 metadata:
   name: {{ $claim }}
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-mariadb" "name" "mariadb" "component" "backup") | nindent 4 }}
 spec:
   {{- if $b.s3.bucket }}
   bucketName: {{ $b.s3.bucket }}
@@ -28,6 +30,8 @@ apiVersion: k8s.mariadb.com/v1alpha1
 kind: Backup
 metadata:
   name: {{ $claim }}
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-mariadb" "name" "mariadb" "component" "backup") | nindent 4 }}
   annotations:
     # a scheduled backup is not a rollout in progress
     argocd.argoproj.io/ignore-healthcheck: "true"

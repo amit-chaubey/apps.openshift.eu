@@ -3,6 +3,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}-postfix-egress
+  labels:
+    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "mail") | nindent 4 }}
   {{- with merge (deepCopy .Values.egressService.annotations) (include "mailu-wrapper.publicAddress" . | fromYaml) }}
   annotations: {{- toYaml . | nindent 4 }}
   {{- end }}

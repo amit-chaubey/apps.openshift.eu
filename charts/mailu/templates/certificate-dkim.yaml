@@ -5,6 +5,8 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}-dkim
+  labels:
+    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "certificate") | nindent 4 }}
 spec:
   secretName: {{ include "mailu-wrapper.fullname" . }}-dkim
   commonName: {{ .Values.upstream.domain }}

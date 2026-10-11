@@ -5,6 +5,8 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "mkdocs.fullname" . }}
+  labels:
+    {{- include "mkdocs.labels" (dict "root" $ "component" "network") | nindent 4 }}
 spec:
   podSelector:
     matchLabels:

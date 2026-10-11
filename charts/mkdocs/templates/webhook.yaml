@@ -4,6 +4,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "mkdocs.fullname" . }}-webhook
+  labels:
+    {{- include "mkdocs.labels" (dict "root" $ "component" "rbac") | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

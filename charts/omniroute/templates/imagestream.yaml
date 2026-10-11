@@ -3,6 +3,8 @@ apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: {{ include "omniroute.fullname" . }}
+  labels:
+    {{- include "omniroute.labels" (dict "root" $ "component" "build") | nindent 4 }}
 spec:
   lookupPolicy:
     local: true

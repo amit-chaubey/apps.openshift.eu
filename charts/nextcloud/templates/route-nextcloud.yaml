@@ -2,6 +2,8 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: nextcloud
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud" "component" "route") | nindent 4 }}
   {{- with include "wrapper.routeAnnotations" (dict "root" .) | fromYaml }}
   annotations:
     {{- toYaml . | nindent 4 }}

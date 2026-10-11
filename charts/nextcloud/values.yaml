@@ -339,9 +339,11 @@ nextcloud:
   fullnameOverride: nextcloud
   # group, icon and arrows in the topology view of the console
   deploymentLabels:
+    app: nextcloud
     app.kubernetes.io/part-of: nextcloud
     app.openshift.io/runtime: php
   deploymentAnnotations:
+    app.openshift.io/vcs-uri: https://github.com/nextcloud/server
     app.openshift.io/custom-icon: https://raw.githubusercontent.com/nextcloud/promo/master/nextcloud-icon.svg
     app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"StatefulSet","name":"nextcloud-mariadb"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-redis"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-imaginary"},{"apiVersion":"apps/v1","kind":"Deployment","name":"onlyoffice"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-signaling"},{"apiVersion":"apps/v1","kind":"Deployment","name":"mailu-front"}]'
   image:
@@ -483,6 +485,10 @@ nextcloud:
           memory: 128Mi
   imaginary:
     enabled: true
+    service:
+      labels:
+        app: nextcloud-imaginary
+        app.kubernetes.io/part-of: nextcloud
     securityContext:
       runAsNonRoot: true
       runAsUser: 1000
@@ -492,10 +498,14 @@ nextcloud:
         memory: 128Mi
   persistence:
     enabled: true
+    labels: &volumeLabels
+      app: nextcloud
+      app.kubernetes.io/part-of: nextcloud
     accessMode: ReadWriteOnce
     size: 10Gi
     nextcloudData:
       enabled: true
+      labels: *volumeLabels
       accessMode: ReadWriteOnce
       # the space for user files
       size: 25Gi

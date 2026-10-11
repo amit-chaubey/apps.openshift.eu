@@ -10,6 +10,7 @@ metadata:
   labels:
     {{- include "wrapper.labels" "nextcloud-redis" | nindent 4 }}
     {{- include "wrapper.topologyLabels" "nextcloud-redis" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-redis" "component" "cache" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
 spec:
   replicas: 1
   strategy:
@@ -74,6 +75,7 @@ metadata:
   name: nextcloud-redis
   labels:
     {{- include "wrapper.labels" "nextcloud-redis" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-redis" "component" "cache" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
 spec:
   type: ClusterIP
   ports:

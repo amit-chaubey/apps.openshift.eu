@@ -2,6 +2,8 @@ apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
   name: {{ include "mkdocs.fullname" . }}
+  labels:
+    {{- include "mkdocs.labels" (dict "root" $ "component" "build") | nindent 4 }}
 spec:
   source:
     {{- if .Values.source.gitRepo }}

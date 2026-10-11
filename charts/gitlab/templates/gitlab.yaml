@@ -123,6 +123,11 @@ metadata:
   name: gitlab
   labels:
     app.kubernetes.io/name: gitlab
+    {{- include "instance.labels" (dict "root" $ "component" "server" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app.openshift.io/runtime: gitlab
+  annotations:
+    app.openshift.io/vcs-uri: https://gitlab.com/gitlab-org/gitlab
+    app.openshift.io/connects-to: '[{"apiVersion":"postgresql.cnpg.io/v1","kind":"Cluster","name":"gitlab-postgres"},{"apiVersion":"apps/v1","kind":"Deployment","name":"gitlab-valkey"},{"apiVersion":"objectbucket.io/v1alpha1","kind":"ObjectBucketClaim","name":"gitlab-objects"}]'
 spec:
   chart:
     version: {{ .Values.gitlab.chartVersion | quote }}
@@ -135,6 +140,8 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: gitlab
+  labels:
+    {{- include "instance.labels" (dict "root" $ "component" "route") | nindent 4 }}
   {{- if and .Values.route.hostname .Values.route.annotations }}
   annotations:
     {{- toYaml .Values.route.annotations | nindent 4 }}

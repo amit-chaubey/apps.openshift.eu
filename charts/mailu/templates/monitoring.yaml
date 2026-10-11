@@ -5,6 +5,7 @@ kind: Service
 metadata:
   name: {{ $fullname }}-dovecot-metrics
   labels: {{- include "mailu-wrapper.selector" (dict "context" . "component" "dovecot-metrics") | nindent 4 }}
+    {{- include "mailu-wrapper.labels" (dict "root" $ "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/component")) | nindent 4 }}
 spec:
   selector: {{- include "mailu-wrapper.selector" (dict "context" . "component" "dovecot") | nindent 4 }}
   ports:
@@ -16,6 +17,8 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ $fullname }}-dovecot-metrics
+  labels:
+    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "monitoring") | nindent 4 }}
 spec:
   selector:
     matchLabels: {{- include "mailu-wrapper.selector" (dict "context" . "component" "dovecot-metrics") | nindent 6 }}
@@ -28,6 +31,8 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ $fullname }}-rspamd
+  labels:
+    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "monitoring") | nindent 4 }}
 spec:
   selector:
     matchLabels: {{- include "mailu-wrapper.selector" (dict "context" . "component" "rspamd") | nindent 6 }}
@@ -47,6 +52,8 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ $fullname }}-allow-monitoring
+  labels:
+    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "monitoring") | nindent 4 }}
 spec:
   podSelector:
     matchLabels: {{- include "mailu-wrapper.selector" (dict "context" .) | nindent 6 }}

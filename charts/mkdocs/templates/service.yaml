@@ -2,6 +2,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "mkdocs.fullname" . }}
+  labels:
+    {{- include "mkdocs.labels" (dict "root" $ "component" "web") | nindent 4 }}
 spec:
   selector:
     app: {{ include "mkdocs.fullname" . }}

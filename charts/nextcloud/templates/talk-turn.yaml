@@ -19,6 +19,7 @@ metadata:
   labels:
     {{- include "wrapper.labels" "nextcloud-turn" | nindent 4 }}
     {{- include "wrapper.topologyLabels" "nextcloud-turn" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-turn" "component" "turn" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
 spec:
   replicas: 1
   selector:
@@ -141,6 +142,7 @@ metadata:
   name: nextcloud-turn
   labels:
     {{- include "wrapper.labels" "nextcloud-turn" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-turn" "component" "turn" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
   {{- with $annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -183,6 +185,8 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: nextcloud-turn
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-turn" "component" "network") | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
@@ -211,6 +215,8 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: nextcloud-turn
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-turn" "component" "certificate") | nindent 4 }}
 spec:
   secretName: nextcloud-turn-tls
   dnsNames:

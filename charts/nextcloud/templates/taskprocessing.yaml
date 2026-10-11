@@ -11,6 +11,7 @@ metadata:
   labels:
     {{- include "wrapper.labels" "nextcloud-taskprocessing" | nindent 4 }}
     {{- include "wrapper.topologyLabels" "nextcloud-taskprocessing" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-taskprocessing" "component" "worker" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
 spec:
   replicas: 1
   strategy:

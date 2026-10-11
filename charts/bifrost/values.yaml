@@ -29,6 +29,14 @@ secrets:
 upstream:
   nameOverride: bifrost
   fullnameOverride: bifrost
+  # topology view of the console; on the workload only, not on its pods
+  deploymentLabels:
+    app: bifrost
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: bifrost
+    app.openshift.io/runtime: golang
+  deploymentAnnotations:
+    app.openshift.io/vcs-uri: https://github.com/maximhq/bifrost
   image:
     tag: v1.5.8
   resources:

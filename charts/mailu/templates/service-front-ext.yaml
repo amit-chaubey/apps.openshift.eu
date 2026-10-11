@@ -17,6 +17,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}-front-ext
+  labels:
+    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "mail") | nindent 4 }}
   {{- with $annotations }}
   annotations: {{- toYaml . | nindent 4 }}
   {{- end }}

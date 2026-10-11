@@ -3,6 +3,8 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}
+  labels:
+    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "route") | nindent 4 }}
 spec:
   {{- if .Values.route.hostname }}
   host: {{ .Values.route.hostname }}

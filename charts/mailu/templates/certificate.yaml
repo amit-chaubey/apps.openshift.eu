@@ -3,6 +3,8 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}-certificates
+  labels:
+    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "certificate") | nindent 4 }}
 spec:
   secretName: {{ include "mailu-wrapper.fullname" . }}-certificates
   commonName: {{ first .Values.upstream.hostnames }}

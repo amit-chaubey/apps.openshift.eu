@@ -61,3 +61,10 @@ metallb.io/loadBalancerIPs: {{ . | quote }}
 {{- define "mailu-wrapper.trafficPolicy" -}}
 {{- if ((.root.Values.global).publicAddress).shared -}}Cluster{{- else -}}{{ .policy }}{{- end -}}
 {{- end -}}
+
+{{/* Labels of one object. A key the object sets itself is left out with skip. */}}
+{{- define "mailu-wrapper.labels" -}}
+{{- $l := dict "app" (.app | default (include "mailu-wrapper.fullname" .root)) "app.kubernetes.io/name" (.name | default .root.Values.upstream.nameOverride) "app.kubernetes.io/component" .component "app.kubernetes.io/part-of" .root.Release.Name "app.kubernetes.io/version" .root.Chart.AppVersion -}}
+{{- range .skip }}{{- $_ := unset $l . }}{{- end -}}
+{{- toYaml $l -}}
+{{- end -}}

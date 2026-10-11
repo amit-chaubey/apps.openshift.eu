@@ -2,3 +2,5 @@ apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: {{ include "mkdocs.fullname" . }}
+  labels:
+    {{- include "mkdocs.labels" (dict "root" $ "component" "build") | nindent 4 }}

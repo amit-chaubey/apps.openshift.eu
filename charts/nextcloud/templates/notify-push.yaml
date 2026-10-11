@@ -11,6 +11,7 @@ metadata:
   labels:
     {{- include "wrapper.labels" "nextcloud-notify-push" | nindent 4 }}
     {{- include "wrapper.topologyLabels" "nextcloud-notify-push" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-notify-push" "component" "push" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
 spec:
   replicas: 1
   strategy:
@@ -105,6 +106,7 @@ metadata:
   name: nextcloud-notify-push
   labels:
     {{- include "wrapper.labels" "nextcloud-notify-push" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-notify-push" "component" "push" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
 spec:
   type: ClusterIP
   ports:

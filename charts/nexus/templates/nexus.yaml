@@ -2,6 +2,8 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: nexus-data
+  labels:
+    {{- include "nexus.labels" (dict "root" $ "component" "storage") | nindent 4 }}
 spec:
   accessModes:
   - ReadWriteOnce
@@ -18,6 +20,10 @@ metadata:
   name: nexus
   labels:
     app.kubernetes.io/name: nexus
+    {{- include "nexus.labels" (dict "root" $ "component" "server" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app.openshift.io/runtime: java
+  annotations:
+    app.openshift.io/vcs-uri: https://github.com/sonatype/nexus-public
 spec:
   replicas: 1
   # the data volume is ReadWriteOnce: the old pod must release it first
@@ -92,6 +98,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: nexus
+  labels:
+    {{- include "nexus.labels" (dict "root" $ "component" "server") | nindent 4 }}
 spec:
   selector:
     app.kubernetes.io/name: nexus
@@ -104,6 +112,8 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: nexus
+  labels:
+    {{- include "nexus.labels" (dict "root" $ "component" "route") | nindent 4 }}
   {{- if and .Values.route.hostname .Values.route.annotations }}
   annotations:
     {{- toYaml .Values.route.annotations | nindent 4 }}

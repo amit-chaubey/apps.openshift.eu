@@ -4,6 +4,8 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: nextcloud
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud" "component" "monitoring") | nindent 4 }}
 spec:
   groups:
   - name: nextcloud

@@ -2,6 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "omniroute.fullname" . }}-redis
+  labels:
+    {{- include "omniroute.redisLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: redis
+  annotations:
+    app.openshift.io/vcs-uri: https://github.com/redis/redis
 spec:
   replicas: 1
   strategy:

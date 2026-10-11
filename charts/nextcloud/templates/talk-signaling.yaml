@@ -11,6 +11,7 @@ metadata:
   labels:
     {{- include "wrapper.labels" "nextcloud-nats" | nindent 4 }}
     {{- include "wrapper.topologyLabels" "nextcloud-nats" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-nats" "component" "queue" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
 spec:
   replicas: 1
   selector:
@@ -71,6 +72,7 @@ metadata:
   name: nextcloud-nats
   labels:
     {{- include "wrapper.labels" "nextcloud-nats" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-nats" "component" "queue" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -91,6 +93,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nextcloud-signaling
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-signaling" "component" "config") | nindent 4 }}
 data:
   # the init container replaces the names in capitals by the secrets
   server.conf: |
@@ -131,6 +135,7 @@ metadata:
   labels:
     {{- include "wrapper.labels" "nextcloud-signaling" | nindent 4 }}
     {{- include "wrapper.topologyLabels" "nextcloud-signaling" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-signaling" "component" "signaling" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
 spec:
   replicas: 1
   selector:
@@ -236,6 +241,7 @@ metadata:
   name: nextcloud-signaling
   labels:
     {{- include "wrapper.labels" "nextcloud-signaling" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-signaling" "component" "signaling" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -252,6 +258,7 @@ metadata:
   name: nextcloud-signaling
   labels:
     {{- include "wrapper.labels" "nextcloud-signaling" | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-signaling" "component" "route" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
   annotations:
     {{- include "wrapper.routeAnnotations" (dict "root" .) | nindent 4 }}
 spec:

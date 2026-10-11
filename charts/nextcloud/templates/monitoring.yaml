@@ -19,6 +19,7 @@ metadata:
   labels:
     {{- include "wrapper.labels" $e.name | nindent 4 }}
     {{- include "wrapper.topologyLabels" $e.name | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" $e.name "component" "monitoring" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
 spec:
   replicas: 1
   selector:
@@ -95,6 +96,7 @@ metadata:
   name: {{ $e.name }}
   labels:
     {{- include "wrapper.labels" $e.name | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" $e.name "component" "monitoring" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -110,6 +112,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nextcloud-blackbox-exporter
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-blackbox-exporter" "component" "config") | nindent 4 }}
 data:
   config.yml: |
     modules:
@@ -144,6 +148,8 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ $sm.name }}
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" $sm.name "component" "monitoring") | nindent 4 }}
 spec:
   selector:
     matchLabels:
@@ -163,6 +169,8 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: nextcloud-blackbox-exporter
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-blackbox-exporter" "component" "monitoring") | nindent 4 }}
 spec:
   selector:
     matchLabels:

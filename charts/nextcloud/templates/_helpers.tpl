@@ -89,6 +89,7 @@ metadata:
   name: {{ .name }}
   labels:
     {{- include "wrapper.labels" .name | nindent 4 }}
+    {{- include "wrapper.objectLabels" (dict "root" .root "app" .name "component" "route" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
   annotations:
     {{- include "wrapper.routeAnnotations" (dict "root" .root "path" true) | nindent 4 }}
 spec:
@@ -132,6 +133,8 @@ apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: {{ .name }}
+  labels:
+    {{- include "wrapper.objectLabels" (dict "root" .root "app" .app "component" "credentials") | nindent 4 }}
 spec:
   refreshInterval: {{ $es.refreshInterval }}
   secretStoreRef:
@@ -163,22 +166,23 @@ spec:
 
 {{/*
 Topology view of the OpenShift console. Per workload: the group it is drawn in, the icon,
-a product logo where one exists, and the workloads it calls (drawn as arrows). An arrow to a workload that is switched off
+a product logo where one exists, the source repository, and the workloads it calls (drawn as arrows). An arrow to a workload that is switched off
 is not drawn.
 */}}
 {{- define "wrapper.topology" -}}
-nextcloud-taskprocessing: {group: nextcloud, runtime: php, to: [StatefulSet/nextcloud-mariadb, Deployment/nextcloud-redis], icon: "https://raw.githubusercontent.com/nextcloud/promo/master/nextcloud-icon.svg"}
-nextcloud-notify-push: {group: nextcloud, runtime: rust, to: [Deployment/nextcloud-redis, StatefulSet/nextcloud-mariadb]}
-nextcloud-redis: {group: nextcloud, runtime: redis}
-onlyoffice: {group: nextcloud-office, runtime: nodejs, icon: "https://avatars.githubusercontent.com/ONLYOFFICE"}
-nextcloud-whiteboard: {group: nextcloud-office, runtime: nodejs, to: [Deployment/nextcloud, Deployment/nextcloud-redis], icon: "https://raw.githubusercontent.com/nextcloud/promo/master/nextcloud-icon.svg"}
-nextcloud-signaling: {group: nextcloud-talk, runtime: golang, to: [Deployment/nextcloud-nats, Deployment/nextcloud-turn]}
-nextcloud-nats: {group: nextcloud-talk, runtime: golang, icon: "https://raw.githubusercontent.com/cncf/artwork/main/projects/nats/icon/color/nats-icon-color.svg"}
-nextcloud-turn: {group: nextcloud-talk}
-nextcloud-talk-recording: {group: nextcloud-talk, runtime: python, to: [Deployment/nextcloud-signaling]}
-nextcloud-exporter: {group: nextcloud-monitoring, runtime: golang, to: [Deployment/nextcloud], icon: "https://raw.githubusercontent.com/cncf/artwork/main/projects/prometheus/icon/color/prometheus-icon-color.svg"}
-nextcloud-redis-exporter: {group: nextcloud-monitoring, runtime: golang, to: [Deployment/nextcloud-redis], icon: "https://raw.githubusercontent.com/cncf/artwork/main/projects/prometheus/icon/color/prometheus-icon-color.svg"}
-nextcloud-blackbox-exporter: {group: nextcloud-monitoring, runtime: golang, to: [Deployment/nextcloud], icon: "https://raw.githubusercontent.com/cncf/artwork/main/projects/prometheus/icon/color/prometheus-icon-color.svg"}
+nextcloud-taskprocessing: {group: nextcloud, runtime: php, to: [StatefulSet/nextcloud-mariadb, Deployment/nextcloud-redis], icon: "https://raw.githubusercontent.com/nextcloud/promo/master/nextcloud-icon.svg", vcs: "https://github.com/nextcloud/server"}
+nextcloud-notify-push: {group: nextcloud, runtime: rust, to: [Deployment/nextcloud-redis, StatefulSet/nextcloud-mariadb], vcs: "https://github.com/nextcloud/notify_push"}
+nextcloud-redis: {group: nextcloud, runtime: redis, vcs: "https://github.com/redis/redis"}
+onlyoffice: {group: nextcloud-office, runtime: nodejs, icon: "https://avatars.githubusercontent.com/ONLYOFFICE", vcs: "https://github.com/ONLYOFFICE/DocumentServer"}
+nextcloud-whiteboard: {group: nextcloud-office, runtime: nodejs, to: [Deployment/nextcloud, Deployment/nextcloud-redis], icon: "https://raw.githubusercontent.com/nextcloud/promo/master/nextcloud-icon.svg", vcs: "https://github.com/nextcloud/whiteboard"}
+nextcloud-signaling: {group: nextcloud-talk, runtime: golang, to: [Deployment/nextcloud-nats, Deployment/nextcloud-turn], vcs: "https://github.com/strukturag/nextcloud-spreed-signaling"}
+nextcloud-nats: {group: nextcloud-talk, runtime: golang, icon: "https://raw.githubusercontent.com/cncf/artwork/main/projects/nats/icon/color/nats-icon-color.svg", vcs: "https://github.com/nats-io/nats-server"}
+nextcloud-turn: {group: nextcloud-talk, vcs: "https://github.com/coturn/coturn"}
+nextcloud-talk-recording: {group: nextcloud-talk, runtime: python, to: [Deployment/nextcloud-signaling], vcs: "https://github.com/nextcloud/nextcloud-talk-recording"}
+nextcloud-exporter: {group: nextcloud-monitoring, runtime: golang, to: [Deployment/nextcloud], icon: "https://raw.githubusercontent.com/cncf/artwork/main/projects/prometheus/icon/color/prometheus-icon-color.svg", vcs: "https://github.com/xperimental/nextcloud-exporter"}
+nextcloud-redis-exporter: {group: nextcloud-monitoring, runtime: golang, to: [Deployment/nextcloud-redis], icon: "https://raw.githubusercontent.com/cncf/artwork/main/projects/prometheus/icon/color/prometheus-icon-color.svg", vcs: "https://github.com/oliver006/redis_exporter"}
+nextcloud-mariadb: {group: nextcloud, runtime: mariadb, vcs: "https://github.com/MariaDB/server"}
+nextcloud-blackbox-exporter: {group: nextcloud-monitoring, runtime: golang, to: [Deployment/nextcloud], icon: "https://raw.githubusercontent.com/cncf/artwork/main/projects/prometheus/icon/color/prometheus-icon-color.svg", vcs: "https://github.com/prometheus/blackbox_exporter"}
 {{- end -}}
 
 {{- define "wrapper.topologyLabels" -}}
@@ -204,6 +208,21 @@ app.openshift.io/connects-to: {{ $to | toJson | squote }}
 {{- with $t.icon }}
 app.openshift.io/custom-icon: {{ . }}
 {{- end }}
+{{- with $t.vcs }}
+app.openshift.io/vcs-uri: {{ . }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Labels of one object. .app is the component it belongs to, as named in wrapper.topology:
+the object joins the group of that component. A key the object sets itself is left out
+with skip: the name under wrapper.labels, the group under wrapper.topologyLabels.
+*/}}
+{{- define "wrapper.objectLabels" -}}
+{{- $t := index (include "wrapper.topology" . | fromYaml) .app | default dict -}}
+{{- $l := dict "app" .app "app.kubernetes.io/name" (.name | default .app) "app.kubernetes.io/component" .component "app.kubernetes.io/part-of" ($t.group | default "nextcloud") "app.kubernetes.io/version" .root.Chart.AppVersion -}}
+{{- range .skip }}{{- $_ := unset $l . }}{{- end -}}
+{{- toYaml $l -}}
 {{- end -}}
 
 {{/*
