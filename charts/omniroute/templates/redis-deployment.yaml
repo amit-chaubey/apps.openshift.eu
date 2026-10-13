@@ -3,7 +3,10 @@ kind: Deployment
 metadata:
   name: {{ include "omniroute.fullname" . }}-redis
   labels:
-    {{- include "omniroute.redisLabels" $ | nindent 4 }}
+    app: {{ printf "%s-redis" (include "omniroute.fullname" $) | quote }}
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    {{- include "omniroute.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: redis
   annotations:
     app.openshift.io/vcs-uri: https://github.com/redis/redis

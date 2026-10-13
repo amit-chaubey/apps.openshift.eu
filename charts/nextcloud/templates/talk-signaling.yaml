@@ -4,14 +4,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nextcloud-nats
-  {{- with include "wrapper.topologyAnnotations" "nextcloud-nats" }}
   annotations:
-    {{- . | nindent 4 }}
-  {{- end }}
+    app.openshift.io/custom-icon: https://raw.githubusercontent.com/cncf/artwork/main/projects/nats/icon/color/nats-icon-color.svg
+    app.openshift.io/vcs-uri: https://github.com/nats-io/nats-server
   labels:
-    {{- include "wrapper.labels" "nextcloud-nats" | nindent 4 }}
-    {{- include "wrapper.topologyLabels" "nextcloud-nats" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-nats" "component" "queue" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
+    app: nextcloud-nats
+    app.kubernetes.io/name: nextcloud-nats
+    app.kubernetes.io/instance: nextcloud-nats
+    app.kubernetes.io/component: queue
+    app.kubernetes.io/part-of: nextcloud-talk
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: golang
 spec:
   replicas: 1
   selector:
@@ -71,8 +74,12 @@ kind: Service
 metadata:
   name: nextcloud-nats
   labels:
-    {{- include "wrapper.labels" "nextcloud-nats" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-nats" "component" "queue" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app: nextcloud-nats
+    app.kubernetes.io/name: nextcloud-nats
+    app.kubernetes.io/instance: nextcloud-nats
+    app.kubernetes.io/component: queue
+    app.kubernetes.io/part-of: nextcloud-talk
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -94,7 +101,11 @@ kind: ConfigMap
 metadata:
   name: nextcloud-signaling
   labels:
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-signaling" "component" "config") | nindent 4 }}
+    app: nextcloud-signaling
+    app.kubernetes.io/name: nextcloud-signaling
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: nextcloud-talk
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 data:
   # the init container replaces the names in capitals by the secrets
   server.conf: |
@@ -128,14 +139,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nextcloud-signaling
-  {{- with include "wrapper.topologyAnnotations" "nextcloud-signaling" }}
   annotations:
-    {{- . | nindent 4 }}
-  {{- end }}
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-nats"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-turn"}]'
+    app.openshift.io/vcs-uri: https://github.com/strukturag/nextcloud-spreed-signaling
   labels:
-    {{- include "wrapper.labels" "nextcloud-signaling" | nindent 4 }}
-    {{- include "wrapper.topologyLabels" "nextcloud-signaling" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-signaling" "component" "signaling" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
+    app: nextcloud-signaling
+    app.kubernetes.io/name: nextcloud-signaling
+    app.kubernetes.io/instance: nextcloud-signaling
+    app.kubernetes.io/component: signaling
+    app.kubernetes.io/part-of: nextcloud-talk
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: golang
 spec:
   replicas: 1
   selector:
@@ -240,8 +254,12 @@ kind: Service
 metadata:
   name: nextcloud-signaling
   labels:
-    {{- include "wrapper.labels" "nextcloud-signaling" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-signaling" "component" "signaling" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app: nextcloud-signaling
+    app.kubernetes.io/name: nextcloud-signaling
+    app.kubernetes.io/instance: nextcloud-signaling
+    app.kubernetes.io/component: signaling
+    app.kubernetes.io/part-of: nextcloud-talk
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -257,8 +275,12 @@ kind: Route
 metadata:
   name: nextcloud-signaling
   labels:
-    {{- include "wrapper.labels" "nextcloud-signaling" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-signaling" "component" "route" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app: nextcloud-signaling
+    app.kubernetes.io/name: nextcloud-signaling
+    app.kubernetes.io/instance: nextcloud-signaling
+    app.kubernetes.io/component: route
+    app.kubernetes.io/part-of: nextcloud-talk
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
   annotations:
     {{- include "wrapper.routeAnnotations" (dict "root" .) | nindent 4 }}
 spec:

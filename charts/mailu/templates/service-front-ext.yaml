@@ -18,7 +18,10 @@ kind: Service
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}-front-ext
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "mail") | nindent 4 }}
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/component: mail
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
   {{- with $annotations }}
   annotations: {{- toYaml . | nindent 4 }}
   {{- end }}

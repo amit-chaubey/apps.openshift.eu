@@ -6,7 +6,10 @@ kind: NetworkPolicy
 metadata:
   name: {{ include "mkdocs.fullname" . }}
   labels:
-    {{- include "mkdocs.labels" (dict "root" $ "component" "network") | nindent 4 }}
+    app: {{ include "mkdocs.fullname" $ | quote }}
+    app.kubernetes.io/name: mkdocs
+    app.kubernetes.io/component: network
+    {{- include "mkdocs.commonLabels" $ | nindent 4 }}
 spec:
   podSelector:
     matchLabels:

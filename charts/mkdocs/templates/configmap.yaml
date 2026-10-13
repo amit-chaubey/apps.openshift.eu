@@ -3,7 +3,10 @@ kind: ConfigMap
 metadata:
   name: {{ include "mkdocs.fullname" . }}-nginx
   labels:
-    {{- include "mkdocs.labels" (dict "root" $ "component" "config") | nindent 4 }}
+    app: {{ include "mkdocs.fullname" $ | quote }}
+    app.kubernetes.io/name: mkdocs
+    app.kubernetes.io/component: config
+    {{- include "mkdocs.commonLabels" $ | nindent 4 }}
 data:
   site.conf: |
     {{- if .Values.oauth.enabled }}

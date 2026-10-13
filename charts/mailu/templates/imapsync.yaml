@@ -5,7 +5,10 @@ kind: ConfigMap
 metadata:
   name: {{ $name }}-nginx-config
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "migration" "app" $name "name" "imapsync") | nindent 4 }}
+    app: {{ $name | quote }}
+    app.kubernetes.io/name: imapsync
+    app.kubernetes.io/component: migration
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 data:
   default.conf: |
     server {
@@ -26,7 +29,10 @@ kind: Deployment
 metadata:
   name: {{ $name }}
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "migration" "app" $name "name" "imapsync") | nindent 4 }}
+    app: {{ $name | quote }}
+    app.kubernetes.io/name: imapsync
+    app.kubernetes.io/component: migration
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: perl
   annotations:
     app.openshift.io/vcs-uri: https://github.com/imapsync/imapsync
@@ -77,7 +83,10 @@ kind: Service
 metadata:
   name: {{ $name }}
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "migration" "app" $name "name" "imapsync") | nindent 4 }}
+    app: {{ $name | quote }}
+    app.kubernetes.io/name: imapsync
+    app.kubernetes.io/component: migration
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   selector:
     app: {{ $name }}
@@ -91,7 +100,10 @@ kind: Route
 metadata:
   name: {{ $name }}
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "migration" "app" $name "name" "imapsync") | nindent 4 }}
+    app: {{ $name | quote }}
+    app.kubernetes.io/name: imapsync
+    app.kubernetes.io/component: migration
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   {{- if .Values.imapsync.route.hostname }}
   host: {{ .Values.imapsync.route.hostname }}
@@ -111,7 +123,10 @@ kind: NetworkPolicy
 metadata:
   name: {{ $name }}
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "migration" "app" $name "name" "imapsync") | nindent 4 }}
+    app: {{ $name | quote }}
+    app.kubernetes.io/name: imapsync
+    app.kubernetes.io/component: migration
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   podSelector:
     matchLabels:

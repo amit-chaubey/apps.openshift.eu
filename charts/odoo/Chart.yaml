@@ -2,7 +2,7 @@ apiVersion: v2
 name: odoo
 description: Odoo Community business applications with a PostgreSQL database and a filestore volume
 type: application
-version: 0.1.2
+version: 0.1.3
 appVersion: "19.0"
 home: https://apps.openshift.eu
 icon: https://avatars.githubusercontent.com/u/6368483?s=200

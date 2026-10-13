@@ -5,7 +5,10 @@ kind: NetworkPolicy
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}-front
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "network") | nindent 4 }}
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/component: network
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   podSelector:
     matchLabels: {{- include "mailu-wrapper.selector" (dict "context" . "component" "front") | nindent 6 }}
@@ -27,7 +30,10 @@ kind: NetworkPolicy
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}-allow-same-namespace
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "network") | nindent 4 }}
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/component: network
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   podSelector:
     matchLabels: {{- include "mailu-wrapper.selector" (dict "context" .) | nindent 6 }}

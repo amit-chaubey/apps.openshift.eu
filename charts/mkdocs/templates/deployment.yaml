@@ -3,7 +3,10 @@ kind: Deployment
 metadata:
   name: {{ include "mkdocs.fullname" . }}
   labels:
-    {{- include "mkdocs.labels" (dict "root" $ "component" "web") | nindent 4 }}
+    app: {{ include "mkdocs.fullname" $ | quote }}
+    app.kubernetes.io/name: mkdocs
+    app.kubernetes.io/component: web
+    {{- include "mkdocs.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: nginx
   annotations:
     app.openshift.io/vcs-uri: https://github.com/mkdocs/mkdocs

@@ -122,8 +122,10 @@ kind: GitLab
 metadata:
   name: gitlab
   labels:
+    app: gitlab
     app.kubernetes.io/name: gitlab
-    {{- include "instance.labels" (dict "root" $ "component" "server" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app.kubernetes.io/component: server
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: gitlab
   annotations:
     app.openshift.io/vcs-uri: https://gitlab.com/gitlab-org/gitlab
@@ -141,7 +143,10 @@ kind: Route
 metadata:
   name: gitlab
   labels:
-    {{- include "instance.labels" (dict "root" $ "component" "route") | nindent 4 }}
+    app: gitlab
+    app.kubernetes.io/name: gitlab
+    app.kubernetes.io/component: route
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
   {{- if and .Values.route.hostname .Values.route.annotations }}
   annotations:
     {{- toYaml .Values.route.annotations | nindent 4 }}

@@ -5,7 +5,11 @@ kind: ConfigMap
 metadata:
   name: nextcloud-setup
   labels:
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud" "component" "config") | nindent 4 }}
+    app: nextcloud
+    app.kubernetes.io/name: nextcloud
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: nextcloud
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 data:
   # Nextcloud checks the header on its own web server, behind the Route
   hsts.conf: |

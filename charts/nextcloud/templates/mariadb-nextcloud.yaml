@@ -3,13 +3,15 @@ apiVersion: k8s.mariadb.com/v1alpha1
 kind: MariaDB
 metadata:
   name: nextcloud-mariadb
-  {{- with include "wrapper.topologyAnnotations" "nextcloud-mariadb" }}
   annotations:
-    {{- . | nindent 4 }}
-  {{- end }}
+    app.openshift.io/vcs-uri: https://github.com/MariaDB/server
   labels:
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-mariadb" "name" "mariadb" "component" "database" "skip" (list "app.kubernetes.io/part-of")) | nindent 4 }}
-    {{- include "wrapper.topologyLabels" "nextcloud-mariadb" | nindent 4 }}
+    app: nextcloud-mariadb
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: nextcloud
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: mariadb
 spec:
   image: {{ .Values.database.image }}
   replicas: {{ .Values.database.replicas }}

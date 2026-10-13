@@ -2,7 +2,7 @@ apiVersion: v2
 name: omniroute
 description: Self-hosted AI proxy that routes LLM requests to many providers through one endpoint
 type: application
-version: 0.3.3
+version: 0.3.4
 appVersion: "3.8.49"
 home: https://apps.openshift.eu
 icon: https://raw.githubusercontent.com/diegosouzapw/OmniRoute/main/public/favicon.svg

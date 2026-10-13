@@ -3,9 +3,10 @@ kind: Cluster
 metadata:
   name: odoo-postgres
   labels:
+    app: odoo-postgres
     app.kubernetes.io/name: odoo
     app.kubernetes.io/component: database
-    {{- include "odoo.labels" (dict "root" $ "app" "odoo-postgres" "component" "database" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/component")) | nindent 4 }}
+    {{- include "odoo.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: postgresql
   annotations:
     app.openshift.io/vcs-uri: https://github.com/postgres/postgres

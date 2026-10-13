@@ -3,7 +3,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ include "omniroute.fullname" . }}-data
   labels:
-    {{- include "omniroute.labels" (dict "root" $ "component" "storage") | nindent 4 }}
+    app: {{ include "omniroute.fullname" $ | quote }}
+    app.kubernetes.io/name: omniroute
+    app.kubernetes.io/component: storage
+    {{- include "omniroute.commonLabels" $ | nindent 4 }}
 spec:
   accessModes:
   - ReadWriteOnce

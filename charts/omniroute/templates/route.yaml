@@ -3,7 +3,10 @@ kind: Route
 metadata:
   name: {{ include "omniroute.fullname" . }}
   labels:
-    {{- include "omniroute.labels" (dict "root" $ "component" "route") | nindent 4 }}
+    app: {{ include "omniroute.fullname" $ | quote }}
+    app.kubernetes.io/name: omniroute
+    app.kubernetes.io/component: route
+    {{- include "omniroute.commonLabels" $ | nindent 4 }}
 spec:
   {{- if .Values.route.hostname }}
   host: {{ .Values.route.hostname }}

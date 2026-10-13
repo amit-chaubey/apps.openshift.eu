@@ -3,7 +3,10 @@ kind: ObjectBucketClaim
 metadata:
   name: gitlab-objects
   labels:
-    {{- include "instance.labels" (dict "root" $ "app" "gitlab-object-storage" "component" "storage") | nindent 4 }}
+    app: gitlab-object-storage
+    app.kubernetes.io/name: gitlab
+    app.kubernetes.io/component: storage
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
 spec:
   {{- if .Values.objectStorage.bucket }}
   bucketName: {{ .Values.objectStorage.bucket }}
@@ -19,14 +22,20 @@ kind: ServiceAccount
 metadata:
   name: gitlab-object-storage
   labels:
-    {{- include "instance.labels" (dict "root" $ "app" "gitlab-object-storage" "component" "storage") | nindent 4 }}
+    app: gitlab-object-storage
+    app.kubernetes.io/name: gitlab
+    app.kubernetes.io/component: storage
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: gitlab-object-storage
   labels:
-    {{- include "instance.labels" (dict "root" $ "app" "gitlab-object-storage" "component" "storage") | nindent 4 }}
+    app: gitlab-object-storage
+    app.kubernetes.io/name: gitlab
+    app.kubernetes.io/component: storage
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
@@ -40,7 +49,10 @@ kind: RoleBinding
 metadata:
   name: gitlab-object-storage
   labels:
-    {{- include "instance.labels" (dict "root" $ "app" "gitlab-object-storage" "component" "storage") | nindent 4 }}
+    app: gitlab-object-storage
+    app.kubernetes.io/name: gitlab
+    app.kubernetes.io/component: storage
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -54,7 +66,10 @@ kind: ConfigMap
 metadata:
   name: gitlab-object-storage
   labels:
-    {{- include "instance.labels" (dict "root" $ "app" "gitlab-object-storage" "component" "storage") | nindent 4 }}
+    app: gitlab-object-storage
+    app.kubernetes.io/name: gitlab
+    app.kubernetes.io/component: storage
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
 data:
   connection.sh: |
     set -eu
@@ -97,7 +112,10 @@ kind: Job
 metadata:
   name: gitlab-object-storage
   labels:
-    {{- include "instance.labels" (dict "root" $ "app" "gitlab-object-storage" "component" "storage") | nindent 4 }}
+    app: gitlab-object-storage
+    app.kubernetes.io/name: gitlab
+    app.kubernetes.io/component: storage
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-delete-policy: before-hook-creation

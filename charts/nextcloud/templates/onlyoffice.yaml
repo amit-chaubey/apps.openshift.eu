@@ -3,15 +3,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: onlyoffice
-  {{- with include "wrapper.topologyAnnotations" "onlyoffice" }}
   annotations:
-    {{- . | nindent 4 }}
-  {{- end }}
+    app.openshift.io/custom-icon: https://avatars.githubusercontent.com/ONLYOFFICE
+    app.openshift.io/vcs-uri: https://github.com/ONLYOFFICE/DocumentServer
   labels:
+    app: onlyoffice
     app.kubernetes.io/name: onlyoffice
     app.kubernetes.io/instance: onlyoffice
-    {{- include "wrapper.topologyLabels" "onlyoffice" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "onlyoffice" "component" "office" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
+    app.kubernetes.io/component: office
+    app.kubernetes.io/part-of: nextcloud-office
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: nodejs
 spec:
   replicas: 1
   selector:
@@ -76,9 +78,12 @@ kind: Service
 metadata:
   name: onlyoffice
   labels:
+    app: onlyoffice
     app.kubernetes.io/name: onlyoffice
     app.kubernetes.io/instance: onlyoffice
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "onlyoffice" "component" "office" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app.kubernetes.io/component: office
+    app.kubernetes.io/part-of: nextcloud-office
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -95,9 +100,12 @@ kind: Route
 metadata:
   name: onlyoffice
   labels:
+    app: onlyoffice
     app.kubernetes.io/name: onlyoffice
     app.kubernetes.io/instance: onlyoffice
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "onlyoffice" "component" "route" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app.kubernetes.io/component: route
+    app.kubernetes.io/part-of: nextcloud-office
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
   {{- with include "wrapper.routeAnnotations" (dict "root" .) | fromYaml }}
   annotations:
     {{- toYaml . | nindent 4 }}

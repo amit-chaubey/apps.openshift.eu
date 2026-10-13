@@ -4,8 +4,12 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ $fullname }}-dovecot-metrics
-  labels: {{- include "mailu-wrapper.selector" (dict "context" . "component" "dovecot-metrics") | nindent 4 }}
-    {{- include "mailu-wrapper.labels" (dict "root" $ "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/component")) | nindent 4 }}
+  labels:
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/component: dovecot-metrics
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   selector: {{- include "mailu-wrapper.selector" (dict "context" . "component" "dovecot") | nindent 4 }}
   ports:
@@ -18,7 +22,10 @@ kind: ServiceMonitor
 metadata:
   name: {{ $fullname }}-dovecot-metrics
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "monitoring") | nindent 4 }}
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/component: monitoring
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   selector:
     matchLabels: {{- include "mailu-wrapper.selector" (dict "context" . "component" "dovecot-metrics") | nindent 6 }}
@@ -32,7 +39,10 @@ kind: ServiceMonitor
 metadata:
   name: {{ $fullname }}-rspamd
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "monitoring") | nindent 4 }}
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/component: monitoring
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   selector:
     matchLabels: {{- include "mailu-wrapper.selector" (dict "context" . "component" "rspamd") | nindent 6 }}
@@ -53,7 +63,10 @@ kind: NetworkPolicy
 metadata:
   name: {{ $fullname }}-allow-monitoring
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "monitoring") | nindent 4 }}
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/component: monitoring
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   podSelector:
     matchLabels: {{- include "mailu-wrapper.selector" (dict "context" .) | nindent 6 }}

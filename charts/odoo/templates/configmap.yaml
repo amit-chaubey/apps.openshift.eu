@@ -8,7 +8,10 @@ metadata:
   {{- /* .checksum: rendered for the pod checksum, which leaves the labels out */}}
   {{- if not .checksum }}
   labels:
-    {{- include "odoo.labels" (dict "root" $ "component" "config") | nindent 4 }}
+    app: odoo
+    app.kubernetes.io/name: odoo
+    app.kubernetes.io/component: config
+    {{- include "odoo.commonLabels" $ | nindent 4 }}
   {{- end }}
 data:
   odoo.conf: |

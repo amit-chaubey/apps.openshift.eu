@@ -4,14 +4,18 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nextcloud-taskprocessing
-  {{- with include "wrapper.topologyAnnotations" "nextcloud-taskprocessing" }}
   annotations:
-    {{- . | nindent 4 }}
-  {{- end }}
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"StatefulSet","name":"nextcloud-mariadb"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-redis"}]'
+    app.openshift.io/custom-icon: https://raw.githubusercontent.com/nextcloud/promo/master/nextcloud-icon.svg
+    app.openshift.io/vcs-uri: https://github.com/nextcloud/server
   labels:
-    {{- include "wrapper.labels" "nextcloud-taskprocessing" | nindent 4 }}
-    {{- include "wrapper.topologyLabels" "nextcloud-taskprocessing" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-taskprocessing" "component" "worker" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
+    app: nextcloud-taskprocessing
+    app.kubernetes.io/name: nextcloud-taskprocessing
+    app.kubernetes.io/instance: nextcloud-taskprocessing
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: nextcloud
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: php
 spec:
   replicas: 1
   strategy:

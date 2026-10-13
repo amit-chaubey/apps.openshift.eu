@@ -10,7 +10,10 @@ kind: ConfigMap
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}-ports
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "config") | nindent 4 }}
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/component: config
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 data:
   # mail ports the front pod listens on, same as the public Service
   PORTS: {{ join "," $numbers | quote }}

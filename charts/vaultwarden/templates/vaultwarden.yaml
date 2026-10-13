@@ -3,7 +3,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: vaultwarden-data
   labels:
-    {{- include "vaultwarden.labels" (dict "root" $ "component" "storage") | nindent 4 }}
+    app: vaultwarden
+    app.kubernetes.io/name: vaultwarden
+    app.kubernetes.io/component: storage
+    {{- include "vaultwarden.commonLabels" $ | nindent 4 }}
 spec:
   accessModes:
   - ReadWriteOnce
@@ -19,8 +22,10 @@ kind: Deployment
 metadata:
   name: vaultwarden
   labels:
+    app: vaultwarden
     app.kubernetes.io/name: vaultwarden
-    {{- include "vaultwarden.labels" (dict "root" $ "component" "server" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app.kubernetes.io/component: server
+    {{- include "vaultwarden.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: rust
   annotations:
     app.openshift.io/vcs-uri: https://github.com/dani-garcia/vaultwarden
@@ -158,7 +163,10 @@ kind: Service
 metadata:
   name: vaultwarden
   labels:
-    {{- include "vaultwarden.labels" (dict "root" $ "component" "server") | nindent 4 }}
+    app: vaultwarden
+    app.kubernetes.io/name: vaultwarden
+    app.kubernetes.io/component: server
+    {{- include "vaultwarden.commonLabels" $ | nindent 4 }}
 spec:
   selector:
     app.kubernetes.io/name: vaultwarden
@@ -172,7 +180,10 @@ kind: Route
 metadata:
   name: vaultwarden
   labels:
-    {{- include "vaultwarden.labels" (dict "root" $ "component" "route") | nindent 4 }}
+    app: vaultwarden
+    app.kubernetes.io/name: vaultwarden
+    app.kubernetes.io/component: route
+    {{- include "vaultwarden.commonLabels" $ | nindent 4 }}
   {{- if and .Values.route.hostname .Values.route.annotations }}
   annotations:
     {{- toYaml .Values.route.annotations | nindent 4 }}

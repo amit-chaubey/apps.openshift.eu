@@ -4,7 +4,11 @@ kind: HorizontalPodAutoscaler
 metadata:
   name: nextcloud
   labels:
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud" "component" "autoscaling") | nindent 4 }}
+    app: nextcloud
+    app.kubernetes.io/name: nextcloud
+    app.kubernetes.io/component: autoscaling
+    app.kubernetes.io/part-of: nextcloud
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

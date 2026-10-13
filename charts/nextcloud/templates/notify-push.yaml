@@ -4,14 +4,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nextcloud-notify-push
-  {{- with include "wrapper.topologyAnnotations" "nextcloud-notify-push" }}
   annotations:
-    {{- . | nindent 4 }}
-  {{- end }}
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-redis"},{"apiVersion":"apps/v1","kind":"StatefulSet","name":"nextcloud-mariadb"}]'
+    app.openshift.io/vcs-uri: https://github.com/nextcloud/notify_push
   labels:
-    {{- include "wrapper.labels" "nextcloud-notify-push" | nindent 4 }}
-    {{- include "wrapper.topologyLabels" "nextcloud-notify-push" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-notify-push" "component" "push" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
+    app: nextcloud-notify-push
+    app.kubernetes.io/name: nextcloud-notify-push
+    app.kubernetes.io/instance: nextcloud-notify-push
+    app.kubernetes.io/component: push
+    app.kubernetes.io/part-of: nextcloud
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: rust
 spec:
   replicas: 1
   strategy:
@@ -105,8 +108,12 @@ kind: Service
 metadata:
   name: nextcloud-notify-push
   labels:
-    {{- include "wrapper.labels" "nextcloud-notify-push" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-notify-push" "component" "push" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app: nextcloud-notify-push
+    app.kubernetes.io/name: nextcloud-notify-push
+    app.kubernetes.io/instance: nextcloud-notify-push
+    app.kubernetes.io/component: push
+    app.kubernetes.io/part-of: nextcloud
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -121,5 +128,5 @@ spec:
   selector:
     {{- include "wrapper.labels" "nextcloud-notify-push" | nindent 4 }}
 ---
-{{ include "wrapper.pathRoute" (dict "root" . "name" "nextcloud-notify-push" "path" "/push" "port" "push") }}
+{{ include "wrapper.pathRoute" (dict "root" . "name" "nextcloud-notify-push" "partOf" "nextcloud" "path" "/push" "port" "push") }}
 {{- end }}

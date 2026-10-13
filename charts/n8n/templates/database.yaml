@@ -3,7 +3,10 @@ kind: Cluster
 metadata:
   name: n8n-db
   labels:
-    {{- include "wrapper.labels" (dict "root" $ "app" "n8n-db" "name" "postgresql" "component" "database") | nindent 4 }}
+    app: n8n-db
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: database
+    {{- include "n8n.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: postgresql
   annotations:
     app.openshift.io/vcs-uri: https://github.com/postgres/postgres

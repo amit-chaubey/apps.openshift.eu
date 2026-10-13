@@ -55,7 +55,24 @@ Every object a chart renders from its own templates carries these labels in
 | `app.kubernetes.io/part-of` | The application the component is part of; `.Release.Name` unless the chart draws several groups |
 | `app.kubernetes.io/version` | `.Chart.AppVersion` |
 
-- One named helper per chart emits them. `ci/check.sh` fails when an object lacks one.
+- `app`, `app.kubernetes.io/name` and `app.kubernetes.io/component` are literal lines on
+  each object, so a template shows what the object is without opening a helper:
+
+      labels:
+        app: n8n
+        app.kubernetes.io/name: n8n
+        app.kubernetes.io/component: worker
+        {{- include "n8n.commonLabels" $ | nindent 4 }}
+
+- A value is an expression only where it must equal a name that is one, such as the full
+  name of a release.
+- One helper per chart, `<chart>.commonLabels`, takes the root context and emits the labels
+  that are the same on every object: `app.kubernetes.io/part-of` and
+  `app.kubernetes.io/version`. A chart that draws several groups writes
+  `app.kubernetes.io/part-of` as a literal on each object and leaves it out of the helper.
+- `ci/check.sh` fails when an object lacks one of the five labels.
+- The number of an `argocd.argoproj.io/sync-wave` annotation is a quoted literal in the
+  template, not a value.
 - Labels that select pods are fixed for the life of a release. A selector, the labels of a
   pod template and the labels of a volume claim template never change between two versions
   of a chart: a selector cannot be changed on upgrade, and a changed pod template restarts
@@ -81,7 +98,9 @@ Every object a chart renders from its own templates carries these labels in
   and an `appVersion`. A change to a chart raises its `version`: patch for a fix, minor for
   a new value or feature, major for a change that needs an action from the user.
 - A named template is prefixed with the chart name, or with `wrapper.` in a chart that
-  wraps a dependency, so it cannot collide with a template of a subchart.
+  wraps a dependency, so it cannot collide with a template of a subchart. The label helper
+  always carries the chart name; a chart with a dependency checks that no packaged subchart
+  defines `<chart>.commonLabels`.
 - A dependency is pinned to an exact version. Its packages and `Chart.lock` match
   `Chart.yaml`: `helm dependency build` succeeds on a clean clone.
 - A template indents with two spaces and uses `nindent` with `include`, not `template`.
@@ -97,7 +116,7 @@ Every object a chart renders from its own templates carries these labels in
 ## Preferred
 
 These make a chart read well in the OpenShift console. They go on the workload's own
-metadata, never on a pod template.
+metadata, never on a pod template, each as a literal line in the template.
 
 | Key | Kind | Value |
 |---|---|---|

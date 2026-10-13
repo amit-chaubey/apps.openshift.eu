@@ -6,7 +6,10 @@ kind: PrometheusRule
 metadata:
   name: {{ $fullname }}
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "monitoring") | nindent 4 }}
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/component: monitoring
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   groups:
   - name: mailu

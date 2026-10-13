@@ -3,7 +3,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: gitlab-valkey
   labels:
-    {{- include "instance.labels" (dict "root" $ "app" "gitlab-valkey" "name" "gitlab-valkey" "component" "cache") | nindent 4 }}
+    app: gitlab-valkey
+    app.kubernetes.io/name: gitlab-valkey
+    app.kubernetes.io/component: cache
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
 spec:
   accessModes:
   - ReadWriteOnce
@@ -19,8 +22,10 @@ kind: Deployment
 metadata:
   name: gitlab-valkey
   labels:
+    app: gitlab-valkey
     app.kubernetes.io/name: gitlab-valkey
-    {{- include "instance.labels" (dict "root" $ "app" "gitlab-valkey" "component" "cache" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app.kubernetes.io/component: cache
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: redis
   annotations:
     app.openshift.io/vcs-uri: https://github.com/valkey-io/valkey
@@ -89,7 +94,10 @@ kind: Service
 metadata:
   name: gitlab-valkey
   labels:
-    {{- include "instance.labels" (dict "root" $ "app" "gitlab-valkey" "name" "gitlab-valkey" "component" "cache") | nindent 4 }}
+    app: gitlab-valkey
+    app.kubernetes.io/name: gitlab-valkey
+    app.kubernetes.io/component: cache
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
 spec:
   selector:
     app.kubernetes.io/name: gitlab-valkey

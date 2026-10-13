@@ -2,7 +2,7 @@ apiVersion: v2
 name: gitlab
 description: GitLab instance for source code, merge requests and pipelines, run by the GitLab operator
 type: application
-version: 0.1.2
+version: 0.1.3
 appVersion: "19.3.1"
 home: https://apps.openshift.eu
 icon: https://avatars.githubusercontent.com/u/1086321?s=200

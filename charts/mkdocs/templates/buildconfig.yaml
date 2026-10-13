@@ -3,7 +3,10 @@ kind: BuildConfig
 metadata:
   name: {{ include "mkdocs.fullname" . }}
   labels:
-    {{- include "mkdocs.labels" (dict "root" $ "component" "build") | nindent 4 }}
+    app: {{ include "mkdocs.fullname" $ | quote }}
+    app.kubernetes.io/name: mkdocs
+    app.kubernetes.io/component: build
+    {{- include "mkdocs.commonLabels" $ | nindent 4 }}
 spec:
   source:
     {{- if .Values.source.gitRepo }}

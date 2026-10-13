@@ -6,7 +6,10 @@ metadata:
   name: vaultwarden
   {{- if not .checksum }}
   labels:
-    {{- include "vaultwarden.labels" (dict "root" $ "component" "rbac") | nindent 4 }}
+    app: vaultwarden
+    app.kubernetes.io/name: vaultwarden
+    app.kubernetes.io/component: rbac
+    {{- include "vaultwarden.commonLabels" $ | nindent 4 }}
   {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -15,7 +18,10 @@ metadata:
   name: vaultwarden-route
   {{- if not .checksum }}
   labels:
-    {{- include "vaultwarden.labels" (dict "root" $ "component" "rbac") | nindent 4 }}
+    app: vaultwarden
+    app.kubernetes.io/name: vaultwarden
+    app.kubernetes.io/component: rbac
+    {{- include "vaultwarden.commonLabels" $ | nindent 4 }}
   {{- end }}
 rules:
 - apiGroups: ["route.openshift.io"]
@@ -29,7 +35,10 @@ metadata:
   name: vaultwarden-route
   {{- if not .checksum }}
   labels:
-    {{- include "vaultwarden.labels" (dict "root" $ "component" "rbac") | nindent 4 }}
+    app: vaultwarden
+    app.kubernetes.io/name: vaultwarden
+    app.kubernetes.io/component: rbac
+    {{- include "vaultwarden.commonLabels" $ | nindent 4 }}
   {{- end }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -45,7 +54,10 @@ metadata:
   name: vaultwarden-scripts
   {{- if not .checksum }}
   labels:
-    {{- include "vaultwarden.labels" (dict "root" $ "component" "config") | nindent 4 }}
+    app: vaultwarden
+    app.kubernetes.io/name: vaultwarden
+    app.kubernetes.io/component: config
+    {{- include "vaultwarden.commonLabels" $ | nindent 4 }}
   {{- end }}
 data:
   start.sh: |

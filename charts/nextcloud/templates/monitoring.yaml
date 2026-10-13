@@ -12,14 +12,28 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $e.name }}
-  {{- with include "wrapper.topologyAnnotations" $e.name }}
   annotations:
-    {{- . | nindent 4 }}
-  {{- end }}
+    {{- if eq $e.name "nextcloud-redis-exporter" }}
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-redis"}]'
+    {{- else }}
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud"}]'
+    {{- end }}
+    app.openshift.io/custom-icon: https://raw.githubusercontent.com/cncf/artwork/main/projects/prometheus/icon/color/prometheus-icon-color.svg
+    {{- if eq $e.name "nextcloud-exporter" }}
+    app.openshift.io/vcs-uri: https://github.com/xperimental/nextcloud-exporter
+    {{- else if eq $e.name "nextcloud-redis-exporter" }}
+    app.openshift.io/vcs-uri: https://github.com/oliver006/redis_exporter
+    {{- else }}
+    app.openshift.io/vcs-uri: https://github.com/prometheus/blackbox_exporter
+    {{- end }}
   labels:
-    {{- include "wrapper.labels" $e.name | nindent 4 }}
-    {{- include "wrapper.topologyLabels" $e.name | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" $e.name "component" "monitoring" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
+    app: {{ $e.name | quote }}
+    app.kubernetes.io/name: {{ $e.name | quote }}
+    app.kubernetes.io/instance: {{ $e.name | quote }}
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: nextcloud-monitoring
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: golang
 spec:
   replicas: 1
   selector:
@@ -95,8 +109,12 @@ kind: Service
 metadata:
   name: {{ $e.name }}
   labels:
-    {{- include "wrapper.labels" $e.name | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" $e.name "component" "monitoring" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app: {{ $e.name | quote }}
+    app.kubernetes.io/name: {{ $e.name | quote }}
+    app.kubernetes.io/instance: {{ $e.name | quote }}
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: nextcloud-monitoring
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -113,7 +131,11 @@ kind: ConfigMap
 metadata:
   name: nextcloud-blackbox-exporter
   labels:
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-blackbox-exporter" "component" "config") | nindent 4 }}
+    app: nextcloud-blackbox-exporter
+    app.kubernetes.io/name: nextcloud-blackbox-exporter
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: nextcloud-monitoring
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 data:
   config.yml: |
     modules:
@@ -131,16 +153,16 @@ data:
           method: GET
           fail_if_body_matches_regexp:
           - '"maintenance"\s*:\s*true'
-{{- $monitors := list (dict "name" "nextcloud-exporter" "interval" $m.interval) }}
+{{- $monitors := list (dict "name" "nextcloud-exporter" "partOf" "nextcloud-monitoring" "interval" $m.interval) }}
 {{- if include "wrapper.cacheEnabled" . }}
-{{- $monitors = append $monitors (dict "name" "nextcloud-redis-exporter" "interval" $m.interval) }}
+{{- $monitors = append $monitors (dict "name" "nextcloud-redis-exporter" "partOf" "nextcloud-monitoring" "interval" $m.interval) }}
 {{- end }}
 {{- if .Values.notifyPush.enabled }}
-{{- $monitors = append $monitors (dict "name" "nextcloud-notify-push" "interval" $m.interval) }}
+{{- $monitors = append $monitors (dict "name" "nextcloud-notify-push" "partOf" "nextcloud" "interval" $m.interval) }}
 {{- end }}
 {{- if .Values.talk.enabled }}
-{{- $monitors = append $monitors (dict "name" "nextcloud-nats" "interval" $m.interval) }}
-{{- $monitors = append $monitors (dict "name" "nextcloud-signaling" "interval" $m.interval "port" "http") }}
+{{- $monitors = append $monitors (dict "name" "nextcloud-nats" "partOf" "nextcloud-talk" "interval" $m.interval) }}
+{{- $monitors = append $monitors (dict "name" "nextcloud-signaling" "partOf" "nextcloud-talk" "interval" $m.interval "port" "http") }}
 {{- end }}
 {{- range $sm := $monitors }}
 ---
@@ -149,7 +171,11 @@ kind: ServiceMonitor
 metadata:
   name: {{ $sm.name }}
   labels:
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" $sm.name "component" "monitoring") | nindent 4 }}
+    app: {{ $sm.name | quote }}
+    app.kubernetes.io/name: {{ $sm.name | quote }}
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: {{ $sm.partOf | quote }}
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   selector:
     matchLabels:
@@ -170,7 +196,11 @@ kind: ServiceMonitor
 metadata:
   name: nextcloud-blackbox-exporter
   labels:
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-blackbox-exporter" "component" "monitoring") | nindent 4 }}
+    app: nextcloud-blackbox-exporter
+    app.kubernetes.io/name: nextcloud-blackbox-exporter
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: nextcloud-monitoring
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   selector:
     matchLabels:

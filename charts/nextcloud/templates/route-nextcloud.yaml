@@ -3,7 +3,11 @@ kind: Route
 metadata:
   name: nextcloud
   labels:
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud" "component" "route") | nindent 4 }}
+    app: nextcloud
+    app.kubernetes.io/name: nextcloud
+    app.kubernetes.io/component: route
+    app.kubernetes.io/part-of: nextcloud
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
   {{- with include "wrapper.routeAnnotations" (dict "root" .) | fromYaml }}
   annotations:
     {{- toYaml . | nindent 4 }}

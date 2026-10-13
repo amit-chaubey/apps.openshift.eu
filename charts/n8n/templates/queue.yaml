@@ -4,8 +4,10 @@ kind: Deployment
 metadata:
   name: n8n-worker
   labels:
+    app: n8n-worker
     app.kubernetes.io/name: n8n-worker
-    {{- include "wrapper.labels" (dict "root" $ "app" "n8n-worker" "component" "worker" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app.kubernetes.io/component: worker
+    {{- include "n8n.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: nodejs
   annotations:
     app.openshift.io/vcs-uri: https://github.com/n8n-io/n8n
@@ -67,7 +69,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: n8n-redis
   labels:
-    {{- include "wrapper.labels" (dict "root" $ "app" "n8n-redis" "name" "n8n-redis" "component" "queue") | nindent 4 }}
+    app: n8n-redis
+    app.kubernetes.io/name: n8n-redis
+    app.kubernetes.io/component: queue
+    {{- include "n8n.commonLabels" $ | nindent 4 }}
 spec:
   accessModes:
   - ReadWriteOnce
@@ -83,8 +88,10 @@ kind: Deployment
 metadata:
   name: n8n-redis
   labels:
+    app: n8n-redis
     app.kubernetes.io/name: n8n-redis
-    {{- include "wrapper.labels" (dict "root" $ "app" "n8n-redis" "component" "queue" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app.kubernetes.io/component: queue
+    {{- include "n8n.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: redis
   annotations:
     app.openshift.io/vcs-uri: https://github.com/valkey-io/valkey
@@ -154,7 +161,10 @@ kind: Service
 metadata:
   name: n8n-redis
   labels:
-    {{- include "wrapper.labels" (dict "root" $ "app" "n8n-redis" "name" "n8n-redis" "component" "queue") | nindent 4 }}
+    app: n8n-redis
+    app.kubernetes.io/name: n8n-redis
+    app.kubernetes.io/component: queue
+    {{- include "n8n.commonLabels" $ | nindent 4 }}
 spec:
   selector:
     app.kubernetes.io/name: n8n-redis

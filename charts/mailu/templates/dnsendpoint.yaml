@@ -6,7 +6,10 @@ kind: DNSEndpoint
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "dns") | nindent 4 }}
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/component: dns
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   endpoints:
   - dnsName: {{ $domain }}

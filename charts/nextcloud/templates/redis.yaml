@@ -3,14 +3,16 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nextcloud-redis
-  {{- with include "wrapper.topologyAnnotations" "nextcloud-redis" }}
   annotations:
-    {{- . | nindent 4 }}
-  {{- end }}
+    app.openshift.io/vcs-uri: https://github.com/redis/redis
   labels:
-    {{- include "wrapper.labels" "nextcloud-redis" | nindent 4 }}
-    {{- include "wrapper.topologyLabels" "nextcloud-redis" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-redis" "component" "cache" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
+    app: nextcloud-redis
+    app.kubernetes.io/name: nextcloud-redis
+    app.kubernetes.io/instance: nextcloud-redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: nextcloud
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: redis
 spec:
   replicas: 1
   strategy:
@@ -74,8 +76,12 @@ kind: Service
 metadata:
   name: nextcloud-redis
   labels:
-    {{- include "wrapper.labels" "nextcloud-redis" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-redis" "component" "cache" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app: nextcloud-redis
+    app.kubernetes.io/name: nextcloud-redis
+    app.kubernetes.io/instance: nextcloud-redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: nextcloud
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   type: ClusterIP
   ports:

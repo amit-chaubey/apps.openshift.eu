@@ -3,7 +3,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: nexus-data
   labels:
-    {{- include "nexus.labels" (dict "root" $ "component" "storage") | nindent 4 }}
+    app: nexus
+    app.kubernetes.io/name: nexus
+    app.kubernetes.io/component: storage
+    {{- include "nexus.commonLabels" $ | nindent 4 }}
 spec:
   accessModes:
   - ReadWriteOnce
@@ -19,8 +22,10 @@ kind: Deployment
 metadata:
   name: nexus
   labels:
+    app: nexus
     app.kubernetes.io/name: nexus
-    {{- include "nexus.labels" (dict "root" $ "component" "server" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app.kubernetes.io/component: server
+    {{- include "nexus.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: java
   annotations:
     app.openshift.io/vcs-uri: https://github.com/sonatype/nexus-public
@@ -99,7 +104,10 @@ kind: Service
 metadata:
   name: nexus
   labels:
-    {{- include "nexus.labels" (dict "root" $ "component" "server") | nindent 4 }}
+    app: nexus
+    app.kubernetes.io/name: nexus
+    app.kubernetes.io/component: server
+    {{- include "nexus.commonLabels" $ | nindent 4 }}
 spec:
   selector:
     app.kubernetes.io/name: nexus
@@ -113,7 +121,10 @@ kind: Route
 metadata:
   name: nexus
   labels:
-    {{- include "nexus.labels" (dict "root" $ "component" "route") | nindent 4 }}
+    app: nexus
+    app.kubernetes.io/name: nexus
+    app.kubernetes.io/component: route
+    {{- include "nexus.commonLabels" $ | nindent 4 }}
   {{- if and .Values.route.hostname .Values.route.annotations }}
   annotations:
     {{- toYaml .Values.route.annotations | nindent 4 }}

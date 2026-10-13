@@ -3,9 +3,10 @@ kind: Cluster
 metadata:
   name: gitlab-postgres
   labels:
+    app: gitlab-postgres
     app.kubernetes.io/name: gitlab
     app.kubernetes.io/component: database
-    {{- include "instance.labels" (dict "root" $ "app" "gitlab-postgres" "component" "database" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/component")) | nindent 4 }}
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: postgresql
   annotations:
     app.openshift.io/vcs-uri: https://github.com/postgres/postgres

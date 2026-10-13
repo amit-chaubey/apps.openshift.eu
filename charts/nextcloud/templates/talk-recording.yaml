@@ -5,8 +5,12 @@ kind: PersistentVolumeClaim
 metadata:
   name: nextcloud-talk-recording
   labels:
-    {{- include "wrapper.labels" "nextcloud-talk-recording" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-talk-recording" "component" "recording" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app: nextcloud-talk-recording
+    app.kubernetes.io/name: nextcloud-talk-recording
+    app.kubernetes.io/instance: nextcloud-talk-recording
+    app.kubernetes.io/component: recording
+    app.kubernetes.io/part-of: nextcloud-talk
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   accessModes:
   - ReadWriteOnce
@@ -21,14 +25,17 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nextcloud-talk-recording
-  {{- with include "wrapper.topologyAnnotations" "nextcloud-talk-recording" }}
   annotations:
-    {{- . | nindent 4 }}
-  {{- end }}
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-signaling"}]'
+    app.openshift.io/vcs-uri: https://github.com/nextcloud/nextcloud-talk-recording
   labels:
-    {{- include "wrapper.labels" "nextcloud-talk-recording" | nindent 4 }}
-    {{- include "wrapper.topologyLabels" "nextcloud-talk-recording" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-talk-recording" "component" "recording" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
+    app: nextcloud-talk-recording
+    app.kubernetes.io/name: nextcloud-talk-recording
+    app.kubernetes.io/instance: nextcloud-talk-recording
+    app.kubernetes.io/component: recording
+    app.kubernetes.io/part-of: nextcloud-talk
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: python
 spec:
   replicas: 1
   strategy:
@@ -105,8 +112,12 @@ kind: Service
 metadata:
   name: nextcloud-talk-recording
   labels:
-    {{- include "wrapper.labels" "nextcloud-talk-recording" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-talk-recording" "component" "recording" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app: nextcloud-talk-recording
+    app.kubernetes.io/name: nextcloud-talk-recording
+    app.kubernetes.io/instance: nextcloud-talk-recording
+    app.kubernetes.io/component: recording
+    app.kubernetes.io/part-of: nextcloud-talk
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -117,5 +128,5 @@ spec:
   selector:
     {{- include "wrapper.labels" "nextcloud-talk-recording" | nindent 4 }}
 ---
-{{ include "wrapper.pathRoute" (dict "root" . "name" "nextcloud-talk-recording" "path" "/apps/talk/recording" "port" "recording") }}
+{{ include "wrapper.pathRoute" (dict "root" . "name" "nextcloud-talk-recording" "partOf" "nextcloud-talk" "path" "/apps/talk/recording" "port" "recording") }}
 {{- end }}

@@ -3,14 +3,18 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nextcloud-whiteboard
-  {{- with include "wrapper.topologyAnnotations" "nextcloud-whiteboard" }}
   annotations:
-    {{- . | nindent 4 }}
-  {{- end }}
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-redis"}]'
+    app.openshift.io/custom-icon: https://raw.githubusercontent.com/nextcloud/promo/master/nextcloud-icon.svg
+    app.openshift.io/vcs-uri: https://github.com/nextcloud/whiteboard
   labels:
-    {{- include "wrapper.labels" "nextcloud-whiteboard" | nindent 4 }}
-    {{- include "wrapper.topologyLabels" "nextcloud-whiteboard" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-whiteboard" "component" "whiteboard" "skip" (list "app.kubernetes.io/name" "app.kubernetes.io/part-of")) | nindent 4 }}
+    app: nextcloud-whiteboard
+    app.kubernetes.io/name: nextcloud-whiteboard
+    app.kubernetes.io/instance: nextcloud-whiteboard
+    app.kubernetes.io/component: whiteboard
+    app.kubernetes.io/part-of: nextcloud-office
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: nodejs
 spec:
   replicas: 1
   selector:
@@ -78,8 +82,12 @@ kind: Service
 metadata:
   name: nextcloud-whiteboard
   labels:
-    {{- include "wrapper.labels" "nextcloud-whiteboard" | nindent 4 }}
-    {{- include "wrapper.objectLabels" (dict "root" $ "app" "nextcloud-whiteboard" "component" "whiteboard" "skip" (list "app.kubernetes.io/name")) | nindent 4 }}
+    app: nextcloud-whiteboard
+    app.kubernetes.io/name: nextcloud-whiteboard
+    app.kubernetes.io/instance: nextcloud-whiteboard
+    app.kubernetes.io/component: whiteboard
+    app.kubernetes.io/part-of: nextcloud-office
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -90,5 +98,5 @@ spec:
   selector:
     {{- include "wrapper.labels" "nextcloud-whiteboard" | nindent 4 }}
 ---
-{{ include "wrapper.pathRoute" (dict "root" . "name" "nextcloud-whiteboard" "path" "/whiteboard" "port" "http") }}
+{{ include "wrapper.pathRoute" (dict "root" . "name" "nextcloud-whiteboard" "partOf" "nextcloud-office" "path" "/whiteboard" "port" "http") }}
 {{- end }}

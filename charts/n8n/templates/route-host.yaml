@@ -5,7 +5,10 @@ metadata:
   name: n8n-scripts
   {{- if not .checksum }}
   labels:
-    {{- include "wrapper.labels" (dict "root" $ "component" "config") | nindent 4 }}
+    app: n8n
+    app.kubernetes.io/name: n8n
+    app.kubernetes.io/component: config
+    {{- include "n8n.commonLabels" $ | nindent 4 }}
   {{- end }}
 data:
   start.sh: |
@@ -50,7 +53,10 @@ metadata:
   name: n8n
   {{- if not .checksum }}
   labels:
-    {{- include "wrapper.labels" (dict "root" $ "component" "rbac") | nindent 4 }}
+    app: n8n
+    app.kubernetes.io/name: n8n
+    app.kubernetes.io/component: rbac
+    {{- include "n8n.commonLabels" $ | nindent 4 }}
   {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -59,7 +65,10 @@ metadata:
   name: n8n-route
   {{- if not .checksum }}
   labels:
-    {{- include "wrapper.labels" (dict "root" $ "component" "rbac") | nindent 4 }}
+    app: n8n
+    app.kubernetes.io/name: n8n
+    app.kubernetes.io/component: rbac
+    {{- include "n8n.commonLabels" $ | nindent 4 }}
   {{- end }}
 rules:
 - apiGroups: ["route.openshift.io"]
@@ -73,7 +82,10 @@ metadata:
   name: n8n-route
   {{- if not .checksum }}
   labels:
-    {{- include "wrapper.labels" (dict "root" $ "component" "rbac") | nindent 4 }}
+    app: n8n
+    app.kubernetes.io/name: n8n
+    app.kubernetes.io/component: rbac
+    {{- include "n8n.commonLabels" $ | nindent 4 }}
   {{- end }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io

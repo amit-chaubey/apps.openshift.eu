@@ -3,7 +3,10 @@ kind: Route
 metadata:
   name: {{ include "mkdocs.fullname" . }}
   labels:
-    {{- include "mkdocs.labels" (dict "root" $ "component" "route") | nindent 4 }}
+    app: {{ include "mkdocs.fullname" $ | quote }}
+    app.kubernetes.io/name: mkdocs
+    app.kubernetes.io/component: route
+    {{- include "mkdocs.commonLabels" $ | nindent 4 }}
 spec:
   {{- if .Values.route.hostname }}
   host: {{ .Values.route.hostname }}

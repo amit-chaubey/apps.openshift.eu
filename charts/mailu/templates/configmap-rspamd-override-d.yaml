@@ -3,7 +3,10 @@ kind: ConfigMap
 metadata:
   name: {{ include "mailu-wrapper.fullname" . }}-rspamd-override-d
   labels:
-    {{- include "mailu-wrapper.labels" (dict "root" $ "component" "config") | nindent 4 }}
+    app: {{ include "mailu-wrapper.fullname" $ | quote }}
+    app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
+    app.kubernetes.io/component: config
+    {{- include "mailu.commonLabels" $ | nindent 4 }}
 data:
   dkim_signing.conf: |
     use_vault = false;
