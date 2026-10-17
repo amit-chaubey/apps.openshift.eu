@@ -1,0 +1,29 @@
+{{- if and .Values.kiosk.enabled (not .Values.kiosk.image) }}
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: {{ include "guacamole.kiosk" . }}
+  labels:
+    app: {{ include "guacamole.kiosk" $ | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: build
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+spec:
+  source:
+    type: Dockerfile
+    dockerfile: |-
+      {{- .Files.Get "files/kiosk/Containerfile" | trim | nindent 6 }}
+  strategy:
+    type: Docker
+    dockerStrategy: {}
+  output:
+    to:
+      kind: ImageStreamTag
+      name: {{ include "guacamole.kiosk" . }}:latest
+  resources:
+    {{- toYaml .Values.kiosk.build.resources | nindent 4 }}
+  triggers:
+  - type: ConfigChange
+  successfulBuildsHistoryLimit: 3
+  failedBuildsHistoryLimit: 3
+{{- end }}

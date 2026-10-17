@@ -1,0 +1,18 @@
+{{- if .Values.kiosk.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "guacamole.kiosk" . }}
+  labels:
+    app: {{ include "guacamole.kiosk" $ | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: kiosk
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+spec:
+  selector:
+    app: {{ include "guacamole.kiosk" . }}
+  ports:
+  - name: vnc
+    port: 5900
+    targetPort: 5900
+{{- end }}

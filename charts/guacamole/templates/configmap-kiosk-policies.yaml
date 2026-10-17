@@ -1,0 +1,66 @@
+{{- if .Values.kiosk.enabled }}
+{{- $k := .Values.kiosk }}
+{{- $locked := dict "Status" "locked" }}
+{{- range ($k.allowedUrls | default list) }}
+{{- if regexMatch "^[^/]*://[^/]*:[0-9]+(/|$)" . }}
+{{- fail (printf "kiosk.allowedUrls entry %s has a port: Firefox match patterns take none, the entry would never match; leave the port out" .) }}
+{{- end }}
+{{- end }}
+{{- $policies := dict
+  "DisableDeveloperTools" true
+  "BlockAboutConfig" true
+  "BlockAboutAddons" true
+  "BlockAboutProfiles" true
+  "BlockAboutSupport" true
+  "DisablePasswordReveal" true
+  "PasswordManagerEnabled" true
+  "PrimaryPassword" false
+  "PrintingEnabled" false
+  "AllowFileSelectionDialogs" false
+  "DownloadDirectory" "/downloads"
+  "PromptForDownloadLocation" false
+  "WebsiteFilter" (dict "Block" (list "<all_urls>") "Exceptions" ($k.allowedUrls | default list))
+  "ExtensionSettings" (dict "*" (dict "installation_mode" "blocked"))
+  "DisableFirefoxAccounts" true
+  "DisableProfileImport" true
+  "DisableProfileRefresh" true
+  "DisableFirefoxScreenshots" true
+  "DisableTelemetry" true
+  "DisableFeedbackCommands" true
+  "DisableAppUpdate" true
+  "DisableSetDesktopBackground" true
+  "PrivateBrowsingModeAvailability" 1
+  "DontCheckDefaultBrowser" true
+  "OverrideFirstRunPage" ""
+  "OverridePostUpdatePage" ""
+  "DisableFormHistory" true
+  "Preferences" (dict
+    "browser.sessionstore.resume_from_crash" (merge (dict "Value" false) $locked)
+    "browser.startup.page" (merge (dict "Value" 1) $locked)
+    "signon.showAutoCompleteFooter" (merge (dict "Value" false) $locked)
+    "browser.contextual-password-manager.enabled" (merge (dict "Value" false) $locked)
+    "pref.privacy.disable_button.view_passwords" (merge (dict "Value" true) $locked)
+    "network.http.connection-timeout" (merge (dict "Value" (int $k.connectTimeout)) $locked))
+}}
+{{- $prefs := dict }}
+{{- range $name, $value := ($k.preferences | default dict) }}
+{{- $_ := set $prefs $name (merge (dict "Value" $value) $locked) }}
+{{- end }}
+{{- $extra := merge (dict "Preferences" $prefs) (deepCopy ($k.policies | default dict)) }}
+{{- $policies = mergeOverwrite $extra $policies }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "guacamole.kiosk" . }}
+  labels:
+    app: {{ include "guacamole.kiosk" $ | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: kiosk
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+data:
+  # Firefox enterprise policies: https://mozilla.github.io/policy-templates/
+  policies.json: |
+    {{- dict "policies" $policies | toPrettyJson | nindent 4 }}
+  start.sh: |
+    {{- .Files.Get "files/kiosk/start.sh" | nindent 4 }}
+{{- end }}

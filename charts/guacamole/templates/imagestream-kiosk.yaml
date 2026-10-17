@@ -1,0 +1,11 @@
+{{- if and .Values.kiosk.enabled (not .Values.kiosk.image) }}
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: {{ include "guacamole.kiosk" . }}
+  labels:
+    app: {{ include "guacamole.kiosk" $ | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: build
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+{{- end }}

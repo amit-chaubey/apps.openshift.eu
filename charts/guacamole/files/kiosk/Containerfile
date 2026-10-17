@@ -1,0 +1,11 @@
+FROM registry.fedoraproject.org/fedora:42
+RUN dnf install -y --setopt=install_weak_deps=False firefox tigervnc-server-minimal \
+      dejavu-sans-fonts dejavu-sans-mono-fonts dejavu-serif-fonts \
+ && dnf clean all \
+ && mkdir -p /profile /usr/lib64/firefox/distribution \
+ && chgrp 0 /profile && chmod 2775 /profile
+# any user id, group 0: the profile and HOME=/tmp are writable for it
+USER 1001
+ENV HOME=/tmp DISPLAY=:1 MOZ_ENABLE_WAYLAND=0
+EXPOSE 5900
+CMD ["sh", "/opt/kiosk/start.sh"]

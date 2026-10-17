@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "fullnameOverride": {"type": "string"},
+    "image": {
+      "type": "object",
+      "properties": {
+        "guacamole": {"type": "string", "minLength": 1},
+        "guacd": {"type": "string", "minLength": 1},
+        "postgres": {"type": "string", "minLength": 1},
+        "rclone": {"type": "string", "minLength": 1}
+      }
+    },
+    "resources": {"type": "object"},
+    "route": {
+      "type": "object",
+      "properties": {
+        "hostname": {"type": "string"},
+        "annotations": {"type": "object"}
+      }
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "instances": {"type": "integer", "minimum": 1},
+        "size": {"type": "string", "minLength": 1},
+        "storageClassName": {"type": "string"},
+        "resources": {"type": "object"}
+      }
+    },
+    "oidc": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "issuerUrl": {"type": "string", "pattern": "^$|^https://"},
+        "clientId": {"type": "string"},
+        "authorizationEndpoint": {"type": "string", "pattern": "^$|^https://"},
+        "jwksEndpoint": {"type": "string", "pattern": "^$|^https://"},
+        "usernameClaim": {"type": "string", "minLength": 1},
+        "groupsClaim": {"type": "string", "minLength": 1},
+        "scope": {"type": "string", "minLength": 1},
+        "primary": {"type": "boolean"}
+      }
+    },
+    "admins": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+    "adminGroups": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+    "connections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "protocol", "hostname"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 128},
+          "protocol": {"type": "string", "minLength": 1, "maxLength": 32},
+          "hostname": {"type": "string", "minLength": 1},
+          "port": {"type": ["integer", "string"]},
+          "parameters": {
+            "type": "object",
+            "additionalProperties": {"type": ["string", "boolean", "integer"]}
+          },
+          "secretParameters": {
+            "type": "object",
+            "additionalProperties": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"}
+          },
+          "users": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+          "groups": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128}}
+        }
+      }
+    },
+    "recording": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "size": {"type": "string", "minLength": 1},
+        "storageClassName": {"type": "string"},
+        "s3": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "storageClassName": {"type": "string"},
+            "expiryDays": {"type": "integer", "minimum": 1},
+            "region": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "watermark": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"}
+      }
+    },
+    "kiosk": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "replicas": {"type": "integer", "minimum": 0, "maximum": 1},
+        "image": {"type": "string"},
+        "registry": {"type": "string", "minLength": 1},
+        "homepage": {"type": "string", "minLength": 1},
+        "allowedUrls": {"type": "array", "maxItems": 1000, "items": {"type": "string", "minLength": 1}},
+        "connectTimeout": {"type": "integer", "minimum": 1, "maximum": 90},
+        "policies": {"type": "object"},
+        "preferences": {"type": "object"},
+        "geometry": {"type": "string", "pattern": "^[0-9]+x[0-9]+$"},
+        "profileSize": {"type": "string", "minLength": 1},
+        "storageClassName": {"type": "string"},
+        "egressFirewall": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "allowedDnsNames": {"type": "array", "items": {"type": "string", "minLength": 1}},
+            "allowedCidrs": {"type": "array", "items": {"type": "string", "pattern": "^[0-9.]+/[0-9]+$"}}
+          }
+        },
+        "resources": {"type": "object"},
+        "build": {"type": "object"}
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "type": {"enum": ["kubernetes", "externalSecret"]},
+        "adminPassword": {"type": "string"},
+        "vncPassword": {"type": "string"},
+        "externalSecret": {"type": "object"}
+      }
+    }
+  }
+}

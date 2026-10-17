@@ -1,0 +1,27 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "guacamole.fullname" . }}-db
+  labels:
+    app: {{ printf "%s-db" (include "guacamole.fullname" $) | quote }}
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/component: database
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: postgresql
+  annotations:
+    app.openshift.io/vcs-uri: https://github.com/postgres/postgres
+spec:
+  instances: {{ .Values.database.instances }}
+  # a disruption budget on a single instance would block every node drain
+  enablePDB: {{ gt (int .Values.database.instances) 1 }}
+  bootstrap:
+    initdb:
+      database: guacamole
+      owner: guacamole
+  storage:
+    size: {{ .Values.database.size }}
+    {{- if .Values.database.storageClassName }}
+    storageClass: {{ .Values.database.storageClassName }}
+    {{- end }}
+  resources:
+    {{- toYaml .Values.database.resources | nindent 4 }}

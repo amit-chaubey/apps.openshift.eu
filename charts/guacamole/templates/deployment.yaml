@@ -1,0 +1,262 @@
+{{- $db := printf "%s-db-app" (include "guacamole.fullname" .) }}
+{{- $rec := .Values.recording }}
+{{- $s3 := and $rec.enabled $rec.s3.enabled }}
+{{- $wm := .Values.watermark.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "guacamole.fullname" . }}
+  labels:
+    app: {{ include "guacamole.fullname" $ | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: server
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: java
+  annotations:
+    app.openshift.io/vcs-uri: https://github.com/apache/guacamole-client
+    app.openshift.io/connects-to: '[{"apiVersion":"postgresql.cnpg.io/v1","kind":"Cluster","name":"{{ include "guacamole.fullname" . }}-db"}]'
+spec:
+  replicas: 1
+  # the recordings volume is ReadWriteOnce: the old pod must release it first
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ include "guacamole.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "guacamole.fullname" . }}
+      {{- if $wm }}
+      # the subPath mount never refreshes: a new jar rolls the pod
+      annotations:
+        checksum/extensions: {{ include (print $.Template.BasePath "/configmap-extensions.yaml") . | sha256sum }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      # no fixed user or fsGroup: both come from the project's range
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: guacamole
+        image: {{ .Values.image.guacamole }}
+        env:
+        - name: WEBAPP_CONTEXT
+          value: ROOT
+        - name: GUACD_HOSTNAME
+          value: localhost
+        - name: GUACD_PORT
+          value: "4822"
+        # client addresses from the router, for the ban list and the history
+        - name: REMOTE_IP_VALVE_ENABLED
+          value: "true"
+        - name: POSTGRESQL_ENABLED
+          value: "true"
+        - name: POSTGRESQL_HOSTNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ $db }}
+              key: host
+        - name: POSTGRESQL_PORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ $db }}
+              key: port
+        - name: POSTGRESQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ $db }}
+              key: dbname
+        - name: POSTGRESQL_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ $db }}
+              key: username
+        - name: POSTGRESQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ $db }}
+              key: password
+        {{- if $rec.enabled }}
+        - name: RECORDING_ENABLED
+          value: "true"
+        - name: RECORDING_SEARCH_PATH
+          value: /var/lib/guacamole/recordings
+        {{- end }}
+        {{- if .Values.oidc.enabled }}
+        {{- $issuer := required "oidc.issuerUrl is required when oidc.enabled" .Values.oidc.issuerUrl | trimSuffix "/" }}
+        - name: OPENID_ENABLED
+          value: "true"
+        - name: OPENID_ISSUER
+          value: {{ $issuer | quote }}
+        - name: OPENID_AUTHORIZATION_ENDPOINT
+          value: {{ .Values.oidc.authorizationEndpoint | default (printf "%s/protocol/openid-connect/auth" $issuer) | quote }}
+        - name: OPENID_JWKS_ENDPOINT
+          value: {{ .Values.oidc.jwksEndpoint | default (printf "%s/protocol/openid-connect/certs" $issuer) | quote }}
+        - name: OPENID_CLIENT_ID
+          value: {{ required "oidc.clientId is required when oidc.enabled" .Values.oidc.clientId | quote }}
+        - name: OPENID_REDIRECT_URI
+          value: {{ printf "https://%s/" (required "route.hostname is required when oidc.enabled" .Values.route.hostname) | quote }}
+        - name: OPENID_USERNAME_CLAIM_TYPE
+          value: {{ .Values.oidc.usernameClaim | quote }}
+        - name: OPENID_GROUPS_CLAIM_TYPE
+          value: {{ .Values.oidc.groupsClaim | quote }}
+        - name: OPENID_SCOPE
+          value: {{ .Values.oidc.scope | quote }}
+        - name: EXTENSION_PRIORITY
+          value: {{ ternary "openid" "*, openid" .Values.oidc.primary | quote }}
+        {{- end }}
+        ports:
+        - containerPort: 8080
+          name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        {{- if or $rec.enabled $wm }}
+        volumeMounts:
+        {{- if $rec.enabled }}
+        - name: recordings
+          mountPath: /var/lib/guacamole/recordings
+          readOnly: true
+        {{- end }}
+        {{- if $wm }}
+        # the image links template extensions into its generated GUACAMOLE_HOME
+        - name: extensions
+          mountPath: /etc/guacamole/extensions/watermark.jar
+          subPath: watermark.jar
+          readOnly: true
+        {{- end }}
+        {{- end }}
+        startupProbe:
+          httpGet:
+            path: /
+            port: 8080
+          periodSeconds: 5
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.resources.guacamole | nindent 10 }}
+      - name: guacd
+        image: {{ .Values.image.guacd }}
+        # guacd authenticates nobody: listen on localhost, for the web container only
+        command: ["/opt/guacamole/sbin/guacd", "-f", "-b", "127.0.0.1", "-l", "4822", "-L", "info"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        {{- if $rec.enabled }}
+        volumeMounts:
+        - name: recordings
+          mountPath: /var/lib/guacamole/recordings
+        {{- end }}
+        # exec, not tcpSocket: kubelet dials the pod IP, guacd is on loopback
+        readinessProbe:
+          exec:
+            command: ["nc", "-z", "127.0.0.1", "4822"]
+          timeoutSeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command: ["nc", "-z", "127.0.0.1", "4822"]
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.resources.guacd | nindent 10 }}
+      {{- if $s3 }}
+      {{- $obc := printf "%s-recordings" (include "guacamole.fullname" .) }}
+      - name: rclone
+        image: {{ .Values.image.rclone }}
+        command: ["sh", "-c"]
+        # copy, never sync: a recording deleted here stays in the bucket
+        args:
+        - |
+          scheme=https
+          [ "$BUCKET_PORT" = 443 ] || scheme=http
+          export RCLONE_CONFIG_S3_ENDPOINT="$scheme://$BUCKET_HOST:$BUCKET_PORT"
+          while true; do
+            rclone copy /var/lib/guacamole/recordings "s3:$BUCKET_NAME" --no-traverse || echo "copy failed, retrying"
+            sleep 300
+          done
+        env:
+        - name: HOME
+          value: /tmp
+        - name: RCLONE_CONFIG
+          value: /tmp/rclone.conf
+        - name: RCLONE_CONFIG_S3_TYPE
+          value: s3
+        - name: RCLONE_CONFIG_S3_PROVIDER
+          value: Other
+        - name: RCLONE_CONFIG_S3_REGION
+          value: {{ $rec.s3.region | quote }}
+        - name: RCLONE_CONFIG_S3_FORCE_PATH_STYLE
+          value: "true"
+        # the claim's bucket exists and its user may not create buckets
+        - name: RCLONE_CONFIG_S3_NO_CHECK_BUCKET
+          value: "true"
+        - name: RCLONE_CONFIG_S3_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ $obc }}
+              key: AWS_ACCESS_KEY_ID
+        - name: RCLONE_CONFIG_S3_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $obc }}
+              key: AWS_SECRET_ACCESS_KEY
+        - name: BUCKET_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: {{ $obc }}
+              key: BUCKET_HOST
+        - name: BUCKET_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ $obc }}
+              key: BUCKET_PORT
+        - name: BUCKET_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: {{ $obc }}
+              key: BUCKET_NAME
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: recordings
+          mountPath: /var/lib/guacamole/recordings
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        readinessProbe:
+          exec:
+            command: ["test", "-d", "/var/lib/guacamole/recordings"]
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.resources.rclone | nindent 10 }}
+      {{- end }}
+      {{- if or $rec.enabled $s3 $wm }}
+      volumes:
+      {{- if $rec.enabled }}
+      - name: recordings
+        persistentVolumeClaim:
+          claimName: {{ include "guacamole.fullname" . }}-recordings
+      {{- end }}
+      {{- if $wm }}
+      - name: extensions
+        configMap:
+          name: {{ include "guacamole.fullname" . }}-extensions
+      {{- end }}
+      {{- if $s3 }}
+      - name: tmp
+        emptyDir: {}
+      {{- end }}
+      {{- end }}

@@ -1,0 +1,20 @@
+Guacamole: oc get route {{ include "guacamole.fullname" . }} -o jsonpath='https://{.spec.host}/{"\n"}'
+
+Administrator: guacadmin, password:
+  oc get secret {{ include "guacamole.fullname" . }} -o jsonpath='{.data.adminPassword}' | base64 -d
+{{- if .Values.kiosk.enabled }}
+
+Kiosk desktop: VNC at {{ include "guacamole.kiosk" . }}:5900, password key vncPassword of Secret {{ include "guacamole.fullname" . }}.
+{{- if not .Values.kiosk.image }}
+The image is built first: oc logs -f bc/{{ include "guacamole.kiosk" . }}
+{{- end }}
+{{- if .Values.kiosk.egressFirewall.enabled }}
+EgressFirewall default: pods of this project reach only {{ concat .Values.kiosk.egressFirewall.allowedDnsNames .Values.kiosk.egressFirewall.allowedCidrs | join ", " | default "nothing" }} outside the cluster.
+{{- end }}
+{{- end }}
+{{- if and .Values.recording.enabled .Values.recording.s3.enabled }}
+
+Recordings are copied to the bucket of ObjectBucketClaim {{ include "guacamole.fullname" . }}-recordings.
+Give the bucket a lifecycle rule that expires them after {{ .Values.recording.s3.expiryDays }} days; the
+claim cannot carry one. See the Delivery instructions of the chart README.
+{{- end }}

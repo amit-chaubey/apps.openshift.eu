@@ -1,0 +1,17 @@
+{{- if and .Values.recording.enabled .Values.recording.s3.enabled }}
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: {{ include "guacamole.fullname" . }}-recordings
+  labels:
+    app: {{ include "guacamole.fullname" $ | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: storage
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+  annotations:
+    # recordings are evidence: uninstalling the chart keeps the bucket
+    helm.sh/resource-policy: keep
+spec:
+  generateBucketName: {{ include "guacamole.fullname" . }}-recordings
+  storageClassName: {{ required "recording.s3.storageClassName is required when recording.s3.enabled" .Values.recording.s3.storageClassName }}
+{{- end }}

@@ -1,0 +1,27 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "guacamole.fullname" . }}
+  labels:
+    app: {{ include "guacamole.fullname" $ | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: route
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+  {{- if and .Values.route.hostname .Values.route.annotations }}
+  annotations:
+    {{- toYaml .Values.route.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.route.hostname }}
+  host: {{ .Values.route.hostname }}
+  {{- end }}
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: {{ include "guacamole.fullname" . }}
+    weight: 100
+  wildcardPolicy: None

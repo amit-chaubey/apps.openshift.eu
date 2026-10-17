@@ -1,0 +1,24 @@
+apiVersion: v2
+name: guacamole
+description: Apache Guacamole remote desktop gateway with a PostgreSQL database, optional single sign-on, session recording to object storage and a locked-down kiosk browser desktop
+type: application
+version: 0.1.0
+appVersion: "1.6.0"
+home: https://apps.openshift.eu
+icon: https://guacamole.apache.org/images/logos/guac-tricolor-logo.svg
+keywords:
+- guacamole
+- remote-desktop
+- vnc
+- rdp
+- session-recording
+sources:
+- https://github.com/apache/guacamole-client
+- https://github.com/apache/guacamole-server
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Apache Guacamole
+  charts.openshift.io/provider: GRN.CLOUD B.V.

@@ -1,0 +1,20 @@
+{{- if .Values.kiosk.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "guacamole.kiosk" . }}-profile
+  labels:
+    app: {{ include "guacamole.kiosk" $ | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: storage
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.kiosk.profileSize }}
+  {{- if .Values.kiosk.storageClassName }}
+  storageClassName: {{ .Values.kiosk.storageClassName }}
+  {{- end }}
+{{- end }}

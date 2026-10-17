@@ -1,0 +1,207 @@
+# empty: objects are named <release>-guacamole
+fullnameOverride: ""
+
+image:
+  # web application, Tomcat on port 8080
+  guacamole: guacamole/guacamole:1.6.0
+  # proxy daemon that speaks VNC, RDP and SSH to the remote desktops
+  guacd: guacamole/guacd:1.6.0
+  # psql of the database job
+  postgres: ghcr.io/cloudnative-pg/postgresql:17.6
+  # copies the recordings to the bucket
+  rclone: rclone/rclone:1.71
+
+resources:
+  guacamole:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+  guacd:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+  rclone:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  job:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+route:
+  # empty: OpenShift assigns a host under the default application domain
+  hostname: ""
+  # used when a hostname is set; certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+database:
+  # PostgreSQL instances of the CloudNativePG cluster
+  instances: 1
+  size: 1Gi
+  # empty: the default storage class
+  storageClassName: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+oidc:
+  # true: users sign in at an OpenID Connect issuer (implicit flow, no client secret)
+  enabled: false
+  # issuer, for example https://login.example.com/realms/example
+  issuerUrl: ""
+  clientId: ""
+  # empty: <issuerUrl>/protocol/openid-connect/auth, the Keycloak address
+  authorizationEndpoint: ""
+  # empty: <issuerUrl>/protocol/openid-connect/certs, the Keycloak address
+  jwksEndpoint: ""
+  # token claim that holds the Guacamole user name
+  usernameClaim: preferred_username
+  # token claim that holds the user's group names, for adminGroups and connections[].groups
+  groupsClaim: groups
+  scope: openid email profile
+  # true: straight to the issuer, no login form. false: the form, with a link to the issuer
+  primary: true
+
+# administrators by user name, signing in like any other user: every system
+# permission and READ on every connection. A name removed from the list loses
+# them on the next upgrade. guacadmin is not one of them: it stays the
+# break-glass administrator with the password of the Secret
+# - admin@example.com
+admins: []
+
+# groups of the issuer, by name as oidc.groupsClaim gives them: their members
+# are administrators like the names in admins, without a database account.
+# A group removed from the list loses the permissions on the next upgrade
+# - admins
+adminGroups: []
+
+# connections managed by the chart. Each one is created or updated on every
+# install and upgrade; its parameters and its users are exactly the ones here
+# - name: desktop
+#   protocol: vnc
+#   hostname: desktop
+#   port: 5900
+#   # Guacamole connection parameters, all values as strings.
+#   # disable-copy and disable-paste are "true" unless set here
+#   parameters:
+#     color-depth: "24"
+#   # Guacamole parameter: key of the Secret <release>-guacamole that holds its value
+#   secretParameters:
+#     password: vncPassword
+#   # users that may open the connection, READ permission only
+#   users:
+#   - user@example.com
+#   # groups of the issuer whose members may open the connection, READ only
+#   groups:
+#   - desktop-users
+connections: []
+
+recording:
+  # true: every session of a managed connection is recorded and can be played
+  # back from the connection history
+  enabled: true
+  size: 10Gi
+  # empty: the default storage class
+  storageClassName: ""
+  s3:
+    # true: recordings are copied to a bucket every 5 minutes, never deleted there
+    enabled: false
+    # storage class of the ObjectBucketClaim; required with s3.enabled
+    storageClassName: ""
+    # days after which the bucket must expire a recording; see the Delivery instructions
+    expiryDays: 180
+    # region given to the S3 client
+    region: us-east-1
+
+watermark:
+  # true: the user name and the time are tiled faintly over every page
+  enabled: false
+
+kiosk:
+  # true: a locked-down Firefox desktop, Service <release>-kiosk on VNC port
+  # 5900, for a connection with hostname <release>-kiosk and
+  # secretParameters password: vncPassword
+  enabled: false
+  # 0 stops the desktop and keeps its profile; at most 1, one Firefox per profile
+  replicas: 1
+  # empty: built in the project from files/kiosk/Containerfile
+  image: ""
+  # registry of the cluster, where the build pushes and the pod pulls
+  registry: image-registry.openshift-image-registry.svc:5000
+  # first page; must match allowedUrls unless it is an about: page
+  homepage: about:blank
+  # Firefox WebsiteFilter exceptions (match patterns); everything else is blocked.
+  # No port: http://10.0.0.1/* matches every port of the host
+  # - https://code.example.com/*
+  allowedUrls: []
+  # seconds Firefox waits for a TCP connection (its default is 90). A page that
+  # loads a stylesheet or font from a host the egress firewall drops stays
+  # blank, or keeps showing the previous page, this long
+  connectTimeout: 5
+  # extra Firefox enterprise policies; a key the chart sets keeps the chart value
+  policies: {}
+  # extra Firefox preferences, each locked; a name the chart sets keeps its value
+  preferences: {}
+  geometry: 1600x900
+  # Firefox profile with the saved logins, kept across restarts
+  profileSize: 1Gi
+  # empty: the default storage class
+  storageClassName: ""
+  egressFirewall:
+    # true: EgressFirewall "default" for the whole project: only the entries
+    # below are reachable outside the cluster. The project may hold one only
+    enabled: true
+    # - code.example.com
+    allowedDnsNames: []
+    # - 192.0.2.10/32
+    allowedCidrs: []
+  resources:
+    requests:
+      cpu: 200m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 3Gi
+  build:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+secrets:
+  # kubernetes: a Secret from the values below. externalSecret: from a secret store
+  type: kubernetes
+  # password of the guacadmin user. Empty: generated once and kept on upgrade
+  adminPassword: ""
+  # VNC password for a desktop, read through connections[].secretParameters.
+  # Empty: generated once and kept on upgrade
+  vncPassword: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # one vault item per secret; the value is read from the item's password
+    items:
+      adminPassword: guacamole-admin-password
+      vncPassword: guacamole-vnc-password

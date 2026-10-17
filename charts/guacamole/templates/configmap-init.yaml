@@ -1,0 +1,219 @@
+{{- $root := . }}
+{{- $admins := list }}
+{{- range $a := (.Values.admins | default list) }}
+{{- if eq $a "guacadmin" }}
+{{- fail "admins: guacadmin is the break-glass administrator with the password of the Secret; leave it out of admins" }}
+{{- end }}
+{{- range $c := $root.Values.connections }}
+{{- if has $a ($c.users | default list) }}
+{{- fail (printf "admins: %s is in admins and in the users of connection %s; a user is one or the other" $a $c.name) }}
+{{- end }}
+{{- end }}
+{{- $admins = append $admins (include "guacamole.sql" $a) }}
+{{- end }}
+{{- $marked := "(SELECT u.entity_id FROM guacamole_user u JOIN guacamole_entity e ON e.entity_id = u.entity_id JOIN guacamole_user_attribute a ON a.user_id = u.user_id AND a.attribute_name = 'guacamole-chart-admin'" }}
+{{- $gone := printf "%s WHERE e.name <> ALL (ARRAY[%s]::text[]))" $marked (join ", " $admins) }}
+{{- $adminGroups := list }}
+{{- range $g := (.Values.adminGroups | default list) }}
+{{- $adminGroups = append $adminGroups (include "guacamole.sql" $g) }}
+{{- end }}
+{{- $markedGroups := "(SELECT g.entity_id FROM guacamole_user_group g JOIN guacamole_entity e ON e.entity_id = g.entity_id JOIN guacamole_user_group_attribute a ON a.user_group_id = g.user_group_id AND a.attribute_name = 'guacamole-chart-admin'" }}
+{{- $goneGroups := printf "%s WHERE e.name <> ALL (ARRAY[%s]::text[]))" $markedGroups (join ", " $adminGroups) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "guacamole.fullname" . }}-init
+  labels:
+    app: {{ printf "%s-init" (include "guacamole.fullname" $) | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: database
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+data:
+  init.sh: |
+    set -eu
+    until pg_isready -q; do
+      echo "waiting for the database"
+      sleep 5
+    done
+    # the schema is created once; Guacamole never creates its own tables.
+    # Schema and init.sql share one transaction, so the schema's default
+    # guacadmin password is never committed
+    files="-f /scripts/init.sql"
+    if [ "$(psql -tAc "SELECT to_regclass('public.guacamole_user') IS NULL")" = t ]; then
+      echo "creating the schema"
+      files="-f /work/schema.sql $files"
+    fi
+    # shellcheck disable=SC2086
+    psql -v ON_ERROR_STOP=1 --single-transaction -q $files
+    echo "done"
+  # applied on every install and upgrade: each statement leaves the same state
+  init.sql: |
+    \set admin_password `cat /secrets/adminPassword`
+    {{- range $i, $c := .Values.connections }}
+    {{- range $j, $p := keys ($c.secretParameters | default dict) | sortAlpha }}
+    \set secret_{{ $i }}_{{ $j }} `cat /secrets/{{ index $c.secretParameters $p }}`
+    {{- end }}
+    {{- end }}
+
+    -- guacadmin: password from the Secret, hashed as Guacamole does
+    UPDATE guacamole_user
+    SET password_hash = sha256(convert_to(:'admin_password' || coalesce(upper(encode(password_salt, 'hex')), ''), 'UTF8')),
+        password_date = now()
+    WHERE entity_id = (SELECT entity_id FROM guacamole_entity WHERE name = 'guacadmin' AND type = 'USER')
+      AND password_hash <> sha256(convert_to(:'admin_password' || coalesce(upper(encode(password_salt, 'hex')), ''), 'UTF8'));
+
+    -- former administrators: users marked by an earlier list and not in this
+    -- one lose every system permission, READ on the connections and the mark
+    DELETE FROM guacamole_system_permission WHERE entity_id IN {{ $gone }};
+    DELETE FROM guacamole_connection_permission WHERE permission = 'READ' AND entity_id IN {{ $gone }};
+    DELETE FROM guacamole_user_attribute
+    WHERE attribute_name = 'guacamole-chart-admin'
+      AND user_id IN (SELECT u.user_id FROM guacamole_user u WHERE u.entity_id IN {{ $gone }});
+    -- former administrator groups: the same, for groups marked by an earlier list
+    DELETE FROM guacamole_system_permission WHERE entity_id IN {{ $goneGroups }};
+    DELETE FROM guacamole_connection_permission WHERE permission = 'READ' AND entity_id IN {{ $goneGroups }};
+    DELETE FROM guacamole_user_group_attribute
+    WHERE attribute_name = 'guacamole-chart-admin'
+      AND user_group_id IN (SELECT g.user_group_id FROM guacamole_user_group g WHERE g.entity_id IN {{ $goneGroups }});
+    {{- range $i, $c := .Values.connections }}
+    {{- $name := include "guacamole.sql" (required "connections[].name is required" $c.name) }}
+    {{- $conn := printf "(SELECT connection_id FROM guacamole_connection WHERE connection_name = %s AND parent_id IS NULL)" $name }}
+    {{- $params := dict "hostname" (required "connections[].hostname is required" $c.hostname) }}
+    {{- if $c.port }}{{- $_ := set $params "port" $c.port }}{{- end }}
+    {{- /* no clipboard unless a connection asks for it */}}
+    {{- $_ := set $params "disable-copy" "true" }}
+    {{- $_ := set $params "disable-paste" "true" }}
+    {{- if $root.Values.recording.enabled }}
+    {{- $_ := set $params "recording-path" "${HISTORY_PATH}/${HISTORY_UUID}" }}
+    {{- $_ := set $params "create-recording-path" "true" }}
+    {{- end }}
+    {{- range $k, $v := ($c.parameters | default dict) }}{{- $_ := set $params $k $v }}{{- end }}
+    {{- $secretNames := keys ($c.secretParameters | default dict) | sortAlpha }}
+    {{- $all := concat (keys $params) $secretNames | uniq | sortAlpha }}
+
+    -- connection {{ $c.name }}
+    INSERT INTO guacamole_connection (connection_name, protocol)
+    SELECT {{ $name }}, {{ include "guacamole.sql" (required "connections[].protocol is required" $c.protocol) }}
+    WHERE NOT EXISTS {{ $conn }};
+    UPDATE guacamole_connection SET protocol = {{ include "guacamole.sql" $c.protocol }}
+    WHERE connection_name = {{ $name }} AND parent_id IS NULL;
+    DELETE FROM guacamole_connection_parameter
+    WHERE connection_id = {{ $conn }}
+      AND parameter_name NOT IN ({{ range $n, $k := $all }}{{ if $n }}, {{ end }}{{ include "guacamole.sql" $k }}{{ end }});
+    INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)
+    SELECT {{ $conn }}, v.name, v.value FROM (VALUES
+    {{- range $k := keys $params | sortAlpha }}
+    {{- if not (has $k $secretNames) }}
+      ({{ include "guacamole.sql" $k }}, {{ include "guacamole.sql" (index $params $k) }}),
+    {{- end }}
+    {{- end }}
+    {{- range $j, $k := $secretNames }}
+      ({{ include "guacamole.sql" $k }}, :'secret_{{ $i }}_{{ $j }}'),
+    {{- end }}
+      (NULL, NULL)
+    ) AS v(name, value)
+    WHERE v.name IS NOT NULL
+    ON CONFLICT (connection_id, parameter_name) DO UPDATE SET parameter_value = EXCLUDED.parameter_value;
+    {{- $users := list }}
+    {{- range $u := ($c.users | default list) }}{{- $users = append $users (include "guacamole.sql" $u) }}{{- end }}
+    {{- range $u := $users }}
+    INSERT INTO guacamole_entity (name, type) VALUES ({{ $u }}, 'USER')
+    ON CONFLICT (type, name) DO NOTHING;
+    -- a random password nobody knows: the user signs in through single sign-on
+    INSERT INTO guacamole_user (entity_id, password_hash, password_salt, password_date)
+    SELECT entity_id,
+           sha256(convert_to(gen_random_uuid()::text || gen_random_uuid()::text, 'UTF8')),
+           sha256(convert_to(gen_random_uuid()::text, 'UTF8')),
+           now()
+    FROM guacamole_entity WHERE name = {{ $u }} AND type = 'USER'
+    ON CONFLICT (entity_id) DO NOTHING;
+    INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
+    SELECT entity_id, {{ $conn }}, 'READ'
+    FROM guacamole_entity WHERE name = {{ $u }} AND type = 'USER'
+    ON CONFLICT DO NOTHING;
+    -- READ on the connection and nothing else
+    DELETE FROM guacamole_connection_permission
+    WHERE entity_id = (SELECT entity_id FROM guacamole_entity WHERE name = {{ $u }} AND type = 'USER')
+      AND permission <> 'READ';
+    DELETE FROM guacamole_system_permission
+    WHERE entity_id = (SELECT entity_id FROM guacamole_entity WHERE name = {{ $u }} AND type = 'USER');
+    {{- end }}
+    {{- $groups := list }}
+    {{- range $g := ($c.groups | default list) }}{{- $groups = append $groups (include "guacamole.sql" $g) }}{{- end }}
+    {{- range $g := $groups }}
+    INSERT INTO guacamole_entity (name, type) VALUES ({{ $g }}, 'USER_GROUP')
+    ON CONFLICT (type, name) DO NOTHING;
+    INSERT INTO guacamole_user_group (entity_id)
+    SELECT entity_id FROM guacamole_entity WHERE name = {{ $g }} AND type = 'USER_GROUP'
+    ON CONFLICT (entity_id) DO NOTHING;
+    INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
+    SELECT entity_id, {{ $conn }}, 'READ'
+    FROM guacamole_entity WHERE name = {{ $g }} AND type = 'USER_GROUP'
+    ON CONFLICT DO NOTHING;
+    {{- end }}
+    {{- $keep := concat $users $admins }}
+    {{- $keepGroups := concat $groups $adminGroups }}
+    -- users and groups removed from the lists lose the connection; administrators keep it
+    DELETE FROM guacamole_connection_permission
+    WHERE connection_id = {{ $conn }}
+      AND entity_id NOT IN (SELECT entity_id FROM guacamole_entity
+        WHERE (type = 'USER' AND name IN ({{ if $keep }}{{ join ", " $keep }}{{ else }}NULL{{ end }}))
+           OR (type = 'USER_GROUP' AND name IN ({{ if $keepGroups }}{{ join ", " $keepGroups }}{{ else }}NULL{{ end }})));
+    {{- end }}
+
+    -- administrators: every system permission, READ on every connection, and
+    -- the mark that lets a later list take both away again
+    {{- range $a := $admins }}
+    INSERT INTO guacamole_entity (name, type) VALUES ({{ $a }}, 'USER')
+    ON CONFLICT (type, name) DO NOTHING;
+    -- a random password nobody knows: the administrator signs in through single sign-on
+    INSERT INTO guacamole_user (entity_id, password_hash, password_salt, password_date)
+    SELECT entity_id,
+           sha256(convert_to(gen_random_uuid()::text || gen_random_uuid()::text, 'UTF8')),
+           sha256(convert_to(gen_random_uuid()::text, 'UTF8')),
+           now()
+    FROM guacamole_entity WHERE name = {{ $a }} AND type = 'USER'
+    ON CONFLICT (entity_id) DO NOTHING;
+    INSERT INTO guacamole_user_attribute (user_id, attribute_name, attribute_value)
+    SELECT u.user_id, 'guacamole-chart-admin', 'true'
+    FROM guacamole_user u JOIN guacamole_entity e ON e.entity_id = u.entity_id
+    WHERE e.name = {{ $a }} AND e.type = 'USER'
+    ON CONFLICT DO NOTHING;
+    INSERT INTO guacamole_system_permission (entity_id, permission)
+    SELECT e.entity_id, p.permission::guacamole_system_permission_type
+    FROM guacamole_entity e, (VALUES ('ADMINISTER'), ('AUDIT'), ('CREATE_CONNECTION'), ('CREATE_CONNECTION_GROUP'),
+      ('CREATE_SHARING_PROFILE'), ('CREATE_USER'), ('CREATE_USER_GROUP')) AS p(permission)
+    WHERE e.name = {{ $a }} AND e.type = 'USER'
+    ON CONFLICT DO NOTHING;
+    INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
+    SELECT e.entity_id, c.connection_id, 'READ'
+    FROM guacamole_entity e, guacamole_connection c
+    WHERE e.name = {{ $a }} AND e.type = 'USER'
+    ON CONFLICT DO NOTHING;
+    {{- end }}
+
+    -- administrator groups: the same permissions and mark, for every member
+    -- the issuer names in the groups claim
+    {{- range $g := $adminGroups }}
+    INSERT INTO guacamole_entity (name, type) VALUES ({{ $g }}, 'USER_GROUP')
+    ON CONFLICT (type, name) DO NOTHING;
+    INSERT INTO guacamole_user_group (entity_id)
+    SELECT entity_id FROM guacamole_entity WHERE name = {{ $g }} AND type = 'USER_GROUP'
+    ON CONFLICT (entity_id) DO NOTHING;
+    INSERT INTO guacamole_user_group_attribute (user_group_id, attribute_name, attribute_value)
+    SELECT g.user_group_id, 'guacamole-chart-admin', 'true'
+    FROM guacamole_user_group g JOIN guacamole_entity e ON e.entity_id = g.entity_id
+    WHERE e.name = {{ $g }} AND e.type = 'USER_GROUP'
+    ON CONFLICT DO NOTHING;
+    INSERT INTO guacamole_system_permission (entity_id, permission)
+    SELECT e.entity_id, p.permission::guacamole_system_permission_type
+    FROM guacamole_entity e, (VALUES ('ADMINISTER'), ('AUDIT'), ('CREATE_CONNECTION'), ('CREATE_CONNECTION_GROUP'),
+      ('CREATE_SHARING_PROFILE'), ('CREATE_USER'), ('CREATE_USER_GROUP')) AS p(permission)
+    WHERE e.name = {{ $g }} AND e.type = 'USER_GROUP'
+    ON CONFLICT DO NOTHING;
+    INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
+    SELECT e.entity_id, c.connection_id, 'READ'
+    FROM guacamole_entity e, guacamole_connection c
+    WHERE e.name = {{ $g }} AND e.type = 'USER_GROUP'
+    ON CONFLICT DO NOTHING;
+    {{- end }}

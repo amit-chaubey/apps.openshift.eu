@@ -1,0 +1,14 @@
+{{- if .Values.watermark.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "guacamole.fullname" . }}-extensions
+  labels:
+    app: {{ include "guacamole.fullname" . | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: server
+    {{- include "guacamole.commonLabels" . | nindent 4 }}
+# built by ci/build-watermark.sh from files/watermark
+binaryData:
+  watermark.jar: {{ .Files.Get "files/watermark.jar" | b64enc }}
+{{- end }}

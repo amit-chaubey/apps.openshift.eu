@@ -1,0 +1,7 @@
+{
+    "guacamoleVersion" : "1.6.0",
+    "name"      : "Watermark",
+    "namespace" : "watermark",
+    "js"  : [ "watermark.js" ],
+    "css" : [ "watermark.css" ]
+}

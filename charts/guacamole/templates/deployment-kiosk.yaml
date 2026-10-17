@@ -1,0 +1,112 @@
+{{- if .Values.kiosk.enabled }}
+{{- $k := .Values.kiosk }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "guacamole.kiosk" . }}
+  labels:
+    app: {{ include "guacamole.kiosk" $ | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: kiosk
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: firefox
+spec:
+  replicas: {{ $k.replicas }}
+  # the profile volume is ReadWriteOnce, and one Firefox may own a profile
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ include "guacamole.kiosk" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "guacamole.kiosk" . }}
+      annotations:
+        checksum/kiosk: {{ include (print $.Template.BasePath "/configmap-kiosk-policies.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # no fixed user or fsGroup: both come from the project's range
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: kiosk
+        {{- if $k.image }}
+        image: {{ $k.image }}
+        {{- else }}
+        # a fixed tag: pulled again on every start, after a new build too
+        image: {{ $k.registry }}/{{ .Release.Namespace }}/{{ include "guacamole.kiosk" . }}:latest
+        imagePullPolicy: Always
+        {{- end }}
+        command: ["sh", "/opt/kiosk/start.sh"]
+        env:
+        - name: HOME
+          value: /tmp
+        - name: VNC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "guacamole.fullname" . }}
+              key: vncPassword
+        - name: GEOMETRY
+          value: {{ $k.geometry | quote }}
+        - name: HOMEPAGE
+          value: {{ $k.homepage | quote }}
+        ports:
+        - containerPort: 5900
+          name: vnc
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: profile
+          mountPath: /profile
+        - name: kiosk
+          mountPath: /opt/kiosk/start.sh
+          subPath: start.sh
+        - name: kiosk
+          mountPath: /usr/lib64/firefox/distribution/policies.json
+          subPath: policies.json
+        - name: tmp
+          mountPath: /tmp
+        - name: downloads
+          mountPath: /downloads
+          readOnly: true
+        - name: shm
+          mountPath: /dev/shm
+        # exec, not tcpSocket: Xvnc blacklists an address after connections without VNC authentication
+        readinessProbe:
+          exec:
+            command: ["sh", "-c", 'kill -0 "$(cat /tmp/xvnc.pid)" && kill -0 "$(cat /tmp/firefox.pid)"']
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command: ["sh", "-c", 'kill -0 "$(cat /tmp/xvnc.pid)"']
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        resources:
+          {{- toYaml $k.resources | nindent 10 }}
+      volumes:
+      - name: profile
+        persistentVolumeClaim:
+          claimName: {{ include "guacamole.kiosk" . }}-profile
+      - name: kiosk
+        configMap:
+          name: {{ include "guacamole.kiosk" . }}
+      # the VNC password lives here, gone with the pod
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+      # the download directory: read-only, so every download fails
+      - name: downloads
+        emptyDir:
+          sizeLimit: 1Mi
+      # Firefox content processes share memory through /dev/shm
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+{{- end }}

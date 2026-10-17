@@ -1,0 +1,95 @@
+# creates the schema once, then sets the admin password and the connections.
+# Every run leaves the same state, so it runs after each install and upgrade
+# (an Argo CD PostSync hook)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "guacamole.fullname" . }}-init
+  labels:
+    app: {{ printf "%s-init" (include "guacamole.fullname" $) | quote }}
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/component: database
+    {{- include "guacamole.commonLabels" $ | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  # a database that never comes up fails the sync instead of hanging it
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: schema
+        image: {{ .Values.image.guacamole }}
+        command: ["sh", "-c", "/opt/guacamole/bin/initdb.sh --postgresql > /work/schema.sql"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: work
+          mountPath: /work
+        resources:
+          {{- toYaml .Values.resources.job | nindent 10 }}
+      containers:
+      - name: apply
+        image: {{ .Values.image.postgres }}
+        command: ["sh", "/scripts/init.sh"]
+        env:
+        - name: HOME
+          value: /work
+        - name: PGHOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "guacamole.fullname" . }}-db-app
+              key: host
+        - name: PGPORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "guacamole.fullname" . }}-db-app
+              key: port
+        - name: PGDATABASE
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "guacamole.fullname" . }}-db-app
+              key: dbname
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "guacamole.fullname" . }}-db-app
+              key: username
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "guacamole.fullname" . }}-db-app
+              key: password
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: work
+          mountPath: /work
+        - name: scripts
+          mountPath: /scripts
+        - name: secrets
+          mountPath: /secrets
+          readOnly: true
+        resources:
+          {{- toYaml .Values.resources.job | nindent 10 }}
+      volumes:
+      - name: work
+        emptyDir: {}
+      - name: scripts
+        configMap:
+          name: {{ include "guacamole.fullname" . }}-init
+      - name: secrets
+        secret:
+          secretName: {{ include "guacamole.fullname" . }}
