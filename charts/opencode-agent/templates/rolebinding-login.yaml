@@ -1,0 +1,23 @@
+{{- if .Values.oauth.allowedGroups }}
+# Members of these OpenShift groups pass the login proxy's group check
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "opencode-agent.name" . }}-login
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "opencode-agent.name" $ }}
+    app.kubernetes.io/name: opencode-agent
+    app.kubernetes.io/component: server
+    {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "opencode-agent.name" . }}-login
+subjects:
+{{- range .Values.oauth.allowedGroups }}
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: {{ . }}
+{{- end }}
+{{- end }}

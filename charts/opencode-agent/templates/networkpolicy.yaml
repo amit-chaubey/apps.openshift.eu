@@ -1,0 +1,42 @@
+{{- if .Values.networkPolicy.enabled }}
+# UI only from the router, A2A only from the listed namespaces
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencode-agent.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "opencode-agent.name" $ }}
+    app.kubernetes.io/name: opencode-agent
+    app.kubernetes.io/component: server
+    {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "opencode-agent.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: {{ .Values.oauthProxy.port }}
+    from:
+    - namespaceSelector:
+        matchLabels:
+          policy-group.network.openshift.io/ingress: ""
+    # a HostNetwork router sends from the node network
+    - namespaceSelector:
+        matchLabels:
+          policy-group.network.openshift.io/host-network: ""
+  {{- with include "opencode-agent.a2aNamespaces" . | fromJsonArray }}
+  - ports:
+    - protocol: TCP
+      port: 8080
+    from:
+    {{- range . }}
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ . }}
+    {{- end }}
+  {{- end }}
+{{- end }}

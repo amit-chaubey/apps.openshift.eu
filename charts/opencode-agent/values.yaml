@@ -1,0 +1,162 @@
+person:
+  # short lowercase name; objects are named <name>-agent. Empty: the release name
+  name: ""
+  # Git identity; also the UI owner when oauth.ownerEmail is empty
+  email: ""
+  # one line appended to the agent instructions, for example "I am sales"
+  role: ""
+
+route:
+  # empty: OpenShift assigns a host under the default application domain
+  host: ""
+  # extra labels on the Route only, for example to pick a router shard
+  labels: {}
+  # the UI streams over SSE; the router must not cut idle streams
+  timeout: 3600s
+  # used when a host is set; certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+oauth:
+  # OpenShift user name (an email) of the only person admitted to the UI.
+  # Empty: person.email; both empty: nobody logs in
+  ownerEmail: ""
+  # OpenShift groups the owner must be in; empty: no group check
+  allowedGroups: []
+
+secrets:
+  # kubernetes: Secrets from the values below. externalSecret: from a secret store
+  type: kubernetes
+  # empty: generated once and kept on upgrade. A value that is not 16, 24 or
+  # 32 characters long is hashed to 32
+  cookieSecret: ""
+  # password between the UI proxy, the A2A adapter and OpenCode. Empty: generated once
+  serverPassword: ""
+  # bearer token the A2A adapter accepts. Empty: generated once
+  a2aToken: ""
+  # access token for git.url, sent to the host of git.url only
+  gitToken: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # one vault item per secret; the value is read from the item's password.
+    # Empty name: <name>-agent-<secret>
+    items:
+      cookieSecret: ""
+      serverPassword: ""
+      a2aToken: ""
+      gitToken: ""
+
+git:
+  # repository cloned into /workspace on first start; empty: no clone. The token
+  # is secrets.gitToken
+  url: ""
+  # branch of the first clone
+  branch: main
+
+gateway:
+  # model and A2A gateway the token proxy forwards to, for example https://api.example.com
+  upstream: ""
+  # audience of the agent's ServiceAccount token. Empty: the host of upstream
+  audience: ""
+
+a2a:
+  # namespace of the gateway's HTTPRoutes that publish A2A. Empty: none
+  gatewayNamespace: ""
+  # inbound Host header allowlist (A2A_ALLOWED_HOSTS); empty disables the check
+  allowedHosts: []
+  # Agent Card base URL. Empty: the in-cluster Service URL
+  publicUrl: ""
+  # opencode-a2a release installed from PyPI
+  version: 1.3.6
+  # the A2A task store needs SQLite 3.35 or later (RETURNING); UBI 9 ships 3.34
+  baseImage: registry.access.redhat.com/ubi10/python-312-minimal
+  # prebuilt adapter image; required when builds.enabled is false
+  image: ""
+  # adapter container requests and limits
+  resources:
+    requests:
+      cpu: 50m
+      memory: 192Mi
+    limits:
+      memory: 512Mi
+
+opencode:
+  # OpenCode release
+  version: 1.19.3
+  # OpenCode image the build starts from
+  baseImage: ghcr.io/anomalyco/opencode
+  # prebuilt image with git and /tools/kubernetes-mcp-server, used when builds.enabled is false.
+  # Empty: baseImage:version
+  image: ""
+  # npm plugins OpenCode installs on start, for example a model provider plugin
+  plugins: []
+  # "@scope": <registry URL> for those installs, written to ~/.npmrc
+  npmScopes: {}
+  # extra environment for the opencode container (name: value)
+  env: {}
+  # merged over the generated opencode.json
+  config: {}
+  # opencode container requests and limits
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 4Gi
+
+kubernetesMcpServer:
+  # image the kubernetes-mcp-server binary is copied from
+  image: quay.io/containers/kubernetes_mcp_server:v0.0.67
+
+builds:
+  # build the opencode (with git) and opencode-a2a images in the project
+  enabled: true
+  # registry of the cluster, where the builds push and the pod pulls
+  registry: image-registry.openshift-image-registry.svc:5000
+
+oauthProxy:
+  # OpenShift oauth-proxy in front of the UI; the cluster keeps this tag current
+  image: image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4
+  # UI port of the pod
+  port: 4180
+  # login proxy requests and limits
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+tokenProxy:
+  # image that runs the token proxy script
+  image: registry.access.redhat.com/ubi9/python-312-minimal
+  # loopback port OpenCode sends model and A2A calls to
+  port: 8099
+  # token proxy requests and limits
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+serviceAccount:
+  # empty: <name>-agent, created by kagent; another name is created by the chart
+  name: ""
+
+storage:
+  # work tree, OpenCode home and session store
+  size: 20Gi
+  # the only accepted mode: a rolling update starts the new pod before the old one stops
+  accessMode: ReadWriteMany
+  # empty: the default storage class
+  className: ""
+
+networkPolicy:
+  # admit the UI from the router and A2A from the listed namespaces only
+  enabled: true
+  # more namespaces that may call A2A on 8080; a2a.gatewayNamespace always may
+  a2aNamespaces: []

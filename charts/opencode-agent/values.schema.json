@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "person": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string", "pattern": "^$|^[a-z0-9]([-a-z0-9]{0,40}[a-z0-9])?$"},
+        "email": {"type": "string", "pattern": "^$|^[^@\\s]+@[^@\\s]+$"},
+        "role": {"type": "string"}
+      }
+    },
+    "route": {
+      "type": "object",
+      "properties": {
+        "host": {"type": "string"},
+        "labels": {"type": "object", "additionalProperties": {"type": "string"}},
+        "timeout": {"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"},
+        "annotations": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "oauth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ownerEmail": {"type": "string", "pattern": "^$|^[^@\\s]+@[^@\\s]+$"},
+        "allowedGroups": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "type": {"enum": ["kubernetes", "externalSecret"]},
+        "cookieSecret": {"type": "string"},
+        "serverPassword": {"type": "string"},
+        "a2aToken": {"type": "string"},
+        "gitToken": {"type": "string"},
+        "externalSecret": {
+          "type": "object",
+          "properties": {
+            "storeKind": {"enum": ["ClusterSecretStore", "SecretStore"]},
+            "storeName": {"type": "string"},
+            "refreshInterval": {"type": "string"},
+            "items": {
+              "type": "object",
+              "properties": {
+                "cookieSecret": {"type": "string"},
+                "serverPassword": {"type": "string"},
+                "a2aToken": {"type": "string"},
+                "gitToken": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "properties": {
+        "url": {"type": "string", "pattern": "^$|^(https?|ssh)://|^[^@]+@[^:]+:"},
+        "branch": {"type": "string", "minLength": 1}
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "properties": {
+        "upstream": {"type": "string", "pattern": "^$|^https?://"},
+        "audience": {"type": "string"}
+      }
+    },
+    "a2a": {
+      "type": "object",
+      "properties": {
+        "gatewayNamespace": {"type": "string"},
+        "allowedHosts": {"type": "array", "items": {"type": "string"}},
+        "publicUrl": {"type": "string", "pattern": "^$|^https?://"},
+        "version": {"type": "string", "minLength": 1},
+        "baseImage": {"type": "string", "minLength": 1},
+        "image": {"type": "string"},
+        "resources": {"type": "object"}
+      }
+    },
+    "opencode": {
+      "type": "object",
+      "properties": {
+        "version": {"type": "string", "minLength": 1},
+        "baseImage": {"type": "string", "minLength": 1},
+        "image": {"type": "string"},
+        "plugins": {"type": "array", "items": {"type": "string"}},
+        "npmScopes": {"type": "object", "additionalProperties": {"type": "string"}},
+        "env": {"type": "object"},
+        "config": {"type": "object"},
+        "resources": {"type": "object"}
+      }
+    },
+    "kubernetesMcpServer": {
+      "type": "object",
+      "properties": {"image": {"type": "string", "minLength": 1}}
+    },
+    "builds": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "registry": {"type": "string", "minLength": 1}
+      }
+    },
+    "oauthProxy": {
+      "type": "object",
+      "properties": {
+        "image": {"type": "string", "minLength": 1},
+        "port": {"type": "integer"},
+        "resources": {"type": "object"}
+      }
+    },
+    "tokenProxy": {
+      "type": "object",
+      "properties": {
+        "image": {"type": "string", "minLength": 1},
+        "port": {"type": "integer"},
+        "resources": {"type": "object"}
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {"name": {"type": "string"}}
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "size": {"type": "string", "minLength": 1},
+        "accessMode": {"enum": ["ReadWriteMany"]},
+        "className": {"type": "string"}
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "a2aNamespaces": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

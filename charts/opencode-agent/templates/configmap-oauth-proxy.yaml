@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "opencode-agent.name" . }}-oauth-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "opencode-agent.name" . }}
+    app.kubernetes.io/name: opencode-agent
+    app.kubernetes.io/component: server
+    {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+data:
+  # The owner's OpenShift user name only; empty: nobody logs in
+  emails.txt: |
+    {{- with include "opencode-agent.ownerEmail" . }}
+    {{ . }}
+    {{- end }}

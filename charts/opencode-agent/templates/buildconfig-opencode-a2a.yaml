@@ -1,0 +1,49 @@
+{{- if .Values.builds.enabled }}
+{{- $name := printf "%s-opencode-a2a" (include "opencode-agent.name" .) }}
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "opencode-agent.name" $ }}
+    app.kubernetes.io/name: opencode-agent
+    app.kubernetes.io/component: build
+    {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+spec:
+  lookupPolicy:
+    local: true
+---
+# PyPI only, no upstream image; the name hash makes ConfigChange rebuild
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: {{ $name }}-{{ include "opencode-agent.a2aHash" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "opencode-agent.name" $ }}
+    app.kubernetes.io/name: opencode-agent
+    app.kubernetes.io/component: build
+    {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+spec:
+  runPolicy: Serial
+  source:
+    type: Dockerfile
+    dockerfile: |
+      {{- include "opencode-agent.a2aDockerfile" . | nindent 6 }}
+  strategy:
+    type: Docker
+    dockerStrategy: {}
+  output:
+    to:
+      kind: ImageStreamTag
+      name: {{ $name }}:{{ include "opencode-agent.a2aTag" . }}
+  triggers:
+  - type: ConfigChange
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+{{- end }}

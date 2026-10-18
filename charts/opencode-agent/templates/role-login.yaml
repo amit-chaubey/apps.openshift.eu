@@ -1,0 +1,22 @@
+{{- if .Values.oauth.allowedGroups }}
+# The login proxy admits a user only with this permission (SAR)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "opencode-agent.name" . }}-login
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "opencode-agent.name" $ }}
+    app.kubernetes.io/name: opencode-agent
+    app.kubernetes.io/component: server
+    {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services/proxy
+  resourceNames:
+  - {{ include "opencode-agent.name" . }}-ui
+  verbs:
+  - get
+{{- end }}

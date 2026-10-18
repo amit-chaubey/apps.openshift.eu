@@ -1,0 +1,48 @@
+{{- $config := dict
+  "$schema" "https://opencode.ai/config.json"
+  "autoupdate" false
+  "share" "disabled"
+  "instructions" (list "/etc/opencode-agent/instructions.md")
+  "plugin" .Values.opencode.plugins
+  "mcp" (dict "kubernetes" (dict
+    "type" "local"
+    "enabled" true
+    "command" (list "/tools/kubernetes-mcp-server" "--config" "/etc/opencode-agent/kubernetes-mcp-server.toml" "--disable-multi-cluster")
+  ))
+-}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "opencode-agent.name" . }}-opencode
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "opencode-agent.name" . }}
+    app.kubernetes.io/name: opencode-agent
+    app.kubernetes.io/component: server
+    {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+data:
+  opencode.json: |
+    {{- mergeOverwrite $config (deepCopy .Values.opencode.config) | toPrettyJson | nindent 4 }}
+  instructions.md: |
+{{ .Files.Get "files/instructions.md" | indent 4 }}
+    ## Person
+
+    - Name: {{ include "opencode-agent.person" . }}
+    {{- with .Values.person.email }}
+    - Email: {{ . }}
+    {{- end }}
+    {{- with .Values.person.role }}
+    - {{ . }}
+    {{- end }}
+  # The RoleBinding limits the namespace; the server has no namespace flag
+  kubernetes-mcp-server.toml: |
+    denied_resources = [
+      {group = "", version = "v1", kind = "Secret"},
+    ]
+  # Copied to ~/.npmrc on every start; read when OpenCode installs plugins
+  npmrc: |
+    {{- range $scope, $url := .Values.opencode.npmScopes }}
+    {{ $scope }}:registry={{ $url }}
+    {{- end }}
+  init.sh: |
+{{ .Files.Get "files/init.sh" | indent 4 }}

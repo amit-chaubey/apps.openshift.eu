@@ -1,0 +1,23 @@
+apiVersion: v2
+name: opencode-agent
+description: Personal OpenCode coding agent with a browser UI behind a login, reachable by other agents over A2A
+type: application
+version: 0.1.0
+appVersion: 1.19.3
+home: https://apps.openshift.eu
+icon: https://opencode.ai/favicon.svg
+keywords:
+- ai
+- agent
+- opencode
+- a2a
+- kagent
+sources:
+- https://github.com/anomalyco/opencode
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: OpenCode Agent
+  charts.openshift.io/provider: GRN.CLOUD B.V.

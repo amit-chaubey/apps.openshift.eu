@@ -1,0 +1,278 @@
+{{- $name := include "opencode-agent.name" . -}}
+{{- $home := "/workspace/.home" -}}
+{{- $audience := include "opencode-agent.audience" . -}}
+{{- $user := include "opencode-agent.opencodeUser" . -}}
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ $name }}
+    app.kubernetes.io/name: opencode-agent
+    app.kubernetes.io/component: server
+    {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+spec:
+  type: BYO
+  description: {{ printf "OpenCode agent of %s. %s" (include "opencode-agent.person" .) .Values.person.role | trim | quote }}
+  byo:
+    deployment:
+      # OpenCode keeps sessions in a local SQLite file: one replica only
+      replicas: 1
+      {{- if include "opencode-agent.ownServiceAccount" . }}
+      serviceAccountName: {{ include "opencode-agent.serviceAccountName" . }}
+      {{- else }}
+      # kagent creates the ServiceAccount named after the Agent with this config
+      serviceAccountConfig:
+        annotations:
+          serviceaccounts.openshift.io/oauth-redirectreference.primary: {{ include "opencode-agent.redirectReference" . | quote }}
+      {{- end }}
+      # Pod labels, fixed for the life of a release
+      labels:
+        kagenti.io/type: agent
+        protocol.kagenti.io/a2a: ""
+        app.kubernetes.io/name: {{ $name }}
+        app.kubernetes.io/part-of: {{ .Release.Namespace }}
+      annotations:
+        # Mounted files are not reloaded in place; roll the pod when they change
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-opencode.yaml") . | sha256sum }}
+        checksum/oauth-proxy: {{ include (print $.Template.BasePath "/configmap-oauth-proxy.yaml") . | sha256sum }}
+        checksum/token-proxy: {{ .Files.Get "files/token-proxy.py" | sha256sum }}
+      image: {{ include "opencode-agent.a2aImage" . }}
+      imagePullPolicy: IfNotPresent
+      cmd: opencode-a2a
+      args:
+      - serve
+      env:
+      - name: A2A_HOST
+        value: 0.0.0.0
+      - name: A2A_PORT
+        value: "8080"
+      - name: A2A_PUBLIC_URL
+        value: {{ default (printf "http://%s.%s.svc.cluster.local:8080" $name .Release.Namespace) .Values.a2a.publicUrl }}
+      {{- with .Values.a2a.allowedHosts }}
+      - name: A2A_ALLOWED_HOSTS
+        value: {{ join "," . | quote }}
+      {{- end }}
+      - name: A2A_TITLE
+        value: {{ $name }}
+      - name: A2A_DESCRIPTION
+        value: {{ .Values.person.role | quote }}
+      - name: A2A_STATIC_AUTH_CREDENTIALS
+        valueFrom:
+          secretKeyRef:
+            name: {{ $name }}-a2a-auth
+            key: credentials
+      # Outbound a2a_call goes through the token proxy, which adds the token
+      - name: A2A_CLIENT_ALLOWED_HOSTS
+        value: 127.0.0.1
+      - name: A2A_CLIENT_ALLOW_PRIVATE_HOSTS
+        value: "true"
+      - name: A2A_TASK_STORE_DATABASE_URL
+        value: sqlite+aiosqlite:////workspace/opencode-a2a.db
+      - name: OPENCODE_BASE_URL
+        value: http://127.0.0.1:4096
+      - name: OPENCODE_WORKSPACE_ROOT
+        value: /workspace
+      - name: OPENCODE_AUTH_USERNAME
+        value: {{ $user | quote }}
+      - name: OPENCODE_AUTH_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: {{ $name }}-server-password
+            key: password
+      - name: HOME
+        value: /tmp
+      volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+      resources:
+        {{- toYaml .Values.a2a.resources | nindent 8 }}
+      securityContext:
+        {{- include "opencode-agent.containerSecurityContext" . | nindent 8 }}
+      extraContainers:
+      # One OpenCode per volume: a new pod waits for the lock until the old one stops
+      - name: opencode
+        image: {{ include "opencode-agent.opencodeImage" . }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -c
+        - sh /etc/opencode-agent/init.sh && cd "$REPO_DIR" && exec flock -x /workspace/.opencode.lock opencode web --hostname 127.0.0.1 --port 4096
+        env:
+        - name: HOME
+          value: {{ $home }}
+        - name: XDG_CONFIG_HOME
+          value: {{ $home }}/.config
+        - name: XDG_DATA_HOME
+          value: {{ $home }}/.local/share
+        - name: XDG_STATE_HOME
+          value: {{ $home }}/.local/state
+        - name: XDG_CACHE_HOME
+          value: {{ $home }}/.cache
+        - name: OPENCODE_CONFIG
+          value: /etc/opencode-agent/opencode.json
+        - name: OPENCODE_SERVER_USERNAME
+          value: {{ $user | quote }}
+        - name: OPENCODE_SERVER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-server-password
+              key: password
+        - name: REPO_DIR
+          value: {{ include "opencode-agent.repoDir" . }}
+        - name: GIT_URL
+          value: {{ .Values.git.url | quote }}
+        - name: GIT_BRANCH
+          value: {{ .Values.git.branch | quote }}
+        - name: GIT_USER_NAME
+          value: {{ include "opencode-agent.person" . }}
+        - name: GIT_USER_EMAIL
+          value: {{ .Values.person.email | quote }}
+        - name: GIT_TOKEN_FILE
+          value: /var/run/secrets/git/token
+        {{- range $key, $value := .Values.opencode.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+        - name: opencode-config
+          mountPath: /etc/opencode-agent
+          readOnly: true
+        {{- if .Values.git.url }}
+        - name: git-token
+          mountPath: /var/run/secrets/git
+          readOnly: true
+        {{- end }}
+        resources:
+          {{- toYaml .Values.opencode.resources | nindent 10 }}
+        securityContext:
+          {{- include "opencode-agent.containerSecurityContext" . | nindent 10 }}
+      # Login through the cluster OAuth server with the ServiceAccount as client
+      - name: oauth-proxy
+        image: {{ .Values.oauthProxy.image }}
+        imagePullPolicy: IfNotPresent
+        args:
+        - --provider=openshift
+        - --openshift-service-account={{ include "opencode-agent.serviceAccountName" . }}
+        - --http-address=0.0.0.0:{{ .Values.oauthProxy.port }}
+        - --https-address=
+        - --upstream=http://127.0.0.1:4096
+        # The UI streams over SSE; keep long requests open
+        - --upstream-timeout={{ .Values.route.timeout }}
+        - --authenticated-emails-file=/etc/oauth-proxy/emails.txt
+        # Without an email domain the openshift provider admits every email
+        - --email-domain=
+        {{- if .Values.oauth.allowedGroups }}
+        # --openshift-group is accepted and ignored; the group check is this SAR
+        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" "get") | toJson }}
+        {{- end }}
+        # basic_auth_password: OpenCode's server password, never in the pod spec
+        - --config=/var/run/secrets/opencode/oauth-proxy.cfg
+        - --pass-basic-auth=true
+        - --cookie-name=_{{ $name | replace "-" "_" }}
+        - --cookie-secure=true
+        - --cookie-samesite=lax
+        - --skip-provider-button=true
+        env:
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-cookie-secret
+              key: cookie-secret
+        ports:
+        - name: ui
+          containerPort: {{ .Values.oauthProxy.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: ui
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: ui
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: oauth-proxy-config
+          mountPath: /etc/oauth-proxy
+          readOnly: true
+        - name: server-password
+          mountPath: /var/run/secrets/opencode
+          readOnly: true
+        resources:
+          {{- toYaml .Values.oauthProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "opencode-agent.containerSecurityContext" . | nindent 10 }}
+      - name: token-proxy
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /app/token-proxy.py
+        env:
+        - name: TOKEN_FILE
+          value: /var/run/secrets/api-token/token
+        - name: UPSTREAM
+          value: {{ .Values.gateway.upstream | quote }}
+        - name: PORT
+          value: {{ .Values.tokenProxy.port | quote }}
+        # Listens on 127.0.0.1 only, so the probe runs inside the container
+        readinessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - import urllib.request; urllib.request.urlopen("http://127.0.0.1:{{ .Values.tokenProxy.port }}/healthz", timeout=2)
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        volumeMounts:
+        - name: token-proxy-code
+          mountPath: /app
+          readOnly: true
+        - name: api-token
+          mountPath: /var/run/secrets/api-token
+          readOnly: true
+        resources:
+          {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "opencode-agent.containerSecurityContext" . | nindent 10 }}
+      volumes:
+      - name: workspace
+        persistentVolumeClaim:
+          claimName: {{ $name }}-data
+      - name: opencode-config
+        configMap:
+          name: {{ $name }}-opencode
+      - name: oauth-proxy-config
+        configMap:
+          name: {{ $name }}-oauth-proxy
+      - name: token-proxy-code
+        configMap:
+          name: {{ $name }}-token-proxy
+      - name: server-password
+        secret:
+          secretName: {{ $name }}-server-password
+          items:
+          - key: oauth-proxy.cfg
+            path: oauth-proxy.cfg
+      # The agent's own credential for the gateway, renewed by the kubelet
+      - name: api-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              {{- with $audience }}
+              audience: {{ . }}
+              {{- end }}
+              expirationSeconds: 3600
+              path: token
+      {{- if .Values.git.url }}
+      - name: git-token
+        secret:
+          secretName: {{ $name }}-git-token
+      {{- end }}

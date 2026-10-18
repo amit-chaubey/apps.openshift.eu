@@ -21,5 +21,9 @@ jobs:
       run: ci/check.sh
     - name: Test guacamole chart
       run: ci/test-guacamole.sh
+    - name: Test opencode-agent chart
+      run: ci/test-opencode-agent.sh
+    - name: Test opencode-agent token proxy
+      run: python3 -m unittest ci/test_opencode_agent_token_proxy.py
     - name: Scan history for secrets
       run: gitleaks detect --source . --redact
