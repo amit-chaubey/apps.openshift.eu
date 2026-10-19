@@ -100,8 +100,9 @@ spec:
         - -c
         - sh /etc/opencode-agent/init.sh && cd "$REPO_DIR" && exec flock -x /workspace/.opencode.lock opencode web --hostname 127.0.0.1 --port 4096
         env:
+        # The web UI opens projects from a picker rooted at HOME
         - name: HOME
-          value: {{ $home }}
+          value: /workspace
         - name: XDG_CONFIG_HOME
           value: {{ $home }}/.config
         - name: XDG_DATA_HOME

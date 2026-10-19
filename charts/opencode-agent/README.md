@@ -24,6 +24,8 @@ Objects are named `<person.name>-agent`. Read the address:
 oc get route sam-agent -o jsonpath='https://{.spec.host}{"\n"}'
 ```
 
+The UI keeps the list of open projects in the browser, so it starts empty in a new browser. Choose **Add project** and pick the work tree, `~/<repository>`; **New session** works once a project is open.
+
 - `person.name` (default: the release name): Name prefix and Git user name.
 - `person.email` (default: empty): Git email, and the UI owner when `oauth.ownerEmail` is empty.
 - `person.role` (default: empty): One line appended to the agent instructions.

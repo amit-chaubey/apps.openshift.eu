@@ -220,6 +220,7 @@ B2=$(echo "$OUT" | grep -E '^  name: sam-agent-opencode-a2a-[0-9a-f]{8}$')
 # init.sh: the Git token goes to the clone host only; an existing clone is never touched
 OUT=$(render "${BASE[@]}" --set git.url=https://git.example.com/org/site.git)
 check "git token mount" 'vol("git-token")["secret"]["secretName"] == "sam-agent-git-token" and env("opencode")["REPO_DIR"] == "/workspace/site"'
+check "repository in picker" 'env("opencode")["HOME"] == "/workspace" and env("opencode")["REPO_DIR"].startswith("/workspace/") and env("opencode")["XDG_DATA_HOME"] == "/workspace/.home/.local/share"'
 check "git token secret" 'obj("Secret", "sam-agent-git-token")["type"] == "Opaque"'
 T=$(mktemp -d)
 init_script > "$T/init.sh"
