@@ -2,6 +2,11 @@
 # Prepares HOME and the work tree, then returns; never overwrites a clone
 set -eu
 
+# ssh refuses to start for a UID without a passwd entry; the image leaves passwd group-writable
+if ! id -un >/dev/null 2>&1 && [ -w /etc/passwd ]; then
+	echo "agent:x:$(id -u):0:agent:${HOME:-/workspace}:/bin/sh" >> /etc/passwd
+fi
+
 mkdir -p "$HOME" "${XDG_CONFIG_HOME:-$HOME/.config}" "${XDG_DATA_HOME:-$HOME/.local/share}" \
 	"${XDG_STATE_HOME:-$HOME/.local/state}" "${XDG_CACHE_HOME:-$HOME/.cache}"
 

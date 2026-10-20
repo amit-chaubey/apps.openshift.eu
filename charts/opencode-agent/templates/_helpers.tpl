@@ -125,9 +125,35 @@ seccompProfile:
 
 {{- define "opencode-agent.opencodeDockerfile" -}}
 FROM {{ .Values.kubernetesMcpServer.image }} AS mcp
+FROM {{ .Values.tools.goImage }} AS odf
+RUN apk add --no-cache git && git clone --depth 1 {{ .Values.tools.odfRepository }} /src
+RUN cd /src && CGO_ENABLED=0 GOTOOLCHAIN=auto go build -p 2 -trimpath -ldflags='-s -w' -o /odf ./cmd/odf
 FROM {{ .Values.opencode.baseImage }}:{{ .Values.opencode.version }}
-RUN apk add --no-cache git openssh-client
+COPY install-tools.sh verify-tools.sh /tmp/agent-tools/
+RUN sh /tmp/agent-tools/install-tools.sh
 COPY --from=mcp /app/kubernetes-mcp-server /tools/kubernetes-mcp-server
+COPY --from=odf /odf /usr/local/bin/odf
+USER 1001:0
+RUN sh /tmp/agent-tools/verify-tools.sh
+{{- end -}}
+
+{{/* Every peer as name=<gateway origin>/a2a/<namespace>/<name>/ */}}
+{{- define "opencode-agent.a2aPeers" -}}
+{{- $origin := include "opencode-agent.gatewayOrigin" . -}}
+{{- $peers := list -}}
+{{- range .Values.a2a.peers -}}
+{{- $peer := kindIs "string" . | ternary (dict "name" .) . -}}
+{{- $ns := default $.Release.Namespace $peer.namespace -}}
+{{- $peers = append $peers (printf "%s=%s/a2a/%s/%s/" $peer.name $origin $ns $peer.name) -}}
+{{- end -}}
+{{- join "," $peers -}}
+{{- end -}}
+
+{{- define "opencode-agent.gatewayOrigin" -}}
+{{- with .Values.gateway.upstream -}}
+{{- $url := urlParse . -}}
+{{- printf "%s://%s" $url.scheme $url.host -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "opencode-agent.a2aDockerfile" -}}
@@ -138,7 +164,7 @@ CMD ["opencode-a2a", "serve"]
 
 {{/* A changed Dockerfile gets a new image tag and a new BuildConfig */}}
 {{- define "opencode-agent.opencodeHash" -}}
-{{- include "opencode-agent.opencodeDockerfile" . | sha256sum | trunc 8 -}}
+{{- list (include "opencode-agent.opencodeDockerfile" .) (.Files.Get "files/install-tools.sh") (.Files.Get "files/verify-tools.sh") | join "\n" | sha256sum | trunc 8 -}}
 {{- end -}}
 
 {{- define "opencode-agent.a2aHash" -}}

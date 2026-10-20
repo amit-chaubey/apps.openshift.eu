@@ -6,6 +6,8 @@ Runs one personal OpenCode coding agent for one person in your project. The pers
 
 The agent is a kagent `Agent` of type `BYO`: kagent renders the Deployment and the A2A Service from it. One pod holds four containers: the A2A adapter `opencode-a2a`, `opencode web` on 127.0.0.1, the OpenShift `oauth-proxy` in front of the UI, and a token proxy on 127.0.0.1 that adds the agent's credential to every model and A2A call to `gateway.upstream`.
 
+The OpenCode image carries a command-line toolset, each tool at the newest upstream release when the image is built: `oc`, `kubectl` and `ccoctl` (OpenShift stable channel), `hcp` (multicluster engine), `argocd`, `kn`, `virtctl`, `amtool`, `kubectl-cnpg`, `helm`, `kustomize`, `glab`, `clusteradm`, `velero`, `restic`, `odf` (built from source; there is no binary release), `operator-sdk`, `kubectl-krew` and `yq`, plus `aws` (AWS CLI v2), `curl`, `jq`, `bash`, `nc`, `python3`, `git` and `ssh` from Alpine, `bw` from npm (its release binary needs glibc) and `mkdocs` from PyPI. The build runs every tool once as a non-root user and fails when one does not start. There is no `kubectl-mariadb`: the MariaDB operator publishes no kubectl plugin.
+
 ## Install
 
 ```bash
@@ -42,9 +44,12 @@ The UI keeps the list of open projects in the browser, so it starts empty in a n
 - `gateway.audience` (default: the host of `gateway.upstream`): Audience of the agent's ServiceAccount token, mounted at `/var/run/secrets/api-token/token`.
 - `a2a.gatewayNamespace` (default: empty): Namespace of the gateway that publishes this agent over A2A. Renders a ReferenceGrant for its HTTPRoutes and admits it in the NetworkPolicy.
 - `a2a.allowedHosts`, `a2a.publicUrl`: Inbound Host allowlist and Agent Card address of the adapter.
+- `a2a.peers` (default: empty): Agents this agent may call, as a name or `{name, namespace}` (namespace default: the release namespace). Each is reached at `<gateway.upstream origin>/a2a/<namespace>/<name>/` through the token proxy. With peers and `gateway.upstream` set, the opencode container gets `A2A_PEERS`, `A2A_GATEWAY_URL` and `A2A_PROXY_URL`, which a model plugin can turn into tools (the `@grncloud/opencode-grncloud` plugin registers `a2a_list_agents` and `a2a_call`), and the instructions describe those two tools.
 - `git.url`, `git.branch`, `secrets.gitToken`: Repository cloned into `/workspace` on first start, never overwritten. The token goes to the host of `git.url` only.
 - `opencode.plugins`, `opencode.npmScopes`, `opencode.env`, `opencode.config`: npm plugins, their registries, extra environment and overrides of `opencode.json`.
-- `builds.enabled` (default: true): Build the OpenCode image (with git and kubernetes-mcp-server) and the adapter image in your project. When false, set `a2a.image`, and `opencode.image` to an image that carries git and `/tools/kubernetes-mcp-server`.
+- `builds.enabled` (default: true): Build the OpenCode image (with the toolset and kubernetes-mcp-server) and the adapter image in your project. When false, set `a2a.image`, and `opencode.image` to an image that carries the toolset and `/tools/kubernetes-mcp-server`.
+- `builds.resources` (default: 100m CPU and 256Mi requested, 6Gi limit): The OpenCode image build; compiling `odf` needs several Gi.
+- `tools.goImage`, `tools.odfRepository`: Go image and repository the `odf` CLI is built from.
 - `storage.size`, `storage.accessMode`, `storage.className` (default: 20Gi, ReadWriteMany, the default class): The work tree volume. It is kept when the release is removed.
 - `serviceAccount.name` (default: empty): Empty: `<person.name>-agent`, created by kagent. Another name is created by the chart. Either way it is the OAuth client of the login, with its redirect pointing at the Route.
 - `networkPolicy.a2aNamespaces` (default: empty): More namespaces allowed to call A2A on 8080.
@@ -57,6 +62,7 @@ OpenCode runs under an exclusive lock on the volume. A new pod starts while the 
 - People log in through the cluster's OAuth server with their OpenShift account; no login client is needed. The owner's OpenShift user name must be an email address (`oc whoami` after a console login) and equal `oauth.ownerEmail`. OpenCode receives the part before `@` as its user name.
 - The A2A gateway publishes the agent to other agents. Ask the platform team for the gateway's namespace and set `a2a.gatewayNamespace`; the platform adds the route and copies the Secret `<person.name>-agent-a2a-auth` (key `token`) to the gateway.
 - The gateway in `gateway.upstream` must accept ServiceAccount tokens of your project with the audience `gateway.audience`.
+- The OpenCode image build downloads from github.com, gitlab.com, mirror.openshift.com, developers.redhat.com, get.helm.sh, the Alpine package mirrors, PyPI and Docker Hub, so the build pod needs egress to them.
 - `storage.accessMode` ReadWriteMany needs a StorageClass that offers it, such as a CephFS or NFS class. Set `storage.className` when it is not the default class. ReadWriteOnce and ReadWriteOncePod are rejected: the Agent renders a RollingUpdate Deployment without a strategy field, so the new pod would wait for the old pod to release the volume and the rollout would stall.
 - With `secrets.type=externalSecret`, set `secrets.externalSecret.storeName` and create one vault item per secret, named `<person.name>-agent-<server-password, a2a-auth, cookie-secret, git-token>` or as set in `secrets.externalSecret.items`, with the value in the password field. The cookie secret item must hold 16, 24 or 32 characters.
 - Agents that share a project can read each other's Secrets and exec into each other's pods. Give an agent its own project when that is not acceptable.

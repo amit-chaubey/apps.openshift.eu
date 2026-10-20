@@ -25,6 +25,16 @@ data:
     {{- mergeOverwrite $config (deepCopy .Values.opencode.config) | toPrettyJson | nindent 4 }}
   instructions.md: |
 {{ .Files.Get "files/instructions.md" | indent 4 }}
+    {{- if and .Values.a2a.peers .Values.gateway.upstream }}
+    ## Other agents
+
+    - `a2a_list_agents` lists the agents of your team that you can call and what they do.
+    - `a2a_call` sends one message to one of them and waits for its answer, which can take
+      minutes. The other agent does not see this conversation: make the message complete.
+    - Only call an agent when the person asked for it or the task clearly needs it, and say
+      which agent you called and why. Never put a credential in a message.
+
+    {{- end }}
     ## Person
 
     - Name: {{ include "opencode-agent.person" . }}

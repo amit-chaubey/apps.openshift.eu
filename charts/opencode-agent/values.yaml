@@ -69,6 +69,11 @@ a2a:
   allowedHosts: []
   # Agent Card base URL. Empty: the in-cluster Service URL
   publicUrl: ""
+  # agents this agent may call with the a2a_call tool: a name, or
+  # {name: <agent>, namespace: <namespace>}; the namespace defaults to the release
+  # namespace. Each is reached at <gateway.upstream origin>/a2a/<namespace>/<name>/
+  # through the token proxy. Empty: no A2A tools
+  peers: []
   # opencode-a2a release installed from PyPI
   version: 1.3.6
   # the A2A task store needs SQLite 3.35 or later (RETURNING); UBI 9 ships 3.34
@@ -88,7 +93,7 @@ opencode:
   version: 1.19.3
   # OpenCode image the build starts from
   baseImage: ghcr.io/anomalyco/opencode
-  # prebuilt image with git and /tools/kubernetes-mcp-server, used when builds.enabled is false.
+  # prebuilt image with the toolset and /tools/kubernetes-mcp-server, used when builds.enabled is false.
   # Empty: baseImage:version
   image: ""
   # npm plugins OpenCode installs on start, for example a model provider plugin
@@ -107,15 +112,28 @@ opencode:
     limits:
       memory: 4Gi
 
+tools:
+  # Go image that builds the odf CLI, which has no binary release, from source
+  goImage: docker.io/library/golang:1.26-alpine
+  # Git repository of the odf CLI; the newest commit of its default branch is built
+  odfRepository: https://github.com/red-hat-storage/odf-cli
+
 kubernetesMcpServer:
   # image the kubernetes-mcp-server binary is copied from
   image: quay.io/containers/kubernetes_mcp_server:v0.0.67
 
 builds:
-  # build the opencode (with git) and opencode-a2a images in the project
+  # build the opencode (with the toolset) and opencode-a2a images in the project
   enabled: true
   # registry of the cluster, where the builds push and the pod pulls
   registry: image-registry.openshift-image-registry.svc:5000
+  # build pod requests and limits; compiling the odf CLI needs several Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 6Gi
 
 oauthProxy:
   # OpenShift oauth-proxy in front of the UI; the cluster keeps this tag current

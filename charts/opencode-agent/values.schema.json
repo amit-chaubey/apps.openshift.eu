@@ -77,7 +77,24 @@
         "version": {"type": "string", "minLength": 1},
         "baseImage": {"type": "string", "minLength": 1},
         "image": {"type": "string"},
-        "resources": {"type": "object"}
+        "resources": {"type": "object"},
+        "peers": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"},
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name"],
+                "properties": {
+                  "name": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"},
+                  "namespace": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"}
+                }
+              }
+            ]
+          }
+        }
       }
     },
     "opencode": {
@@ -93,6 +110,13 @@
         "resources": {"type": "object"}
       }
     },
+    "tools": {
+      "type": "object",
+      "properties": {
+        "goImage": {"type": "string", "minLength": 1},
+        "odfRepository": {"type": "string", "pattern": "^https://"}
+      }
+    },
     "kubernetesMcpServer": {
       "type": "object",
       "properties": {"image": {"type": "string", "minLength": 1}}
@@ -101,7 +125,8 @@
       "type": "object",
       "properties": {
         "enabled": {"type": "boolean"},
-        "registry": {"type": "string", "minLength": 1}
+        "registry": {"type": "string", "minLength": 1},
+        "resources": {"type": "object"}
       }
     },
     "oauthProxy": {

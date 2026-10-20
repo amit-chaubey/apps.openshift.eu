@@ -91,7 +91,13 @@ check "chart labels" 'all(d["metadata"]["labels"]["app.kubernetes.io/name"] == "
 # ported: pins, BuildConfig names, portable labels, ports, role line, MCP, npmrc
 check "pins opencode" '"FROM ghcr.io/anomalyco/opencode:1.19.3" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "pins mcp" '"quay.io/containers/kubernetes_mcp_server:v0.0.67" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
-check "pins git" '"apk add --no-cache git openssh-client" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
+check "toolset build" '"RUN sh /tmp/agent-tools/install-tools.sh" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
+check "toolset check as non-root" '"USER 1001:0\nRUN sh /tmp/agent-tools/verify-tools.sh" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
+check "toolset context" '[b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["configMaps"] == [{"configMap": {"name": "sam-agent-opencode-build"}, "destinationDir": "."}]'
+check "toolset scripts" 'set(obj("ConfigMap", "sam-agent-opencode-build")["data"]) == {"install-tools.sh", "verify-tools.sh"} and "oc version --client" in obj("ConfigMap", "sam-agent-opencode-build")["data"]["verify-tools.sh"]'
+check "odf from source" '"FROM docker.io/library/golang:1.26-alpine AS odf" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
+check "build resources" 'all(b["spec"]["resources"]["limits"]["memory"] == "6Gi" for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"])'
+check "no a2a tools without peers" 'not {"A2A_PEERS", "A2A_GATEWAY_URL", "A2A_PROXY_URL"} & set(env("opencode")) and "a2a_call" not in cfg()["instructions.md"]'
 check "pins a2a" '"opencode-a2a==1.3.6" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "pins a2a base" '"FROM registry.access.redhat.com/ubi10/python-312-minimal" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "oauth-proxy image" 'ctr("oauth-proxy")["image"] == "image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4"'
@@ -197,6 +203,19 @@ hasnt external "oidc"
 
 OUT=$(render "${BASE[@]}" --set route.labels.x=y)
 check "route labels" 'obj("Route")["metadata"]["labels"]["x"] == "y" and [d["kind"] for d in docs if "x" in d["metadata"]["labels"]] == ["Route"]'
+
+# A2A peers: the plugin tools get name=url pairs on the gateway origin
+OUT=$(render "${BASE[@]}" --set gateway.upstream=https://api.example.com:8443/v1 --set-json 'a2a.peers=["noura-agent",{"name":"bob-agent","namespace":"other"}]')
+check "a2a peers" 'env("opencode")["A2A_PEERS"] == "noura-agent=https://api.example.com:8443/a2a/test/noura-agent/,bob-agent=https://api.example.com:8443/a2a/other/bob-agent/"'
+check "a2a gateway" 'env("opencode")["A2A_GATEWAY_URL"] == "https://api.example.com:8443" and env("opencode")["A2A_PROXY_URL"] == "http://127.0.0.1:8099"'
+check "a2a instructions" '"`a2a_list_agents`" in cfg()["instructions.md"] and "`a2a_call`" in cfg()["instructions.md"] and "127.0.0.1:8099/a2a" not in cfg()["instructions.md"]'
+OUT=$(render "${BASE[@]}" --set-json 'a2a.peers=["noura-agent"]')
+check "a2a peers need upstream" '"A2A_PEERS" not in env("opencode") and "a2a_call" not in cfg()["instructions.md"]'
+for v in '["Bad_Name"]' '[{"namespace":"x"}]' '[{"name":"a","url":"https://evil.example"}]'; do
+  if helm template t "$C" --namespace test "${BASE[@]}" --set-json "a2a.peers=$v" >/dev/null 2>&1; then
+    echo "FAIL invalid a2a.peers accepted: $v"; fail=1
+  fi
+done
 
 OUT=$(render "${BASE[@]}" --set a2a.gatewayNamespace=gw)
 check "reference grant" 'obj("ReferenceGrant", "sam-agent-a2a")["spec"]["from"] == [{"group": "gateway.networking.k8s.io", "kind": "HTTPRoute", "namespace": "gw"}] and obj("ReferenceGrant")["spec"]["to"] == [{"group": "", "kind": "Service", "name": "sam-agent"}] and obj("ReferenceGrant")["metadata"]["namespace"] == "test"'

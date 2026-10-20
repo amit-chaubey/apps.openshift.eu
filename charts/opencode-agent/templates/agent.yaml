@@ -132,6 +132,15 @@ spec:
           value: {{ .Values.person.email | quote }}
         - name: GIT_TOKEN_FILE
           value: /var/run/secrets/git/token
+        {{- if and .Values.a2a.peers .Values.gateway.upstream }}
+        # Peers for the a2a_list_agents and a2a_call tools of the model plugin
+        - name: A2A_PEERS
+          value: {{ include "opencode-agent.a2aPeers" . | quote }}
+        - name: A2A_GATEWAY_URL
+          value: {{ include "opencode-agent.gatewayOrigin" . | quote }}
+        - name: A2A_PROXY_URL
+          value: {{ printf "http://127.0.0.1:%v" .Values.tokenProxy.port | quote }}
+        {{- end }}
         {{- range $key, $value := .Values.opencode.env }}
         - name: {{ $key }}
           value: {{ $value | quote }}

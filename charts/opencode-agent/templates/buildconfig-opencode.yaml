@@ -14,7 +14,24 @@ spec:
   lookupPolicy:
     local: true
 ---
-# Adds git to upstream; the name hash makes ConfigChange rebuild on change
+# Build context of the opencode image: the tool installer and its check
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-build
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "opencode-agent.name" $ }}
+    app.kubernetes.io/name: opencode-agent
+    app.kubernetes.io/component: build
+    {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+data:
+  install-tools.sh: |
+{{ .Files.Get "files/install-tools.sh" | indent 4 }}
+  verify-tools.sh: |
+{{ .Files.Get "files/verify-tools.sh" | indent 4 }}
+---
+# Adds the toolset to upstream; the name hash makes ConfigChange rebuild on change
 apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
@@ -31,6 +48,10 @@ spec:
     type: Dockerfile
     dockerfile: |
       {{- include "opencode-agent.opencodeDockerfile" . | nindent 6 }}
+    configMaps:
+    - configMap:
+        name: {{ $name }}-build
+      destinationDir: .
   strategy:
     type: Docker
     dockerStrategy: {}
@@ -41,9 +62,5 @@ spec:
   triggers:
   - type: ConfigChange
   resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      memory: 1Gi
+    {{- toYaml .Values.builds.resources | nindent 4 }}
 {{- end }}

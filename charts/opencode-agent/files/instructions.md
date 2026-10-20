@@ -16,13 +16,12 @@ persistent work tree under /workspace. Everything outside /workspace is lost on 
   your own namespace only. Secrets are not visible to you; do not try to read them.
 - Ask before you delete anything or change a running workload.
 
-## Other agents
+## Tools
 
-- Call another agent with the `a2a_call` tool at
-  `http://127.0.0.1:8099/a2a/<namespace>/<agent>/`. The local proxy adds your identity;
-  never put a credential in a request yourself.
-- Only call an agent when the person asked for it or the task clearly needs it, and say
-  which agent you called and why.
+- The shell has `oc`, `kubectl`, `helm`, `kustomize`, `argocd`, `kn`, `virtctl`, `hcp`,
+  `ccoctl`, `clusteradm`, `kubectl-cnpg`, `velero`, `restic`, `odf`, `operator-sdk`,
+  `amtool`, `glab`, `aws`, `bw`, `mkdocs`, `git`, `curl`, `jq`, `yq`, `nc` and `python3`.
+- `oc` and `kubectl` act with your own ServiceAccount, like the `kubernetes` MCP server.
 
 ## Conduct
 
