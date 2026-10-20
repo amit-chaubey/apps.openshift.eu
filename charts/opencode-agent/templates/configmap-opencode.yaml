@@ -56,3 +56,5 @@ data:
     {{- end }}
   init.sh: |
 {{ .Files.Get "files/init.sh" | indent 4 }}
+  backup-db.sh: |
+{{ .Files.Get "files/backup-db.sh" | indent 4 }}

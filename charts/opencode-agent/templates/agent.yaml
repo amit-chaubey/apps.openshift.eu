@@ -1,7 +1,6 @@
 {{- $name := include "opencode-agent.name" . -}}
 {{- $home := "/workspace/.home" -}}
 {{- $audience := include "opencode-agent.audience" . -}}
-{{- $user := include "opencode-agent.opencodeUser" . -}}
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
@@ -46,6 +45,7 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/configmap-opencode.yaml") . | sha256sum }}
         checksum/oauth-proxy: {{ include (print $.Template.BasePath "/configmap-oauth-proxy.yaml") . | sha256sum }}
         checksum/token-proxy: {{ .Files.Get "files/token-proxy.py" | sha256sum }}
+        checksum/ui-proxy: {{ .Files.Get "files/ui-proxy.py" | sha256sum }}
       image: {{ include "opencode-agent.a2aImage" . }}
       imagePullPolicy: IfNotPresent
       cmd: opencode-a2a
@@ -80,12 +80,16 @@ spec:
       # while a rolling update runs the old and the new pod side by side
       - name: A2A_TASK_STORE_DATABASE_URL
         value: sqlite+aiosqlite:////var/lib/opencode-a2a/tasks.db
+      # OpenCode 2.x HTTP API (/api/*)
+      - name: OPENCODE_API_VERSION
+        value: v2
       - name: OPENCODE_BASE_URL
         value: http://127.0.0.1:4096
       - name: OPENCODE_WORKSPACE_ROOT
         value: /workspace
+      # OpenCode 2.x accepts this Basic user name only
       - name: OPENCODE_AUTH_USERNAME
-        value: {{ $user | quote }}
+        value: opencode
       - name: OPENCODE_AUTH_PASSWORD
         valueFrom:
           secretKeyRef:
@@ -110,7 +114,10 @@ spec:
         command:
         - sh
         - -c
-        - sh /etc/opencode-agent/init.sh && cd "$REPO_DIR" && exec flock -x /workspace/.opencode.lock opencode web --hostname 127.0.0.1 --port 4096
+        - >-
+          sh /etc/opencode-agent/init.sh && cd "$REPO_DIR" &&
+          exec flock -x /workspace/.opencode.lock
+          sh -c 'sh /etc/opencode-agent/backup-db.sh && exec opencode serve --hostname 127.0.0.1 --port 4096'
         env:
         # The web UI opens projects from a picker rooted at HOME
         - name: HOME
@@ -125,9 +132,10 @@ spec:
           value: {{ $home }}/.cache
         - name: OPENCODE_CONFIG
           value: /etc/opencode-agent/opencode.json
-        - name: OPENCODE_SERVER_USERNAME
-          value: {{ $user | quote }}
-        - name: OPENCODE_SERVER_PASSWORD
+        # backup-db.sh keeps the pre-2.x session store here
+        - name: OPENCODE_DB_BACKUP_DIR
+          value: {{ $home }}/backup
+        - name: OPENCODE_PASSWORD
           valueFrom:
             secretKeyRef:
               name: {{ $name }}-server-password
@@ -181,7 +189,8 @@ spec:
         - --openshift-service-account={{ include "opencode-agent.serviceAccountName" . }}
         - --http-address=0.0.0.0:{{ .Values.oauthProxy.port }}
         - --https-address=
-        - --upstream=http://127.0.0.1:4096
+        # ui-proxy swaps the person's Basic user for OpenCode's own credential
+        - --upstream=http://127.0.0.1:{{ .Values.uiProxy.port }}
         # The UI streams over SSE; keep long requests open
         - --upstream-timeout={{ .Values.route.timeout }}
         - --authenticated-emails-file=/etc/oauth-proxy/emails.txt
@@ -191,9 +200,7 @@ spec:
         # --openshift-group is accepted and ignored; the group check is this SAR
         - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" "get") | toJson }}
         {{- end }}
-        # basic_auth_password: OpenCode's server password, never in the pod spec
-        - --config=/var/run/secrets/opencode/oauth-proxy.cfg
-        - --pass-basic-auth=true
+        - --pass-basic-auth=false
         - --cookie-name=_{{ $name | replace "-" "_" }}
         - --cookie-secure=true
         - --cookie-samesite=lax
@@ -224,11 +231,33 @@ spec:
         - name: oauth-proxy-config
           mountPath: /etc/oauth-proxy
           readOnly: true
+        resources:
+          {{- toYaml .Values.oauthProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "opencode-agent.containerSecurityContext" . | nindent 10 }}
+      # Sends the UI to OpenCode as user "opencode" with the server password
+      - name: ui-proxy
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /app/ui-proxy.py
+        env:
+        - name: UPSTREAM
+          value: http://127.0.0.1:4096
+        - name: PORT
+          value: {{ .Values.uiProxy.port | quote }}
+        - name: PASSWORD_FILE
+          value: /var/run/secrets/opencode/password
+        volumeMounts:
+        - name: token-proxy-code
+          mountPath: /app
+          readOnly: true
         - name: server-password
           mountPath: /var/run/secrets/opencode
           readOnly: true
         resources:
-          {{- toYaml .Values.oauthProxy.resources | nindent 10 }}
+          {{- toYaml .Values.uiProxy.resources | nindent 10 }}
         securityContext:
           {{- include "opencode-agent.containerSecurityContext" . | nindent 10 }}
       - name: token-proxy
@@ -285,8 +314,8 @@ spec:
         secret:
           secretName: {{ $name }}-server-password
           items:
-          - key: oauth-proxy.cfg
-            path: oauth-proxy.cfg
+          - key: password
+            path: password
       # The agent's own credential for the gateway, renewed by the kubelet
       - name: api-token
         projected:

@@ -11,7 +11,10 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+    # pinned: "latest" falls back to an old Helm when the release lookup fails
     - uses: azure/setup-helm@v4
+      with:
+        version: v4.3.1
     - name: Install gitleaks
       run: |
         curl -sSL "$(curl -sSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r '.assets[] | select(.name | test("linux_x64.tar.gz$")) | .browser_download_url')" | sudo tar -xz -C /usr/local/bin gitleaks
@@ -25,6 +28,8 @@ jobs:
       run: ci/test-opencode-agent.sh
     - name: Test opencode-agent token proxy
       run: python3 -m unittest ci/test_opencode_agent_token_proxy.py
+    - name: Test opencode-agent UI proxy
+      run: python3 -m unittest ci/test_opencode_agent_ui_proxy.py
     - name: Test openwebui chart
       run: ci/test-openwebui.sh
     - name: Scan history for secrets

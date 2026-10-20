@@ -74,8 +74,10 @@ a2a:
   # namespace. Each is reached at <gateway.upstream origin>/a2a/<namespace>/<name>/
   # through the token proxy. Empty: no A2A tools
   peers: []
-  # opencode-a2a release installed from PyPI
-  version: 1.3.6
+  # opencode-a2a release with the OpenCode 2.x API (OPENCODE_API_VERSION=v2)
+  version: 2.0.0+hoolia.1
+  # pip requirement the adapter image installs; a source archive needs no git
+  package: opencode-a2a @ https://github.com/hoolia/opencode-a2a/archive/refs/tags/v2.0.0%2Bhoolia.1.tar.gz
   # the A2A task store needs SQLite 3.35 or later (RETURNING); UBI 9 ships 3.34
   baseImage: registry.access.redhat.com/ubi10/python-312-minimal
   # prebuilt adapter image; required when builds.enabled is false
@@ -89,8 +91,8 @@ a2a:
       memory: 512Mi
 
 opencode:
-  # OpenCode release
-  version: 1.19.3
+  # OpenCode release; 2.x migrates the session store in place, see backup-db.sh
+  version: 2.1.1
   # OpenCode image the build starts from
   baseImage: ghcr.io/anomalyco/opencode
   # prebuilt image with the toolset and /tools/kubernetes-mcp-server, used when builds.enabled is false.
@@ -143,6 +145,17 @@ oauthProxy:
   # UI port of the pod
   port: 4180
   # login proxy requests and limits
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+uiProxy:
+  # loopback port oauth-proxy sends the UI to; runs on tokenProxy.image
+  port: 4097
+  # UI proxy requests and limits
   resources:
     requests:
       cpu: 10m

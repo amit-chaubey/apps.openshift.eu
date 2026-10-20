@@ -47,7 +47,8 @@ uv tool install ansible-core
 uv tool install "huggingface_hub[cli]"
 uv tool install "fastapi[standard]"
 uv tool install uvicorn
-uv tool install semgrep
+# wheels only: a release without a musl wheel builds from sdist without semgrep-core
+uv tool install --no-build-package semgrep semgrep
 uv tool install --python 3.12 checkov
 # Collections used across the platform, readable by every user
 ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \

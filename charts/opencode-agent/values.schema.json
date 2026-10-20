@@ -75,6 +75,7 @@
         "allowedHosts": {"type": "array", "items": {"type": "string"}},
         "publicUrl": {"type": "string", "pattern": "^$|^https?://"},
         "version": {"type": "string", "minLength": 1},
+        "package": {"type": "string", "minLength": 1},
         "baseImage": {"type": "string", "minLength": 1},
         "image": {"type": "string"},
         "resources": {"type": "object"},
@@ -136,6 +137,13 @@
       "type": "object",
       "properties": {
         "image": {"type": "string", "minLength": 1},
+        "port": {"type": "integer"},
+        "resources": {"type": "object"}
+      }
+    },
+    "uiProxy": {
+      "type": "object",
+      "properties": {
         "port": {"type": "integer"},
         "resources": {"type": "object"}
       }

@@ -37,15 +37,6 @@ kagent: {{ include "opencode-agent.name" . }}
 {{- default .Values.person.email .Values.oauth.ownerEmail -}}
 {{- end -}}
 
-{{/* oauth-proxy sends the local part of the user name as the Basic user */}}
-{{- define "opencode-agent.opencodeUser" -}}
-{{- with include "opencode-agent.ownerEmail" . -}}
-{{- splitList "@" . | first -}}
-{{- else -}}
-opencode
-{{- end -}}
-{{- end -}}
-
 {{/* Audience of the projected ServiceAccount token: the value, else the upstream host */}}
 {{- define "opencode-agent.audience" -}}
 {{- if .Values.gateway.audience -}}
@@ -161,7 +152,9 @@ RUN sh /tmp/agent-tools/verify-tools.sh
 
 {{- define "opencode-agent.a2aDockerfile" -}}
 FROM {{ .Values.a2a.baseImage }}
-RUN pip install --no-cache-dir opencode-a2a=={{ .Values.a2a.version }}
+# a source archive has no git metadata for setuptools-scm
+ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENCODE_A2A={{ .Values.a2a.version }}
+RUN pip install --no-cache-dir {{ .Values.a2a.package | quote }}
 CMD ["opencode-a2a", "serve"]
 {{- end -}}
 
@@ -178,6 +171,7 @@ CMD ["opencode-a2a", "serve"]
 {{- printf "%s-%s" .Values.opencode.version (include "opencode-agent.opencodeHash" .) -}}
 {{- end -}}
 
+{{/* An image tag has no "+": a local version label becomes "-" */}}
 {{- define "opencode-agent.a2aTag" -}}
-{{- printf "%s-%s" .Values.a2a.version (include "opencode-agent.a2aHash" .) -}}
+{{- printf "%s-%s" (.Values.a2a.version | replace "+" "-") (include "opencode-agent.a2aHash" .) -}}
 {{- end -}}

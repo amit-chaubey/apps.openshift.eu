@@ -57,16 +57,21 @@ check default 'vol("workspace")["persistentVolumeClaim"]["claimName"] == "sam-ag
 # login through the cluster OAuth server; the agent's ServiceAccount is the client
 check "oauth provider" 'arg("--provider") == ["openshift"] and arg("--openshift-service-account") == ["sam-agent"]'
 check "oauth listen" 'arg("--http-address") == ["0.0.0.0:4180"] and arg("--https-address") == [""]'
-check "oauth upstream" 'arg("--upstream") == ["http://127.0.0.1:4096"] and arg("--upstream-timeout") == ["3600s"]'
+check "oauth upstream" 'arg("--upstream") == ["http://127.0.0.1:4097"] and arg("--upstream-timeout") == ["3600s"]'
 check "oauth cookie" 'arg("--cookie-secure") == ["true"] and arg("--cookie-name") == ["_sam_agent"] and any(e["name"] == "OAUTH2_PROXY_COOKIE_SECRET" and e["valueFrom"]["secretKeyRef"] == {"name": "sam-agent-cookie-secret", "key": "cookie-secret"} for e in ctr("oauth-proxy")["env"])'
 # without an email domain the openshift provider admits every email
 check "oauth emails" 'arg("--authenticated-emails-file") == ["/etc/oauth-proxy/emails.txt"] and arg("--email-domain") == [""]'
-check "oauth basic auth" 'arg("--config") == ["/var/run/secrets/opencode/oauth-proxy.cfg"] and arg("--pass-basic-auth") == ["true"]'
+check "oauth no basic auth" 'arg("--config") == [] and arg("--pass-basic-auth") == ["false"]'
+# OpenCode 2.x takes the Basic user "opencode" only: ui-proxy sends it with the server password
+check "ui proxy" 'ctr("ui-proxy")["command"] == ["python3", "/app/ui-proxy.py"] and env("ui-proxy") == {"UPSTREAM": "http://127.0.0.1:4096", "PORT": "4097", "PASSWORD_FILE": "/var/run/secrets/opencode/password"}'
+check "ui proxy password mount" 'vol("server-password")["secret"]["items"] == [{"key": "password", "path": "password"}] and any(m["name"] == "server-password" and m["mountPath"] == "/var/run/secrets/opencode" for m in ctr("ui-proxy")["volumeMounts"]) and not any(m["name"] == "server-password" for m in ctr("oauth-proxy")["volumeMounts"])'
+check "ui proxy code" '"ui-proxy.py" in obj("ConfigMap", "sam-agent-token-proxy")["data"] and "checksum/ui-proxy" in byo()["annotations"]'
 check "oauth no group flag" 'not arg("--openshift-group") and not arg("--openshift-sar")'
 check "oauth probe" 'ctr("oauth-proxy")["readinessProbe"]["httpGet"]["path"] == "/oauth/healthz"'
 check "redirect reference" 'redirect() == {"kind": "OAuthRedirectReference", "apiVersion": "v1", "reference": {"kind": "Route", "name": "sam-agent"}}'
 check "no login role" 'not objs("Role") and [b["metadata"]["name"] for b in objs("RoleBinding")] == ["sam-agent-edit"]'
-check "opencode user" 'env("opencode")["OPENCODE_SERVER_USERNAME"] == "sam" and env("opencode-a2a")["OPENCODE_AUTH_USERNAME"] == "sam"'
+check "opencode user" '"OPENCODE_SERVER_USERNAME" not in env("opencode") and env("opencode-a2a")["OPENCODE_AUTH_USERNAME"] == "opencode" and env("opencode-a2a")["OPENCODE_API_VERSION"] == "v2"'
+check "opencode password env" '"OPENCODE_PASSWORD" in [e["name"] for e in ctr("opencode")["env"]] and "OPENCODE_SERVER_PASSWORD" not in [e["name"] for e in ctr("opencode")["env"]]'
 for s in oauth2-proxy oauth2_proxy keycloak issuerURL clientSecret code_challenge oidc; do hasnt default "$s"; done
 hasnt default "storageClassName"
 check default 'obj("PersistentVolumeClaim", "sam-agent-data")["spec"]["resources"]["requests"]["storage"] == "20Gi"'
@@ -74,13 +79,14 @@ check default 'obj("PersistentVolumeClaim", "sam-agent-data")["metadata"]["annot
 check "default namespace" 'all(d["metadata"].get("namespace", "test") == "test" for d in docs)'
 check "owner email only" 'proxy()["emails.txt"].split() == ["sam@example.com"]'
 check "flock" '"flock -x /workspace/.opencode.lock" in " ".join(ctr("opencode")["command"])'
-check "flock wraps opencode" '"flock -x /workspace/.opencode.lock opencode web" in " ".join(ctr("opencode")["command"])'
+check "flock wraps opencode" '"exec flock -x /workspace/.opencode.lock sh -c" in " ".join(ctr("opencode")["command"]) and "sh /etc/opencode-agent/backup-db.sh && exec opencode serve --hostname 127.0.0.1 --port 4096" in " ".join(ctr("opencode")["command"])'
+check "db backup" '"backup-db.sh" in cfg() and env("opencode")["OPENCODE_DB_BACKUP_DIR"] == "/workspace/.home/backup"'
 # the adapter answers A2A while another pod still holds the lock
 check "adapter readiness" '"readinessProbe" not in byo() or "4096" not in json.dumps(byo()["readinessProbe"])'
 check "generated secrets" 'len(secret("sam-agent-server-password", "password")) == 48 and len(secret("sam-agent-a2a-auth", "token")) == 48 and len(secret("sam-agent-cookie-secret", "cookie-secret")) == 32'
 check "a2a credentials" 'json.loads(secret("sam-agent-a2a-auth", "credentials"))[0]["token"] == secret("sam-agent-a2a-auth", "token")'
 check "proxy password" 'secret("sam-agent-server-password", "oauth-proxy.cfg") == "basic_auth_password = " + json.dumps(secret("sam-agent-server-password", "password")) + "\n" and "basic-auth-header" not in obj("Secret", "sam-agent-server-password")["data"]'
-check "proxy password mount" 'vol("server-password")["secret"]["items"] == [{"key": "oauth-proxy.cfg", "path": "oauth-proxy.cfg"}] and any(m["name"] == "server-password" and m["mountPath"] == "/var/run/secrets/opencode" for m in ctr("oauth-proxy")["volumeMounts"])'
+
 check "a2a secret ref" 'any(e.get("valueFrom", {}).get("secretKeyRef", {}).get("name") == "sam-agent-a2a-auth" for e in byo()["env"])'
 check "projected token" 'vol("api-token")["projected"]["sources"][0]["serviceAccountToken"]["expirationSeconds"] == 3600 and vol("api-token")["projected"]["sources"][0]["serviceAccountToken"]["path"] == "token"'
 check "projected audience" '"audience" not in vol("api-token")["projected"]["sources"][0]["serviceAccountToken"]'
@@ -89,7 +95,7 @@ check "token mount" 'any(m["mountPath"] == "/var/run/secrets/api-token" and m["n
 check "chart labels" 'all(d["metadata"]["labels"]["app.kubernetes.io/name"] == "opencode-agent" for d in docs)'
 
 # ported: pins, BuildConfig names, portable labels, ports, role line, MCP, npmrc
-check "pins opencode" '"FROM ghcr.io/anomalyco/opencode:1.19.3" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
+check "pins opencode" '"FROM ghcr.io/anomalyco/opencode:2.1.1" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "pins mcp" '"quay.io/containers/kubernetes_mcp_server:v0.0.67" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "toolset build" '"RUN sh /tmp/agent-tools/install-tools.sh" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "toolset check as non-root" '"USER 1001:0\nRUN sh /tmp/agent-tools/verify-tools.sh" in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
@@ -102,7 +108,9 @@ check "task store off the shared volume" '"/workspace" not in env("opencode-a2a"
 check "mcp runtimes checked" 'all(("check " + t) in obj("ConfigMap", "sam-agent-opencode-build")["data"]["verify-tools.sh"] for t in ["node --version", "npm --version", "npx --version", "uv --version", "uvx --version", "terraform version", "packer version", "go version", "ansible --version", "hf version", "fastapi --version", "kubectl-mariadb --help", "kubectl mdba --help", "trivy --version", "semgrep --version", "checkov --version", "sonar-scanner --version", "renovate --version", "snyk --version", "cosign version", "opa version"])'
 check "no runtime tool bin dir" '"UV_TOOL_BIN_DIR" not in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "no a2a tools without peers" 'not {"A2A_PEERS", "A2A_GATEWAY_URL", "A2A_PROXY_URL"} & set(env("opencode")) and "a2a_call" not in cfg()["instructions.md"]'
-check "pins a2a" '"opencode-a2a==1.3.6" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
+check "pins a2a" '"pip install --no-cache-dir \"opencode-a2a @ https://github.com/hoolia/opencode-a2a/archive/refs/tags/v2.0.0%2Bhoolia.1.tar.gz\"" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
+check "a2a version without git" '"ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENCODE_A2A=2.0.0+hoolia.1" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
+check "a2a tag has no plus" 'all("+" not in b["spec"]["output"]["to"]["name"] for b in objs("BuildConfig")) and "+" not in byo()["image"]'
 check "pins a2a base" '"FROM registry.access.redhat.com/ubi10/python-312-minimal" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "oauth-proxy image" 'ctr("oauth-proxy")["image"] == "image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4"'
 check "buildconfig names" 'sorted(b["metadata"]["name"].rsplit("-", 1)[0] for b in objs("BuildConfig")) == ["sam-agent-opencode", "sam-agent-opencode-a2a"]'
@@ -111,7 +119,7 @@ check "buildconfig trigger" 'all(b["spec"]["triggers"] == [{"type": "ConfigChang
 check "pod pulls built tag" 'ctr("opencode")["image"].endswith("/test/" + [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["output"]["to"]["name"]) and byo()["image"].endswith("/test/" + [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["output"]["to"]["name"])'
 check "portable labels" 'byo()["labels"] == {"kagenti.io/type": "agent", "protocol.kagenti.io/a2a": "", "app.kubernetes.io/name": "sam-agent", "app.kubernetes.io/part-of": "test"}'
 check "ports TCP" 'all(p.get("protocol") == "TCP" for c in [byo()] + byo()["extraContainers"] for p in c.get("ports", []))'
-check "containers" 'sorted(c["name"] for c in byo()["extraContainers"]) == ["oauth-proxy", "opencode", "token-proxy"]'
+check "containers" 'sorted(c["name"] for c in byo()["extraContainers"]) == ["oauth-proxy", "opencode", "token-proxy", "ui-proxy"]'
 check "adapter env" 'env("opencode-a2a")["A2A_PORT"] == "8080" and env("opencode-a2a")["A2A_CLIENT_ALLOWED_HOSTS"] == "127.0.0.1" and byo()["replicas"] == 1'
 check "role line" '"- I am sales" in cfg()["instructions.md"] and "/etc/opencode-agent/instructions.md" in json.loads(cfg()["opencode.json"])["instructions"]'
 check "agent description" 'obj("Agent")["spec"]["description"] == "OpenCode agent of sam. I am sales"'
@@ -139,7 +147,8 @@ for m in ReadWriteOnce ReadWriteOncePod; do
   if ERR=$(helm template t "$C" --namespace test "${BASE[@]}" --set storage.accessMode=$m 2>&1 >/dev/null); then
     echo "FAIL access mode $m: render succeeded"; fail=1
   else
-    echo "$ERR" | grep -qF "/storage/accessMode" || { echo "FAIL access mode $m: error does not name /storage/accessMode"; fail=1; }
+    # Helm 4 names the JSON pointer, Helm 3 the dotted path
+    echo "$ERR" | grep -qE '/storage/accessMode|storage\.accessMode' || { echo "FAIL access mode $m: error does not name storage.accessMode: $ERR"; fail=1; }
   fi
 done
 
@@ -166,9 +175,9 @@ check "login binding" 'obj("RoleBinding", "sam-agent-login")["roleRef"] == {"api
 
 # the owner is an OpenShift user name; OpenCode sees its local part as the Basic user
 OUT=$(render "${BASE[@]}" --set oauth.ownerEmail=Owner.Name@example.org)
-check "owner override" 'proxy()["emails.txt"].split() == ["Owner.Name@example.org"] and env("opencode")["OPENCODE_SERVER_USERNAME"] == "Owner.Name" and env("opencode-a2a")["OPENCODE_AUTH_USERNAME"] == "Owner.Name"'
+check "owner override" 'proxy()["emails.txt"].split() == ["Owner.Name@example.org"] and env("opencode-a2a")["OPENCODE_AUTH_USERNAME"] == "opencode"'
 OUT=$(render --set person.name=sam)
-check "nobody logs in" 'proxy()["emails.txt"].strip() == "" and env("opencode")["OPENCODE_SERVER_USERNAME"] == "opencode"'
+check "nobody logs in" 'proxy()["emails.txt"].strip() == ""'
 
 # the Keycloak login values are gone; a stale one fails the render
 for v in oauth.issuerUrl=https://login.example.com oauth.clientId=c1 oauth.groupsClaim=roles; do
@@ -234,7 +243,7 @@ OUT=$(render "${BASE[@]}" --set a2a.gatewayNamespace=gw --set 'networkPolicy.a2a
 check "a2a namespaces" '[p["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] for r in obj("NetworkPolicy")["spec"]["ingress"] if r["ports"][0]["port"] == 8080 for p in r["from"]] == ["gw", "kagent"]'
 
 OUT=$(render "${BASE[@]}" --set builds.enabled=false --set a2a.image=registry.example.com/opencode-a2a:1.3.6)
-check "prebuilt" 'ctr("opencode")["image"] == "ghcr.io/anomalyco/opencode:1.19.3" and not objs("BuildConfig") and not objs("ImageStream")'
+check "prebuilt" 'ctr("opencode")["image"] == "ghcr.io/anomalyco/opencode:2.1.1" and not objs("BuildConfig") and not objs("ImageStream")'
 OUT=$(render "${BASE[@]}" --set builds.enabled=false)
 has "required a2a.image" "a2a.image is required when builds.enabled is false"
 OUT=$(render "${BASE[@]}" --set secrets.type=externalSecret)
@@ -268,6 +277,21 @@ grep -q clone "$T/git-calls" 2>/dev/null || { echo "FAIL init: no clone without 
 printf '@example:registry=https://npm.example.com/\n' > "$T/npmrc"
 env -i PATH="$PATH" HOME="$T/home2" NPMRC_SOURCE="$T/npmrc" sh "$T/init.sh" >/dev/null 2>&1 || { echo "FAIL init: npmrc run"; fail=1; }
 cmp -s "$T/npmrc" "$T/home2/.npmrc" || { echo "FAIL init: npmrc not copied"; fail=1; }
+rm -rf "$T"
+
+# backup-db.sh: one copy of the pre-2.x session store, with its WAL, never twice
+T=$(mktemp -d)
+B="$C/files/backup-db.sh"
+env -i PATH="$PATH" XDG_DATA_HOME="$T/data" OPENCODE_DB_BACKUP_DIR="$T/bk" sh "$B" >/dev/null || { echo "FAIL backup: run without a store"; fail=1; }
+[ -e "$T/bk" ] && { echo "FAIL backup: directory made without a store"; fail=1; }
+mkdir -p "$T/data/opencode" && echo db > "$T/data/opencode/opencode.db" && echo wal > "$T/data/opencode/opencode.db-wal"
+env -i PATH="$PATH" XDG_DATA_HOME="$T/data" OPENCODE_DB_BACKUP_DIR="$T/bk" sh "$B" >/dev/null || { echo "FAIL backup: run"; fail=1; }
+[ "$(ls "$T/bk" | grep -c '^opencode\.db\.[0-9TZ]*$')" = 1 ] || { echo "FAIL backup: no single copy"; fail=1; }
+ls "$T/bk" | grep -q -- '-wal$' || { echo "FAIL backup: WAL not copied"; fail=1; }
+ls "$T/bk" | grep -q partial && { echo "FAIL backup: partial file left"; fail=1; }
+echo changed > "$T/data/opencode/opencode.db"
+env -i PATH="$PATH" XDG_DATA_HOME="$T/data" OPENCODE_DB_BACKUP_DIR="$T/bk" sh "$B" >/dev/null
+grep -qx db "$T"/bk/opencode.db.*[Z] || { echo "FAIL backup: a later start replaced the copy"; fail=1; }
 rm -rf "$T"
 
 [ $fail = 0 ] && echo "RESULT PASS" || { echo "RESULT FAIL"; exit 1; }

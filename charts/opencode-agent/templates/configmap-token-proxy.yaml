@@ -11,3 +11,5 @@ metadata:
 data:
   token-proxy.py: |
 {{ .Files.Get "files/token-proxy.py" | indent 4 }}
+  ui-proxy.py: |
+{{ .Files.Get "files/ui-proxy.py" | indent 4 }}
