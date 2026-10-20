@@ -9,6 +9,9 @@ metadata:
     {{- include "mcp-server.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
   annotations:
+    {{- with .Values.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
     agentgateway.dev/mcp-path: {{ .Values.path | quote }}
     agentgateway.dev/mcp-target-name: {{ .Values.mcp.targetName | default .Release.Name | quote }}
 spec:
@@ -17,7 +20,7 @@ spec:
     {{- include "mcp-server.selectorLabels" . | nindent 4 }}
   ports:
   - name: mcp
-    port: {{ .Values.port }}
+    port: {{ if .Values.rbacProxy.enabled }}{{ .Values.rbacProxy.port }}{{ else }}{{ .Values.port }}{{ end }}
     targetPort: mcp
     protocol: TCP
     {{- with .Values.mcp.appProtocol }}

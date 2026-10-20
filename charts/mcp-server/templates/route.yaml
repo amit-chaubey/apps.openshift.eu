@@ -1,0 +1,30 @@
+{{- if and .Values.image.repository .Values.route.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mcp-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.route.host }}
+  host: {{ . }}
+  {{- end }}
+  {{- with .Values.route.path }}
+  path: {{ . }}
+  {{- end }}
+  port:
+    targetPort: mcp
+  tls:
+    termination: {{ if .Values.rbacProxy.enabled }}reencrypt{{ else }}edge{{ end }}
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: {{ .Release.Name }}
+    weight: 100
+{{- end }}

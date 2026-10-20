@@ -11,6 +11,8 @@ Choices:
 - `envFromSecret` names a Secret you create (for example from an ExternalSecret); its keys become environment variables. The chart never writes a credential.
 - No ServiceAccount token in the pod; non-root, no capabilities, `RuntimeDefault` seccomp.
 - A NetworkPolicy admits callers from the own project and `networkPolicy.ingressNamespaces` only. Egress goes to cluster DNS and the public internet; a private upstream needs an entry in `networkPolicy.egress.allow`.
+- `rbacProxy.enabled` puts kube-rbac-proxy in front of the server: every call needs a Kubernetes ServiceAccount token allowed `services/proxy` on the Service (Role `<release>-caller`, subjects from `rbacProxy.callers`). The server then listens on `127.0.0.1`; `serviceAccountName` must name a ServiceAccount bound to `system:auth-delegator`, which the cluster administrator creates. With `route.enabled` a Route publishes the endpoint (reencrypt to the proxy) for an MCP gateway on another cluster.
+- `secretEnv` maps single keys of existing Secrets to variables, for example a ServiceAccount token Secret.
 - The default port 8000 is outside the ports a typical project default opens to everyone (80, 443, 8080, 8443).
 
 ## Install

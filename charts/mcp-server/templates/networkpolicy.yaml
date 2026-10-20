@@ -20,7 +20,7 @@ spec:
   ingress:
   - ports:
     - protocol: TCP
-      port: {{ .Values.port }}
+      port: {{ if .Values.rbacProxy.enabled }}{{ .Values.rbacProxy.port }}{{ else }}{{ .Values.port }}{{ end }}
     from:
     - podSelector: {}
     {{- range .Values.networkPolicy.ingressNamespaces }}

@@ -1,0 +1,57 @@
+{{- if and .Values.image.repository .Values.rbacProxy.enabled }}
+# What a caller must be allowed to do: services/proxy on this Service
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-rbac
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mcp-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+data:
+  config.yaml: |
+    authorization:
+      resourceAttributes:
+        namespace: {{ .Release.Namespace }}
+        apiVersion: v1
+        resource: services
+        subresource: proxy
+        name: {{ .Release.Name }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-caller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mcp-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services/proxy
+  resourceNames:
+  - {{ .Release.Name }}
+  verbs:
+  - get
+  - create
+  - delete
+{{- with .Values.rbacProxy.callers }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $.Release.Name }}-caller
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "mcp-server.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $.Release.Name }}-caller
+subjects:
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}

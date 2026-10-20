@@ -9,6 +9,10 @@ args: []
 env: {}
 # Existing Secret whose keys become environment variables (the server's credential)
 envFromSecret: ""
+# Single environment variables from keys of existing Secrets: [{name, secret, key}]
+secretEnv: []
+# Existing ServiceAccount for the pod; empty: the namespace default, without a token mount
+serviceAccountName: ""
 # Not 80, 443, 8080 or 8443 (open to every project)
 port: 8000
 path: /mcp
@@ -18,6 +22,29 @@ mcp:
   appProtocol: agentgateway.dev/mcp
   # Tool prefix on the gateway (<targetName>_<tool>); empty: the release name
   targetName: ""
+
+# Authenticate every call with kube-rbac-proxy in front of the server: the caller's
+# ServiceAccount token must allow services/proxy on this Service (TokenReview and
+# SubjectAccessReview). The server must then listen on 127.0.0.1:<port>. serviceAccountName
+# must name a ServiceAccount bound to system:auth-delegator (cluster-scoped, not in this chart).
+rbacProxy:
+  enabled: false
+  image: quay.io/brancz/kube-rbac-proxy:v0.23.0
+  port: 8443
+  # TLS Secret for the proxy (for example created by a service CA through service.annotations)
+  tlsSecretName: ""
+  # Subjects allowed to call: [{kind: ServiceAccount, name, namespace}]
+  callers: []
+
+service:
+  annotations: {}
+
+# Publish the endpoint off-cluster (with rbacProxy: reencrypt to the proxy)
+route:
+  enabled: false
+  host: ""
+  path: ""
+  annotations: {}
 
 # Extra pod labels and annotations, e.g. sidecar.istio.io/inject: "false" in a mesh namespace
 podLabels: {}

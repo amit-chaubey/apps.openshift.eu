@@ -25,8 +25,11 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      # The server needs no Kubernetes API access
-      automountServiceAccountToken: false
+      {{- with .Values.serviceAccountName }}
+      serviceAccountName: {{ . }}
+      {{- end }}
+      # The server needs no Kubernetes API access; the proxy needs the token for its reviews
+      automountServiceAccountToken: {{ .Values.rbacProxy.enabled }}
       containers:
       - name: server
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -46,11 +49,19 @@ spec:
         - name: {{ $k }}
           value: {{ $v | toString | quote }}
         {{- end }}
+        {{- range .Values.secretEnv }}
+        - name: {{ .name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .secret }}
+              key: {{ .key }}
+        {{- end }}
         {{- with .Values.envFromSecret }}
         envFrom:
         - secretRef:
             name: {{ . }}
         {{- end }}
+        {{- if not .Values.rbacProxy.enabled }}
         ports:
         - name: mcp
           containerPort: {{ .Values.port }}
@@ -64,6 +75,7 @@ spec:
             port: mcp
           initialDelaySeconds: 20
           periodSeconds: 30
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         securityContext:
@@ -77,7 +89,53 @@ spec:
         volumeMounts:
         - name: tmp
           mountPath: /tmp
+      {{- if .Values.rbacProxy.enabled }}
+      - name: kube-rbac-proxy
+        image: {{ .Values.rbacProxy.image }}
+        args:
+        - --secure-listen-address=0.0.0.0:{{ .Values.rbacProxy.port }}
+        - --upstream=http://127.0.0.1:{{ .Values.port }}/
+        - --config-file=/etc/kube-rbac-proxy/config.yaml
+        - --tls-cert-file=/etc/tls/private/tls.crt
+        - --tls-private-key-file=/etc/tls/private/tls.key
+        ports:
+        - name: mcp
+          containerPort: {{ .Values.rbacProxy.port }}
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: mcp
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 5m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: rbac
+          mountPath: /etc/kube-rbac-proxy
+        - name: tls
+          mountPath: /etc/tls/private
+      {{- end }}
       volumes:
       - name: tmp
         emptyDir: {}
+      {{- if .Values.rbacProxy.enabled }}
+      - name: rbac
+        configMap:
+          name: {{ .Release.Name }}-rbac
+      - name: tls
+        secret:
+          secretName: {{ required "rbacProxy.tlsSecretName is required" .Values.rbacProxy.tlsSecretName }}
+      {{- end }}
 {{- end }}
