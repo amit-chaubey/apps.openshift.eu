@@ -32,6 +32,8 @@ check hcp version
 check virtctl version --client
 check amtool --version
 check kubectl-cnpg version
+check kubectl-mariadb --help
+check kubectl mdba --help
 check helm version
 check kustomize version
 check glab version
@@ -44,10 +46,35 @@ check kubectl-krew version
 check aws --version
 check mkdocs --version
 check bw --version
+check node --version
+check npm --version
+check npx --version
+check uv --version
+check uvx --version
+check make --version
+check go version
+check terraform version
+check packer version
+check ansible --version
+check ansible-galaxy collection list kubernetes.core
+check hf version
+check fastapi --version
+check uvicorn --version
+check gh --version
+check promtool --version
+check gitleaks version
+check rclone version
+check tmux -V
+check psql --version
+check mariadb --version
+check openssl version
+check dig -v
+check python3 -c 'import yaml; print("pyyaml", yaml.__version__)'
 check opencode --version
 check /tools/kubernetes-mcp-server --version
 # Leave passwd as the build found it; the pod adds its own entry
 grep -v "^agent:x:$(id -u):" /etc/passwd > /tmp/passwd && cat /tmp/passwd > /etc/passwd
+echo "image size: $(du -shx / 2>/dev/null | cut -f1)"
 if [ -n "$failed" ]; then
   echo "tools that do not run:$failed" >&2
   exit 1

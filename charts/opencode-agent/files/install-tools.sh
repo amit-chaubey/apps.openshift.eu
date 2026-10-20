@@ -27,9 +27,63 @@ untar() {
   for member in "$@"; do install -m 0755 "$WORK/$member" "$BIN/$(basename "$member")"; done
 }
 
+# Alpine packages: shell basics, MCP runtimes (node, python), clients engineers use
 apk add --no-cache \
-  bash curl jq netcat-openbsd python3 py3-pip git openssh-client \
-  ca-certificates tar gzip unzip bzip2 gcompat libstdc++ aws-cli
+  bash curl jq netcat-openbsd python3 py3-pip py3-yaml git openssh-client \
+  ca-certificates tar gzip unzip bzip2 xz zstd gcompat libstdc++ aws-cli \
+  nodejs npm make tmux ncurses openssl bind-tools rsync tree less \
+  postgresql-client mariadb-client
+
+# uv and uvx, static musl build
+TAG=$(latest astral-sh/uv)
+fetch "$(gh_release astral-sh/uv "$TAG" uv-x86_64-unknown-linux-musl.tar.gz)" uv.tgz
+untar uv.tgz uv-x86_64-unknown-linux-musl/uv uv-x86_64-unknown-linux-musl/uvx
+
+# Python CLIs, each in its own environment under /opt/uv-tools
+export UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR="$BIN" UV_PYTHON_PREFERENCE=only-system UV_NO_CACHE=1
+uv tool install mkdocs --with mkdocs-material
+uv tool install ansible-core
+uv tool install "huggingface_hub[cli]"
+uv tool install "fastapi[standard]"
+uv tool install uvicorn
+# Collections used across the platform, readable by every user
+ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \
+  ansible-galaxy collection install --no-cache kubernetes.core community.general ansible.posix community.crypto
+chmod -R a+rX /opt/uv-tools /usr/share/ansible
+
+# go, newest stable toolchain from go.dev
+GO=$(curl -fsSL 'https://go.dev/dl/?mode=json' | jq -r '[.[] | select(.stable)][0].version')
+fetch "https://go.dev/dl/$GO.linux-amd64.tar.gz" go.tgz
+tar -xzf go.tgz -C /usr/local
+ln -sf /usr/local/go/bin/go /usr/local/go/bin/gofmt "$BIN/"
+
+# terraform and packer, newest release from HashiCorp
+for tool in terraform packer; do
+  V=$(curl -fsSL "https://checkpoint-api.hashicorp.com/v1/check/$tool" | jq -r .current_version)
+  fetch "https://releases.hashicorp.com/$tool/$V/${tool}_${V}_linux_amd64.zip" "$tool.zip"
+  unzip -qo "$tool.zip" "$tool"
+  install -m 0755 "$tool" "$BIN/$tool"
+done
+
+# gh
+TAG=$(latest cli/cli)
+fetch "$(gh_release cli/cli "$TAG" "gh_${TAG#v}_linux_amd64.tar.gz")" gh.tgz
+untar gh.tgz "gh_${TAG#v}_linux_amd64/bin/gh"
+
+# promtool, for alert rule checks
+TAG=$(latest prometheus/prometheus)
+fetch "$(gh_release prometheus/prometheus "$TAG" "prometheus-${TAG#v}.linux-amd64.tar.gz")" prom.tgz
+untar prom.tgz "prometheus-${TAG#v}.linux-amd64/promtool"
+
+# gitleaks
+TAG=$(latest gitleaks/gitleaks)
+fetch "$(gh_release gitleaks/gitleaks "$TAG" "gitleaks_${TAG#v}_linux_x64.tar.gz")" gitleaks.tgz
+untar gitleaks.tgz gitleaks
+
+# rclone
+fetch https://downloads.rclone.org/rclone-current-linux-amd64.zip rclone.zip
+unzip -qo rclone.zip
+install -m 0755 rclone-*-linux-amd64/rclone "$BIN/rclone"
 
 # yq
 fetch "$(gh_release mikefarah/yq "$(latest mikefarah/yq)" yq_linux_amd64)" "$BIN/yq"
@@ -74,6 +128,21 @@ TAG=$(latest cloudnative-pg/cloudnative-pg)
 fetch "$(gh_release cloudnative-pg/cloudnative-pg "$TAG" "kubectl-cnpg_${TAG#v}_linux_x86_64.tar.gz")" cnpg.tgz
 untar cnpg.tgz kubectl-cnpg
 
+# kubectl-mariadb: the mariadb-operator binary of the newest operator release
+# (its "latest" release is a chart, so pick the newest plain version tag)
+MDB=$(curl -fsSL 'https://api.github.com/repos/mariadb-operator/mariadb-operator/releases?per_page=30' \
+  | jq -r '[.[] | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))][0].tag_name')
+fetch "$(gh_release mariadb-operator/mariadb-operator "$MDB" "mariadb-operator_${MDB}_linux_amd64.tar.gz")" mdb.tgz
+mkdir -p mdb && tar -xzf mdb.tgz -C mdb
+install -m 0755 "$(find mdb -type f -name mariadb-operator | head -1)" "$BIN/kubectl-mariadb"
+
+# kubectl-mdba, the version the krew index publishes
+MDBA_URL=$(curl -fsSL https://raw.githubusercontent.com/kubernetes-sigs/krew-index/master/plugins/mdba.yaml \
+  | sed -n 's/^ *uri: *//p' | head -1)
+fetch "$MDBA_URL" mdba.tgz
+mkdir -p mdba && tar -xzf mdba.tgz -C mdba
+install -m 0755 "$(find mdba -type f -name kubectl-mdba | head -1)" "$BIN/kubectl-mdba"
+
 # helm
 fetch "https://get.helm.sh/helm-$(latest helm/helm)-linux-amd64.tar.gz" helm.tgz
 untar helm.tgz linux-amd64/helm
@@ -117,10 +186,6 @@ apk add --no-cache nodejs npm
 npm install --global --no-fund --no-audit --omit=dev @bitwarden/cli@latest
 npm cache clean --force
 
-# mkdocs, in its own virtual environment
-python3 -m venv /opt/mkdocs
-/opt/mkdocs/bin/pip install --no-cache-dir --quiet mkdocs mkdocs-material
-ln -sf /opt/mkdocs/bin/mkdocs "$BIN/mkdocs"
 
 # ssh and git need a passwd entry; init.sh adds one for the arbitrary UID
 chmod g=u /etc/passwd

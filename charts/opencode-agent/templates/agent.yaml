@@ -68,8 +68,10 @@ spec:
         value: 127.0.0.1
       - name: A2A_CLIENT_ALLOW_PRIVATE_HOSTS
         value: "true"
+      # Pod-local: two adapters on one shared SQLite file fail with "locking protocol"
+      # while a rolling update runs the old and the new pod side by side
       - name: A2A_TASK_STORE_DATABASE_URL
-        value: sqlite+aiosqlite:////workspace/opencode-a2a.db
+        value: sqlite+aiosqlite:////var/lib/opencode-a2a/tasks.db
       - name: OPENCODE_BASE_URL
         value: http://127.0.0.1:4096
       - name: OPENCODE_WORKSPACE_ROOT
@@ -86,6 +88,8 @@ spec:
       volumeMounts:
       - name: workspace
         mountPath: /workspace
+      - name: a2a-state
+        mountPath: /var/lib/opencode-a2a
       resources:
         {{- toYaml .Values.a2a.resources | nindent 8 }}
       securityContext:
@@ -256,6 +260,10 @@ spec:
       - name: workspace
         persistentVolumeClaim:
           claimName: {{ $name }}-data
+      # A2A task store and session bindings of this pod only
+      - name: a2a-state
+        emptyDir:
+          sizeLimit: 1Gi
       - name: opencode-config
         configMap:
           name: {{ $name }}-opencode

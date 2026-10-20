@@ -133,6 +133,9 @@ COPY install-tools.sh verify-tools.sh /tmp/agent-tools/
 RUN sh /tmp/agent-tools/install-tools.sh
 COPY --from=mcp /app/kubernetes-mcp-server /tools/kubernetes-mcp-server
 COPY --from=odf /odf /usr/local/bin/odf
+# npm and uv caches follow HOME and XDG_CACHE_HOME on the volume; kubectl-mdba needs TERM
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false UV_PYTHON_PREFERENCE=system TERM=xterm \
+    ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections
 USER 1001:0
 RUN sh /tmp/agent-tools/verify-tools.sh
 {{- end -}}
