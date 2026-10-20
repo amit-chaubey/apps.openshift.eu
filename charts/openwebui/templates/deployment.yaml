@@ -1,5 +1,8 @@
 {{- $name := include "openwebui.name" . -}}
 {{- $audience := include "openwebui.audience" . -}}
+{{- if and .Values.team.enabled (not .Values.oauth.allowedGroups) }}
+{{- fail "team.enabled needs oauth.allowedGroups: without a group every cluster user logs in" }}
+{{- end }}
 {{- $env := dict
   "HOST" "127.0.0.1"
   "PORT" "8080"
@@ -20,7 +23,19 @@
   "DO_NOT_TRACK" "true"
   "ANONYMIZED_TELEMETRY" "false"
   "ENABLE_VERSION_UPDATE_CHECK" "false"
+  "RAG_EMBEDDING_BATCH_SIZE" "64"
 -}}
+{{- if .Values.team.enabled }}
+{{- $_ := set $env "DEFAULT_USER_ROLE" "user" }}
+{{- end }}
+{{- if .Values.team.memberTools }}
+{{- $_ := set $env "USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS" "true" }}
+{{- $_ := set $env "USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS" "true" }}
+{{- end }}
+{{- with .Values.qdrant.url }}
+{{- $_ := set $env "VECTOR_DB" "qdrant" }}
+{{- $_ := set $env "QDRANT_URI" . }}
+{{- end }}
 {{- with .Values.route.host }}
 {{- $_ := set $env "WEBUI_URL" (printf "https://%s" .) }}
 {{- end }}
@@ -206,9 +221,14 @@ spec:
         - --https-address=
         - --upstream=http://127.0.0.1:8080
         - --upstream-timeout={{ .Values.route.timeout }}
+        {{- if .Values.team.enabled }}
+        # Every email passes; the group check below decides who logs in
+        - --email-domain=*
+        {{- else }}
         - --authenticated-emails-file=/etc/openwebui/emails.txt
         # Without an email domain the openshift provider admits every email
         - --email-domain=
+        {{- end }}
         {{- if .Values.oauth.allowedGroups }}
         # --openshift-group is accepted and ignored; the group check is this SAR
         - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" $name "verb" "get") | toJson }}

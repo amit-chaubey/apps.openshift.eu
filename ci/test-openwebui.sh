@@ -104,6 +104,27 @@ check "group sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test
 check "login role" 'obj("Role", "sam-openwebui-login")["rules"] == [{"apiGroups": [""], "resources": ["services/proxy"], "resourceNames": ["sam-openwebui"], "verbs": ["get"]}]'
 check "login binding" '[s["name"] for s in obj("RoleBinding", "sam-openwebui-login")["subjects"]] == ["team-admins", "ops"] and obj("RoleBinding")["roleRef"]["name"] == "sam-openwebui-login"'
 
+# team: every group member passes the proxy, the group check stays
+OUT=$(render "${BASE[@]}" --set team.enabled=true --set 'oauth.allowedGroups={staff}')
+check "team emails" 'arg("--email-domain") == ["*"] and not arg("--authenticated-emails-file")'
+check "team sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test", "resource": "services/proxy", "resourceName": "sam-openwebui", "verb": "get"}] and [s["name"] for s in obj("RoleBinding", "sam-openwebui-login")["subjects"]] == ["staff"]'
+check "team role" 'env("openwebui")["DEFAULT_USER_ROLE"] == "user" and env("openwebui")["ENABLE_SIGNUP"] == "false"'
+check "member tools off" '"USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS" not in env("openwebui") and "USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS" not in env("openwebui")'
+OUT=$(render "${BASE[@]}" --set team.enabled=true --set 'oauth.allowedGroups={staff}' --set team.memberTools=true)
+check "member tools on" 'env("openwebui")["USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS"] == "true" and env("openwebui")["USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS"] == "true"'
+
+# vectors: built-in store unless a Qdrant address is given
+OUT=$(render "${BASE[@]}")
+check "builtin vectors" '"VECTOR_DB" not in env("openwebui") and "QDRANT_URI" not in env("openwebui") and env("openwebui")["RAG_EMBEDDING_BATCH_SIZE"] == "64"'
+OUT=$(render "${BASE[@]}" --set qdrant.url=http://qdrant:6333)
+check qdrant 'env("openwebui")["VECTOR_DB"] == "qdrant" and env("openwebui")["QDRANT_URI"] == "http://qdrant:6333"'
+if helm template t "$C" --namespace test "${BASE[@]}" --set qdrant.url=qdrant:6333 >/dev/null 2>&1; then
+  echo "FAIL qdrant url without scheme accepted"; fail=1
+fi
+if helm template t "$C" --namespace test "${BASE[@]}" --set team.enabled=true >/dev/null 2>&1; then
+  echo "FAIL team without allowedGroups accepted"; fail=1
+fi
+
 OUT=$(render "${BASE[@]}" --set oauth.ownerEmail=Owner@example.org)
 check "owner override" 'obj("ConfigMap")["data"]["emails.txt"].split() == ["Owner@example.org"]'
 

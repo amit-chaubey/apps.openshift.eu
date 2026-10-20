@@ -23,6 +23,19 @@ oauth:
   # OpenShift groups the owner must be in; empty: no group check
   allowedGroups: []
 
+team:
+  # true: every member of oauth.allowedGroups logs in, not only the owner, and gets an
+  # account with role user. Needs oauth.allowedGroups
+  enabled: false
+  # true: members may write their own tools, which run as Python in this pod, and connect
+  # tool servers from their browser. Admins always may
+  memberTools: false
+
+qdrant:
+  # HTTP address of a Qdrant for document vectors, for example http://qdrant:6333. Empty:
+  # the built-in store on the data volume
+  url: ""
+
 secrets:
   # kubernetes: Secrets from the values below. externalSecret: from a secret store
   type: kubernetes

@@ -101,6 +101,24 @@
       "properties": {
         "enabled": {"type": "boolean"}
       }
+    },
+    "team": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "memberTools": {"type": "boolean"}
+      }
+    },
+    "qdrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^$|^https?://[^\\s]+$"
+        }
+      }
     }
   }
 }
