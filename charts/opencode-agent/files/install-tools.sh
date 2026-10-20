@@ -32,7 +32,7 @@ apk add --no-cache \
   bash curl jq netcat-openbsd python3 py3-pip py3-yaml git openssh-client \
   ca-certificates tar gzip unzip bzip2 xz zstd gcompat libstdc++ aws-cli \
   nodejs npm make tmux ncurses openssl bind-tools rsync tree less \
-  postgresql-client mariadb-client
+  postgresql-client mariadb-client openjdk21-jre-headless
 
 # uv and uvx, static musl build
 TAG=$(latest astral-sh/uv)
@@ -40,16 +40,20 @@ fetch "$(gh_release astral-sh/uv "$TAG" uv-x86_64-unknown-linux-musl.tar.gz)" uv
 untar uv.tgz uv-x86_64-unknown-linux-musl/uv uv-x86_64-unknown-linux-musl/uvx
 
 # Python CLIs, each in its own environment under /opt/uv-tools
-export UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR="$BIN" UV_PYTHON_PREFERENCE=only-system UV_NO_CACHE=1
+# A tool that does not support the image's Python gets a managed one under /opt/uv-python
+export UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR="$BIN" UV_PYTHON_INSTALL_DIR=/opt/uv-python UV_NO_CACHE=1
 uv tool install mkdocs --with mkdocs-material
 uv tool install ansible-core
 uv tool install "huggingface_hub[cli]"
 uv tool install "fastapi[standard]"
 uv tool install uvicorn
+uv tool install semgrep
+uv tool install --python 3.12 checkov
 # Collections used across the platform, readable by every user
 ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \
   ansible-galaxy collection install --no-cache kubernetes.core community.general ansible.posix community.crypto
 chmod -R a+rX /opt/uv-tools /usr/share/ansible
+[ -d /opt/uv-python ] && chmod -R a+rX /opt/uv-python
 
 # go, newest stable toolchain from go.dev
 GO=$(curl -fsSL 'https://go.dev/dl/?mode=json' | jq -r '[.[] | select(.stable)][0].version')
@@ -79,6 +83,41 @@ untar prom.tgz "prometheus-${TAG#v}.linux-amd64/promtool"
 TAG=$(latest gitleaks/gitleaks)
 fetch "$(gh_release gitleaks/gitleaks "$TAG" "gitleaks_${TAG#v}_linux_x64.tar.gz")" gitleaks.tgz
 untar gitleaks.tgz gitleaks
+
+# Security and policy scanners
+TAG=$(latest open-policy-agent/opa)
+fetch "$(gh_release open-policy-agent/opa "$TAG" opa_linux_amd64_static)" "$BIN/opa"
+TAG=$(latest open-policy-agent/conftest)
+fetch "$(gh_release open-policy-agent/conftest "$TAG" "conftest_${TAG#v}_Linux_x86_64.tar.gz")" conftest.tgz
+untar conftest.tgz conftest
+TAG=$(latest aquasecurity/trivy)
+fetch "$(gh_release aquasecurity/trivy "$TAG" "trivy_${TAG#v}_Linux-64bit.tar.gz")" trivy.tgz
+untar trivy.tgz trivy
+for tool in grype syft; do
+  TAG=$(latest "anchore/$tool")
+  fetch "$(gh_release "anchore/$tool" "$TAG" "${tool}_${TAG#v}_linux_amd64.tar.gz")" "$tool.tgz"
+  untar "$tool.tgz" "$tool"
+done
+fetch "$(gh_release stackrox/kube-linter "$(latest stackrox/kube-linter)" kube-linter-linux)" "$BIN/kube-linter"
+fetch "$(gh_release hadolint/hadolint "$(latest hadolint/hadolint)" hadolint-linux-x86_64)" "$BIN/hadolint"
+TAG=$(latest koalaman/shellcheck)
+fetch "$(gh_release koalaman/shellcheck "$TAG" "shellcheck-$TAG.linux.x86_64.tar.gz")" shellcheck.tgz
+untar shellcheck.tgz "shellcheck-$TAG/shellcheck"
+fetch "$(gh_release yannh/kubeconform "$(latest yannh/kubeconform)" kubeconform-linux-amd64.tar.gz)" kubeconform.tgz
+untar kubeconform.tgz kubeconform
+fetch "$(gh_release sigstore/cosign "$(latest sigstore/cosign)" cosign-linux-amd64)" "$BIN/cosign"
+chmod 0755 "$BIN/opa" "$BIN/kube-linter" "$BIN/hadolint" "$BIN/cosign"
+
+# sonar-scanner without its bundled glibc JRE; runs on Alpine's OpenJDK
+SONAR=$(latest SonarSource/sonar-scanner-cli)
+fetch "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-$SONAR.zip" sonar.zip
+unzip -qo sonar.zip -d /opt
+mv "/opt/sonar-scanner-$SONAR" /opt/sonar-scanner
+ln -sf /opt/sonar-scanner/bin/sonar-scanner "$BIN/sonar-scanner"
+
+# renovate and snyk from npm; snyk needs SNYK_TOKEN at run time
+npm install --global --no-fund --no-audit --omit=dev renovate@latest snyk@latest
+npm cache clean --force
 
 # rclone
 fetch https://downloads.rclone.org/rclone-current-linux-amd64.zip rclone.zip
