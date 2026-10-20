@@ -1,0 +1,26 @@
+{{- if .Values.image.repository }}
+{{- if not .Values.image.tag }}{{ fail "image.tag is required" }}{{ end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mcp-server.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+  annotations:
+    agentgateway.dev/mcp-path: {{ .Values.path | quote }}
+    agentgateway.dev/mcp-target-name: {{ .Values.mcp.targetName | default .Release.Name | quote }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "mcp-server.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: mcp
+    port: {{ .Values.port }}
+    targetPort: mcp
+    protocol: TCP
+    {{- with .Values.mcp.appProtocol }}
+    appProtocol: {{ . }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {"type": "string"},
+        "tag": {"type": "string"},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "command": {"type": "array", "items": {"type": "string"}},
+    "args": {"type": "array", "items": {"type": "string"}},
+    "env": {"type": "object", "additionalProperties": {"type": ["string", "number", "boolean"]}},
+    "envFromSecret": {"type": "string"},
+    "port": {"type": "integer", "minimum": 1024, "maximum": 65535, "not": {"enum": [8080, 8443]}},
+    "path": {"type": "string", "pattern": "^/"},
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "appProtocol": {"type": "string"},
+        "targetName": {"type": "string", "pattern": "^$|^[a-z0-9]([-a-z0-9]{0,30}[a-z0-9])?$"}
+      }
+    },
+    "podLabels": {"type": "object", "additionalProperties": {"type": "string"}},
+    "podAnnotations": {"type": "object", "additionalProperties": {"type": "string"}},
+    "resources": {"type": "object"},
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "ingressNamespaces": {"type": "array", "items": {"type": "object"}},
+        "egress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "exceptCidrs": {"type": "array", "items": {"type": "string"}},
+            "extraExceptCidrs": {"type": "array", "items": {"type": "string"}},
+            "allow": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["cidr"],
+                "properties": {
+                  "cidr": {"type": "string"},
+                  "ports": {"type": "array", "items": {"type": "integer"}}
+                }
+              }
+            },
+            "dnsNamespace": {"type": "string"},
+            "dnsPort": {"type": "integer"}
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+apiVersion: v2
+name: mcp-server
+description: Any streamable HTTP MCP server image for one team, with its credential from a Secret, discovered by an MCP gateway
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://apps.openshift.eu
+icon: https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/docs/logo/light.svg
+keywords:
+- ai
+- mcp
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: MCP server
+  charts.openshift.io/provider: GRN.CLOUD B.V.
