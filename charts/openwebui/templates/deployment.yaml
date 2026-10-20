@@ -1,0 +1,218 @@
+{{- $name := include "openwebui.name" . -}}
+{{- $audience := include "openwebui.audience" . -}}
+{{- $env := dict
+  "HOST" "127.0.0.1"
+  "PORT" "8080"
+  "HOME" "/tmp"
+  "DATA_DIR" "/app/backend/data"
+  "ENABLE_PERSISTENT_CONFIG" (ternary "true" "false" .Values.openwebui.persistentConfig)
+  "WEBUI_AUTH_TRUSTED_EMAIL_HEADER" "X-Forwarded-Email"
+  "WEBUI_AUTH_TRUSTED_NAME_HEADER" "X-Forwarded-User"
+  "WEBUI_AUTH_SIGNOUT_REDIRECT_URL" "/oauth/sign_out"
+  "WEBUI_SESSION_COOKIE_SECURE" "true"
+  "ENABLE_SIGNUP" "false"
+  "DEFAULT_USER_ROLE" "pending"
+  "ENABLE_OLLAMA_API" "false"
+  "ENABLE_OPENAI_API" "true"
+  "OPENAI_API_BASE_URLS" (printf "http://127.0.0.1:%v/v1" .Values.tokenProxy.port)
+  "OPENAI_API_KEYS" "unused"
+  "SCARF_NO_ANALYTICS" "true"
+  "DO_NOT_TRACK" "true"
+  "ANONYMIZED_TELEMETRY" "false"
+  "ENABLE_VERSION_UPDATE_CHECK" "false"
+-}}
+{{- with .Values.route.host }}
+{{- $_ := set $env "WEBUI_URL" (printf "https://%s" .) }}
+{{- end }}
+{{- with .Values.openwebui.title }}
+{{- $_ := set $env "WEBUI_NAME" . }}
+{{- end }}
+{{- range $key, $value := .Values.openwebui.env }}
+{{- $_ := set $env $key (toString $value) }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openwebui.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+  annotations:
+    app.openshift.io/custom-icon: {{ .Chart.Icon }}
+spec:
+  # one Open WebUI per SQLite database: the old pod stops before the new one starts
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "openwebui.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "openwebui.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ $name }}
+      containers:
+      - name: openwebui
+        image: {{ .Values.openwebui.image }}
+        imagePullPolicy: IfNotPresent
+        env:
+        {{- range $key := keys $env | sortAlpha }}
+        - name: {{ $key }}
+          value: {{ index $env $key | quote }}
+        {{- end }}
+        - name: WEBUI_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-secret-key
+              key: secret-key
+        # Listens on 127.0.0.1 only, so the probes run inside the container
+        startupProbe:
+          exec:
+            command:
+            - curl
+            - -sf
+            - -o
+            - /dev/null
+            - http://127.0.0.1:8080/health
+          periodSeconds: 5
+          timeoutSeconds: 5
+          # the first start downloads the embedding model
+          failureThreshold: 120
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - -sf
+            - -o
+            - /dev/null
+            - http://127.0.0.1:8080/health/db
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - curl
+            - -sf
+            - -o
+            - /dev/null
+            - http://127.0.0.1:8080/health
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 5
+        volumeMounts:
+        - name: data
+          mountPath: /app/backend/data
+        resources:
+          {{- toYaml .Values.openwebui.resources | nindent 10 }}
+        securityContext:
+          {{- include "openwebui.containerSecurityContext" . | nindent 10 }}
+      # Login through the cluster OAuth server with the ServiceAccount as client
+      - name: oauth-proxy
+        image: {{ .Values.oauthProxy.image }}
+        imagePullPolicy: IfNotPresent
+        args:
+        - --provider=openshift
+        - --openshift-service-account={{ $name }}
+        - --http-address=0.0.0.0:{{ .Values.oauthProxy.port }}
+        - --https-address=
+        - --upstream=http://127.0.0.1:8080
+        - --upstream-timeout={{ .Values.route.timeout }}
+        - --authenticated-emails-file=/etc/openwebui/emails.txt
+        # Without an email domain the openshift provider admits every email
+        - --email-domain=
+        {{- if .Values.oauth.allowedGroups }}
+        # --openshift-group is accepted and ignored; the group check is this SAR
+        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" $name "verb" "get") | toJson }}
+        {{- end }}
+        # X-Forwarded-Email is set from the session and replaces any sent by the client
+        - --pass-user-headers=true
+        - --pass-basic-auth=false
+        - --cookie-name=_{{ $name | replace "-" "_" }}
+        - --cookie-secure=true
+        - --cookie-samesite=lax
+        - --skip-provider-button=true
+        env:
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-cookie-secret
+              key: cookie-secret
+        ports:
+        - name: ui
+          containerPort: {{ .Values.oauthProxy.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: ui
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: ui
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: config
+          mountPath: /etc/openwebui
+          readOnly: true
+        resources:
+          {{- toYaml .Values.oauthProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "openwebui.containerSecurityContext" . | nindent 10 }}
+      # Adds the instance's ServiceAccount token to every model call
+      - name: token-proxy
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /etc/openwebui/token-proxy.py
+        env:
+        - name: TOKEN_FILE
+          value: /var/run/secrets/api-token/token
+        - name: UPSTREAM
+          value: {{ .Values.gateway.upstream | quote }}
+        - name: PORT
+          value: {{ .Values.tokenProxy.port | quote }}
+        readinessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - import urllib.request; urllib.request.urlopen("http://127.0.0.1:{{ .Values.tokenProxy.port }}/healthz", timeout=2)
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        volumeMounts:
+        - name: config
+          mountPath: /etc/openwebui
+          readOnly: true
+        - name: api-token
+          mountPath: /var/run/secrets/api-token
+          readOnly: true
+        resources:
+          {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "openwebui.containerSecurityContext" . | nindent 10 }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ $name }}-data
+      - name: config
+        configMap:
+          name: {{ $name }}
+      # The instance's credential for the gateway, renewed by the kubelet
+      - name: api-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              {{- with $audience }}
+              audience: {{ . }}
+              {{- end }}
+              expirationSeconds: 3600
+              path: token

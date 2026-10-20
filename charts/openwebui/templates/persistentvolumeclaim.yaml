@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "openwebui.name" . }}-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openwebui.labels" . | nindent 4 }}
+    app.kubernetes.io/component: storage
+  annotations:
+    # chats survive a prune or an Application delete
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+  - {{ .Values.storage.accessMode }}
+  {{- with .Values.storage.className }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size }}

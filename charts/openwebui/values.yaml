@@ -1,0 +1,104 @@
+person:
+  # short lowercase name; objects are named <name>-openwebui. Empty: the release name
+  name: ""
+  # OpenShift user name (an email) of the owner, who logs in and becomes admin
+  email: ""
+
+route:
+  # empty: OpenShift assigns a host under the default application domain
+  host: ""
+  # extra labels on the Route only, for example to pick a router shard
+  labels: {}
+  # answers stream; the router must not cut long requests
+  timeout: 3600s
+  # used when a host is set; certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+oauth:
+  # OpenShift user name (an email) of the only person admitted. Empty: person.email;
+  # both empty: nobody logs in
+  ownerEmail: ""
+  # OpenShift groups the owner must be in; empty: no group check
+  allowedGroups: []
+
+secrets:
+  # kubernetes: Secrets from the values below. externalSecret: from a secret store
+  type: kubernetes
+  # login cookie key. Empty: generated once and kept on upgrade. A value that is
+  # not 16, 24 or 32 characters long is hashed to 32
+  cookieSecret: ""
+  # Open WebUI session signing key (WEBUI_SECRET_KEY). Empty: generated once
+  secretKey: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # one vault item per secret; the value is read from the item's password.
+    # Empty name: <name>-openwebui-<secret>
+    items:
+      cookieSecret: ""
+      secretKey: ""
+
+gateway:
+  # OpenAI-compatible model gateway the token proxy forwards to, for example
+  # https://api.example.com (Open WebUI calls <upstream>/v1)
+  upstream: ""
+  # audience of the instance's ServiceAccount token. Empty: the host of upstream
+  audience: ""
+
+openwebui:
+  # Open WebUI image
+  image: ghcr.io/open-webui/open-webui:v0.12.3
+  # title in the browser (WEBUI_NAME); empty: the Open WebUI default
+  title: ""
+  # true: settings changed in the admin panel win over these values after the first start
+  persistentConfig: true
+  # extra environment (name: value), see the Open WebUI environment reference
+  env: {}
+  # requests and limits; the first start loads a local embedding model
+  resources:
+    requests:
+      cpu: 100m
+      memory: 1Gi
+    limits:
+      memory: 3Gi
+
+oauthProxy:
+  # OpenShift oauth-proxy in front of the UI; the cluster keeps this tag current
+  image: image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4
+  # UI port of the pod
+  port: 4180
+  # login proxy requests and limits
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+tokenProxy:
+  # image that runs the token proxy script
+  image: registry.access.redhat.com/ubi9/python-312-minimal
+  # loopback port Open WebUI sends model calls to
+  port: 8099
+  # token proxy requests and limits
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+storage:
+  # chats, uploads, settings (SQLite) and the embedding model cache
+  size: 10Gi
+  # ReadWriteOnce or ReadWriteMany; the Deployment stops the old pod first either way
+  accessMode: ReadWriteOnce
+  # empty: the default storage class
+  className: ""
+
+networkPolicy:
+  # admit the login proxy from the router only
+  enabled: true

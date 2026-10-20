@@ -25,5 +25,7 @@ jobs:
       run: ci/test-opencode-agent.sh
     - name: Test opencode-agent token proxy
       run: python3 -m unittest ci/test_opencode_agent_token_proxy.py
+    - name: Test openwebui chart
+      run: ci/test-openwebui.sh
     - name: Scan history for secrets
       run: gitleaks detect --source . --redact

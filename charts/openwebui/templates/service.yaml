@@ -1,0 +1,18 @@
+# The login proxy; Open WebUI itself listens on 127.0.0.1 only
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "openwebui.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openwebui.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "openwebui.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: http
+    port: {{ .Values.oauthProxy.port }}
+    targetPort: ui
+    protocol: TCP
