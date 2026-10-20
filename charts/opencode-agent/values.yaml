@@ -127,6 +127,8 @@ builds:
   enabled: true
   # registry of the cluster, where the builds push and the pod pulls
   registry: image-registry.openshift-image-registry.svc:5000
+  # node labels for the build pods; a build writes several Gi of layers to the node
+  nodeSelector: {}
   # build pod requests and limits; compiling the odf CLI needs several Gi
   resources:
     requests:
@@ -160,6 +162,10 @@ tokenProxy:
       memory: 32Mi
     limits:
       memory: 128Mi
+
+# node labels and affinity of the agent pod; the OpenCode image is several Gi
+nodeSelector: {}
+affinity: {}
 
 serviceAccount:
   # empty: <name>-agent, created by kagent; another name is created by the chart

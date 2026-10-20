@@ -38,6 +38,10 @@ spec:
     to:
       kind: ImageStreamTag
       name: {{ $name }}:{{ include "opencode-agent.a2aTag" . }}
+  {{- with .Values.builds.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   triggers:
   - type: ConfigChange
   resources:

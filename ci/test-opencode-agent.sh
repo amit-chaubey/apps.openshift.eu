@@ -125,6 +125,12 @@ check "route timeout" 'obj("Route", "sam-agent")["metadata"]["annotations"]["hap
 check "route cert-manager" 'obj("Route")["metadata"]["annotations"]["cert-manager.io/issuer-kind"] == "ClusterIssuer" and obj("Route")["metadata"]["annotations"]["cert-manager.io/issuer-name"] == "letsencrypt"'
 check "network policy" 'sorted(r["ports"][0]["port"] for r in obj("NetworkPolicy")["spec"]["ingress"]) == [4180]'
 
+OUT=$(render "${BASE[@]}" --set-json 'builds.nodeSelector={"kubernetes.io/hostname":"n1"}' --set-json 'nodeSelector={"disk":"big"}' --set-json 'affinity={"nodeAffinity":{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchExpressions":[{"key":"k","operator":"In","values":["a","b"]}]}]}}}')
+check "build placement" 'all(b["spec"]["nodeSelector"] == {"kubernetes.io/hostname": "n1"} for b in objs("BuildConfig"))'
+check "agent placement" 'byo()["nodeSelector"] == {"disk": "big"} and byo()["affinity"]["nodeAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"]["nodeSelectorTerms"][0]["matchExpressions"][0]["values"] == ["a", "b"]'
+OUT=$(render "${BASE[@]}")
+check "no placement by default" '"nodeSelector" not in byo() and "affinity" not in byo() and all("nodeSelector" not in b["spec"] for b in objs("BuildConfig"))'
+
 OUT=$(render "${BASE[@]}" --set-json 'opencode.npmScopes={"@example":"https://npm.example.com/repo/"}')
 check npmrc 'cfg()["npmrc"].strip() == "@example:registry=https://npm.example.com/repo/"'
 

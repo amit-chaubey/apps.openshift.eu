@@ -126,9 +126,12 @@
       "properties": {
         "enabled": {"type": "boolean"},
         "registry": {"type": "string", "minLength": 1},
-        "resources": {"type": "object"}
+        "resources": {"type": "object"},
+        "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}}
       }
     },
+    "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}},
+    "affinity": {"type": "object"},
     "oauthProxy": {
       "type": "object",
       "properties": {

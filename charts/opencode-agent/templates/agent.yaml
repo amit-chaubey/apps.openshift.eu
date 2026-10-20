@@ -19,6 +19,14 @@ spec:
     deployment:
       # OpenCode keeps sessions in a local SQLite file: one replica only
       replicas: 1
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if include "opencode-agent.ownServiceAccount" . }}
       serviceAccountName: {{ include "opencode-agent.serviceAccountName" . }}
       {{- else }}

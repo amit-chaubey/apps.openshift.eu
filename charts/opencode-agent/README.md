@@ -54,6 +54,7 @@ The UI keeps the list of open projects in the browser, so it starts empty in a n
 - `builds.enabled` (default: true): Build the OpenCode image (with the toolset and kubernetes-mcp-server) and the adapter image in your project. When false, set `a2a.image`, and `opencode.image` to an image that carries the toolset and `/tools/kubernetes-mcp-server`.
 - `builds.resources` (default: 100m CPU and 256Mi requested, 6Gi limit): The OpenCode image build; compiling `odf` needs several Gi.
 - `tools.goImage`, `tools.odfRepository`: Go image and repository the `odf` CLI is built from.
+- `builds.nodeSelector`, `nodeSelector`, `affinity` (default: empty): Where the image builds and the agent pod run. The OpenCode image is about 5.7G on disk and every agent builds its own, so keep both on nodes with room for it.
 - `storage.size`, `storage.accessMode`, `storage.className` (default: 20Gi, ReadWriteMany, the default class): The work tree volume. It is kept when the release is removed.
 - `serviceAccount.name` (default: empty): Empty: `<person.name>-agent`, created by kagent. Another name is created by the chart. Either way it is the OAuth client of the login, with its redirect pointing at the Route.
 - `networkPolicy.a2aNamespaces` (default: empty): More namespaces allowed to call A2A on 8080.
