@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "playwright-mcp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "playwright-mcp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "playwright-mcp.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      # The browser needs no Kubernetes API access
+      automountServiceAccountToken: false
+      containers:
+      - name: playwright
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+        - --headless
+        - --browser={{ .Values.browser }}
+        # The pod is the sandbox; Chromium's own needs privileges the pod lacks
+        - --no-sandbox
+        # A fresh in-memory profile per MCP session; sessions share nothing
+        - --isolated
+        - --port={{ .Values.port }}
+        - --host=0.0.0.0
+        # Callers arrive with the Service name or a gateway host as Host
+        - --allowed-hosts=*
+        - --output-dir=/tmp/output
+        {{- range .Values.extraArgs }}
+        - {{ . }}
+        {{- end }}
+        env:
+        - name: HOME
+          value: /tmp
+        ports:
+        - name: mcp
+          containerPort: {{ .Values.port }}
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: mcp
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: mcp
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: shm
+          mountPath: /dev/shm
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      # Chromium needs more shared memory than the 64Mi default
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi

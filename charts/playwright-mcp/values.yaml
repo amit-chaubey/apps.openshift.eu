@@ -1,0 +1,48 @@
+image:
+  repository: mcr.microsoft.com/playwright/mcp
+  tag: v0.0.83
+  pullPolicy: IfNotPresent
+
+# Streamable HTTP MCP endpoint; not 80, 443, 8080 or 8443 (open to every project)
+port: 8931
+browser: chromium
+# Further playwright-mcp flags, for example --viewport-size=1280x720
+extraArgs: []
+
+mcp:
+  # Port appProtocol an MCP gateway discovers; empty leaves it unset
+  appProtocol: agentgateway.dev/mcp
+  # Tool prefix on the gateway (<targetName>_<tool>); empty: the release name
+  targetName: ""
+
+# Extra pod labels and annotations, e.g. sidecar.istio.io/inject: "false" in a mesh namespace
+podLabels: {}
+podAnnotations: {}
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 2Gi
+
+networkPolicy:
+  enabled: true
+  # Namespaces (label selectors) that may call the server besides its own, e.g. the gateway's
+  ingressNamespaces: []
+  egress:
+    # The browser reaches the public internet only, never internal networks
+    enabled: true
+    exceptCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - 169.254.0.0/16
+    - 127.0.0.0/8
+    # Your own public ranges, so the browser cannot reach your exposed services
+    extraExceptCidrs: []
+    # Cluster DNS pods
+    dnsNamespace: openshift-dns
+    dnsPort: 5353

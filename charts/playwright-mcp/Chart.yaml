@@ -1,0 +1,22 @@
+apiVersion: v2
+name: playwright-mcp
+description: Playwright MCP server (headless Chromium browser tools for AI agents) for one team, discovered by an MCP gateway
+type: application
+version: 0.1.0
+appVersion: v0.0.83
+home: https://apps.openshift.eu
+icon: https://playwright.dev/img/playwright-logo.svg
+keywords:
+- ai
+- mcp
+- playwright
+- browser
+sources:
+- https://github.com/microsoft/playwright-mcp
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Playwright MCP
+  charts.openshift.io/provider: GRN.CLOUD B.V.

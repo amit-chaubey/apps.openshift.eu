@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "playwright-mcp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+  annotations:
+    agentgateway.dev/mcp-path: /mcp
+    agentgateway.dev/mcp-target-name: {{ .Values.mcp.targetName | default .Release.Name | quote }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "playwright-mcp.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: mcp
+    port: {{ .Values.port }}
+    targetPort: mcp
+    protocol: TCP
+    {{- with .Values.mcp.appProtocol }}
+    appProtocol: {{ . }}
+    {{- end }}
