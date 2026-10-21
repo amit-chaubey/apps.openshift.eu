@@ -16,6 +16,11 @@ app.kubernetes.io/name: qdrant
 app.kubernetes.io/instance: {{ .Release.Name | quote }}
 {{- end -}}
 
+{{- define "qdrant.mcpSelectorLabels" -}}
+app.kubernetes.io/name: qdrant-mcp
+app.kubernetes.io/instance: {{ .Release.Name | quote }}
+{{- end -}}
+
 {{/* The given value, else the value already in the cluster, else a new random one */}}
 {{- define "qdrant.apiKey" -}}
 {{- $found := lookup "v1" "Secret" .Release.Namespace (printf "%s-api-key" (include "qdrant.name" .)) -}}

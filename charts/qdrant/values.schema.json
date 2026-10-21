@@ -58,6 +58,34 @@
         "enabled": {"type": "boolean"},
         "ingressNamespaces": {"type": "array", "items": {"type": "object"}}
       }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": {"type": "string"},
+            "tag": {"type": "string"},
+            "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+          }
+        },
+        "collection": {"type": "string", "minLength": 1},
+        "port": {"type": "integer", "minimum": 1024, "maximum": 65535, "not": {"enum": [6333, 6334, 8080, 8443]}},
+        "path": {"type": "string", "pattern": "^/"},
+        "appProtocol": {"type": "string"},
+        "targetName": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,30}[a-z0-9])?$"},
+        "findDescription": {"type": "string", "minLength": 1},
+        "storeDescription": {"type": "string", "minLength": 1},
+        "extraEnv": {"type": "object", "additionalProperties": {"type": "string"}},
+        "podLabels": {"type": "object", "additionalProperties": {"type": "string"}},
+        "resources": {"type": "object"},
+        "ingressNamespaces": {"type": "array", "items": {"type": "object"}},
+        "allowInternet": {"type": "boolean"}
+      }
     }
   }
 }

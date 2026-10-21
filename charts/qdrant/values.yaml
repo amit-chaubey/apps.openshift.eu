@@ -38,3 +38,53 @@ networkPolicy:
   enabled: true
   # Namespaces (label selectors) that may call Qdrant besides its own
   ingressNamespaces: []
+
+# Memory tools for AI agents: the official mcp-server-qdrant (qdrant-store,
+# qdrant-find) on streamable HTTP, discovered by an MCP gateway. Renders only
+# with mcp.image set: upstream publishes no image, build it from
+# https://github.com/qdrant/mcp-server-qdrant (Dockerfile in the repository)
+mcp:
+  enabled: true
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Collection that holds the memories; one per release
+  collection: memory
+  # Not 80, 443, 8080 or 8443 (open to every project)
+  port: 8000
+  # Path the gateway calls; mcp-server-qdrant answers /mcp/ (it redirects /mcp)
+  path: /mcp/
+  # Port appProtocol an MCP gateway discovers; empty leaves it unset
+  appProtocol: agentgateway.dev/mcp
+  # Tool prefix on the gateway (<targetName>_<tool>)
+  targetName: memory
+  # Tool descriptions: the only guidance the model gets, so they say when to call
+  findDescription: >-
+    Long-term team memory. Call this at the start of every task with the task
+    topic, to recall earlier decisions, preferences, conventions and lessons
+    learned by you and your teammates, and before asking the user something
+    the team may already have decided. No result means nothing relevant is
+    stored yet: carry on normally.
+  storeDescription: >-
+    Save a durable fact to long-term team memory: a decision and its reason,
+    a user or team preference, a convention, or a lesson learned. One fact per
+    call, written as a self-contained statement with names, dates and context
+    so a teammate understands it later. Call it when the user says remember
+    and whenever such a fact comes up. Never store passwords, tokens or other
+    secrets.
+  # Further mcp-server-qdrant settings as environment variables
+  extraEnv: {}
+  # Extra pod labels, e.g. sidecar.istio.io/inject: "false" in a mesh namespace
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 50m
+      memory: 384Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  # Namespaces (label selectors) that may call the tools besides the own one: the gateway's
+  ingressNamespaces: []
+  # Let the server reach the internet, for an image that downloads its embedding model at start
+  allowInternet: false
