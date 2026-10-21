@@ -348,7 +348,7 @@ nextcloud:
     app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"StatefulSet","name":"nextcloud-mariadb"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-redis"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-imaginary"},{"apiVersion":"apps/v1","kind":"Deployment","name":"onlyoffice"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-signaling"},{"apiVersion":"apps/v1","kind":"Deployment","name":"mailu-front"}]'
   image:
     flavor: apache
-    tag: 33.0.8-apache
+    tag: 33.0.10-apache
   replicaCount: 1
   nextcloud:
     host: nextcloud.example.org
