@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "qdrant.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+    app.openshift.io/runtime: rust
+  annotations:
+    app.openshift.io/custom-icon: {{ .Chart.Icon | quote }}
+spec:
+  serviceName: {{ include "qdrant.name" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "qdrant.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "qdrant.selectorLabels" . | nindent 8 }}
+      annotations:
+        # restart on a new key
+        checksum/api-key: {{ printf "%s%s" .Values.secrets.type .Values.secrets.apiKey | sha256sum | trunc 16 }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - name: qdrant
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: QDRANT__STORAGE__STORAGE_PATH
+          value: /qdrant/storage
+        - name: QDRANT__STORAGE__SNAPSHOTS_PATH
+          value: /qdrant/storage/snapshots
+        - name: QDRANT__TELEMETRY_DISABLED
+          value: "true"
+        - name: QDRANT__SERVICE__API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "qdrant.name" . }}-api-key
+              key: api-key
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        ports:
+        - name: http
+          containerPort: 6333
+        - name: grpc
+          containerPort: 6334
+        # health endpoints need no API key
+        startupProbe:
+          httpGet:
+            path: /readyz
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: http
+          periodSeconds: 20
+          timeoutSeconds: 5
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /qdrant/storage
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        {{- include "qdrant.labels" . | nindent 8 }}
+        app.kubernetes.io/component: database
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}
+      {{- with .Values.persistence.storageClass }}
+      storageClassName: {{ . }}
+      {{- end }}

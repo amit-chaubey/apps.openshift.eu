@@ -1,0 +1,23 @@
+apiVersion: v2
+name: qdrant
+description: Qdrant vector database for agents and RAG workloads in the release namespace, protected by an API key
+type: application
+version: 0.1.0
+appVersion: v1.19.2
+home: https://apps.openshift.eu
+icon: https://qdrant.tech/favicon/favicon-32x32.png
+keywords:
+- ai
+- vector
+- rag
+- agents
+- qdrant
+sources:
+- https://github.com/qdrant/qdrant
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Qdrant
+  charts.openshift.io/provider: GRN.CLOUD B.V.

@@ -1,0 +1,15 @@
+{{- if .Values.connection.configMap }}
+# Where clients find Qdrant; the key is in Secret <release>-qdrant-api-key
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "qdrant.name" . }}-connection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: connection
+data:
+  QDRANT_URL: http://{{ include "qdrant.name" . }}.{{ .Release.Namespace }}.svc:6333
+  QDRANT_GRPC_URL: http://{{ include "qdrant.name" . }}.{{ .Release.Namespace }}.svc:6334
+  QDRANT_API_KEY_SECRET: {{ include "qdrant.name" . }}-api-key
+{{- end }}

@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string", "minLength": 1},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size": {"type": "string", "pattern": "^[0-9]+(Mi|Gi|Ti)$"},
+        "storageClass": {"type": "string"}
+      }
+    },
+    "resources": {"type": "object"},
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {"enum": ["kubernetes", "externalSecret"]},
+        "apiKey": {"type": "string"},
+        "externalSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "storeKind": {"enum": ["ClusterSecretStore", "SecretStore"]},
+            "storeName": {"type": "string"},
+            "refreshInterval": {"type": "string"},
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "apiKey": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "configMap": {"type": "boolean"}
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "ingressNamespaces": {"type": "array", "items": {"type": "object"}}
+      }
+    }
+  }
+}

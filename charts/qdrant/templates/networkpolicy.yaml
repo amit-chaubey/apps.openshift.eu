@@ -1,0 +1,29 @@
+{{- if .Values.networkPolicy.enabled }}
+# Callers: the own project and the listed namespaces
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "qdrant.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "qdrant.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 6333
+    - protocol: TCP
+      port: 6334
+    from:
+    - podSelector: {}
+    {{- range .Values.networkPolicy.ingressNamespaces }}
+    - namespaceSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,40 @@
+image:
+  repository: docker.io/qdrant/qdrant
+  tag: v1.19.2
+  pullPolicy: IfNotPresent
+
+persistence:
+  size: 5Gi
+  # Empty: the cluster default StorageClass
+  storageClass: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+secrets:
+  # kubernetes: a Secret from the value below. externalSecret: from a secret store
+  type: kubernetes
+  # API key every client sends (api-key header). Empty: generated once and kept
+  # on upgrade; a tool that renders without cluster access must set it
+  apiKey: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # vault item holding the key in its password field; empty: <release>-qdrant-api-key
+    items:
+      apiKey: ""
+
+# ConfigMap <release>-qdrant-connection with QDRANT_URL and QDRANT_GRPC_URL for clients
+connection:
+  configMap: true
+
+networkPolicy:
+  enabled: true
+  # Namespaces (label selectors) that may call Qdrant besides its own
+  ingressNamespaces: []
