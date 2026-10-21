@@ -17,6 +17,11 @@ cat > "$HOME/.gitconfig" <<EOF
 	email = ${GIT_USER_EMAIL:-}
 [init]
 	defaultBranch = main
+# The volume root is root-owned and the pod runs as an arbitrary UID: without
+# this git refuses /workspace itself ("dubious ownership"). Trust only the volume.
+[safe]
+	directory = /workspace
+	directory = /workspace/*
 EOF
 
 # The token goes only to the host of GIT_URL, never to another HTTPS host

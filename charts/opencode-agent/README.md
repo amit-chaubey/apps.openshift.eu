@@ -30,7 +30,7 @@ Objects are named `<person.name>-agent`. Read the address:
 oc get route sam-agent -o jsonpath='https://{.spec.host}{"\n"}'
 ```
 
-The UI keeps the list of open projects in the browser, so it starts empty in a new browser. Choose **Add project** and pick the work tree, `~/<repository>`; **New session** works once a project is open.
+The UI keeps the list of open projects in the browser, so it starts empty in a new browser. Choose **Add project** and pick the work tree, `~/<repository>`; **New session** works once a project is open. A new repository goes in its own directory under `~`; git trusts every directory on the volume (`safe.directory`), because the volume root is owned by root and the pod runs as an arbitrary UID.
 
 - `person.name` (default: the release name): Name prefix and Git user name.
 - `person.email` (default: empty): Git email, and the UI owner when `oauth.ownerEmail` is empty.
