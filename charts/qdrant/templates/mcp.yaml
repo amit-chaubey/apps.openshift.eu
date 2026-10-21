@@ -83,6 +83,12 @@ spec:
         ports:
         - name: mcp
           containerPort: {{ .Values.mcp.port }}
+        # loading the embedding model (and its first download) takes minutes on a small CPU
+        startupProbe:
+          tcpSocket:
+            port: mcp
+          periodSeconds: 10
+          failureThreshold: 60
         readinessProbe:
           tcpSocket:
             port: mcp
@@ -90,7 +96,6 @@ spec:
         livenessProbe:
           tcpSocket:
             port: mcp
-          initialDelaySeconds: 30
           periodSeconds: 20
         resources:
           {{- toYaml .Values.mcp.resources | nindent 10 }}

@@ -2,7 +2,7 @@ apiVersion: v2
 name: qdrant
 description: Qdrant vector database with optional memory tools for AI agents (mcp-server-qdrant) in the release namespace, protected by an API key
 type: application
-version: 0.3.0
+version: 0.3.1
 appVersion: v1.19.2
 home: https://apps.openshift.eu
 icon: https://qdrant.tech/favicon/favicon-32x32.png
