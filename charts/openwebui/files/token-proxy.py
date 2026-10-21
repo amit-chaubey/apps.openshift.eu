@@ -181,12 +181,16 @@ class Handler(BaseHTTPRequestHandler):
                 has_length = True
                 declared = int(value) if value.isdigit() else 0
             self.send_header(name, value)
-        chunked = not has_length and self.request_version == "HTTP/1.1"
+        # 1xx, 204, 304 and HEAD responses have no body: no chunked framing (RFC 9112 6.3)
+        bodyless = self.command == "HEAD" or resp.status < 200 or resp.status in (204, 304)
+        chunked = not has_length and not bodyless and self.request_version == "HTTP/1.1"
         if chunked:
             self.send_header("Transfer-Encoding", "chunked")
-        elif not has_length:
+        elif not has_length and not bodyless:
             self.close_connection = True
         self.end_headers()
+        if bodyless:
+            return
         relayed = 0
         while True:
             data = resp.read1(CHUNK_SIZE)

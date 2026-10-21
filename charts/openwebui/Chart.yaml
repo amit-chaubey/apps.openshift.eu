@@ -2,7 +2,7 @@ apiVersion: v2
 name: openwebui
 description: Personal Open WebUI chat for one person behind the OpenShift login, with models from an OpenAI-compatible gateway
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: 0.12.3
 home: https://apps.openshift.eu
 icon: https://raw.githubusercontent.com/open-webui/open-webui/main/static/favicon.png

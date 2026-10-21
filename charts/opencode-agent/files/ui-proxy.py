@@ -134,13 +134,15 @@ class Handler(BaseHTTPRequestHandler):
                 continue
             has_length = has_length or lowered == "content-length"
             self.send_header(name, value)
-        chunked = not has_length and self.request_version == "HTTP/1.1" and self.command != "HEAD"
+        # 1xx, 204, 304 and HEAD responses have no body: no chunked framing (RFC 9112 6.3)
+        bodyless = self.command == "HEAD" or resp.status < 200 or resp.status in (204, 304)
+        chunked = not has_length and not bodyless and self.request_version == "HTTP/1.1"
         if chunked:
             self.send_header("Transfer-Encoding", "chunked")
-        elif not has_length:
+        elif not has_length and not bodyless:
             self.close_connection = True
         self.end_headers()
-        if self.command == "HEAD":
+        if bodyless:
             return
         while True:
             data = resp.read1(CHUNK_SIZE)

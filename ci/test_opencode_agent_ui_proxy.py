@@ -47,6 +47,10 @@ class Upstream(BaseHTTPRequestHandler):
             self.connection.sendall(b"echo:" + data)
             self.close_connection = True
             return
+        if self.path in ("/204", "/304"):
+            self.send_response(int(self.path[1:]))
+            self.end_headers()
+            return
         body = b"hello"
         self.send_response(200)
         self.send_header("Content-Length", str(len(body)))
@@ -122,6 +126,22 @@ class UiProxyTest(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 502)
         finally:
             server.shutdown()
+
+    def test_bodyless_responses_keep_the_connection_clean(self):
+        # oauth-proxy reuses the connection: a stray closing chunk breaks the next request
+        for path in ("/204", "/304"):
+            with socket.create_connection(("127.0.0.1", self.port), timeout=5) as s:
+                s.sendall(f"GET {path} HTTP/1.1\r\nHost: h\r\n\r\n".encode())
+                s.sendall(b"GET /api/x HTTP/1.1\r\nHost: h\r\n\r\n")
+                data = b""
+                while not data.endswith(b"hello"):
+                    chunk = s.recv(1024)
+                    if not chunk:
+                        break
+                    data += chunk
+            first, second = data.split(b"\r\n\r\n", 1)
+            self.assertNotIn(b"transfer-encoding", first.lower(), path)
+            self.assertTrue(second.startswith(b"HTTP/1.1 200"), path)
 
     def test_healthz_checks_the_password(self):
         self.assertEqual(self.get("/healthz"), (200, b"ok"))
