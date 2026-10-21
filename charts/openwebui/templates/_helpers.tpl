@@ -62,6 +62,26 @@ the cluster, else a new random one. Takes value, existing (Secret data), key, le
 {{- end -}}
 {{- end -}}
 
+{{/* TOOL_SERVER_CONNECTIONS: one MCP connection per gateway endpoint, for every user */}}
+{{- define "openwebui.toolServers" -}}
+{{- $endpoints := .Values.mcp.endpoints -}}
+{{- if not $endpoints -}}
+{{- $endpoints = list (dict "id" "team" "endpoint" .Release.Namespace) (dict "id" "public" "endpoint" "public") -}}
+{{- end -}}
+{{- $connections := list -}}
+{{- range $endpoints -}}
+{{- $connections = append $connections (dict
+  "type" "mcp"
+  "url" (printf "http://127.0.0.1:%v/mcp/%s" $.Values.tokenProxy.port .endpoint)
+  "path" ""
+  "auth_type" "none"
+  "key" ""
+  "config" (dict "enable" true "access_grants" (list (dict "principal_type" "user" "principal_id" "*" "permission" "read")))
+  "info" (dict "id" .id "name" .id "description" (printf "MCP servers of %s through the gateway" .endpoint))) -}}
+{{- end -}}
+{{- toJson $connections -}}
+{{- end -}}
+
 {{- define "openwebui.containerSecurityContext" -}}
 allowPrivilegeEscalation: false
 runAsNonRoot: true

@@ -56,6 +56,69 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ $name }}
+      {{- if or .Values.workbench.terminal.enabled .Values.workbench.jupyter.enabled }}
+      initContainers:
+      {{- $wb := required "workbench.image is required for the terminal or Jupyter sidecar" .Values.workbench.image }}
+      {{- range $tool := list "terminal" "jupyter" }}
+      {{- $cfg := index $.Values.workbench $tool }}
+      {{- if $cfg.enabled }}
+      # Workbench sidecar, started and ready before Open WebUI reads its connections;
+      # logins and files stay in workspace/ on the data volume
+      - name: {{ $tool }}
+        restartPolicy: Always
+        image: {{ $wb }}
+        imagePullPolicy: IfNotPresent
+        {{- if eq $tool "terminal" }}
+        command:
+        - open-terminal
+        - run
+        - --host
+        - 127.0.0.1
+        - --port
+        - {{ $cfg.port | quote }}
+        {{- else }}
+        command:
+        - jupyter-server
+        - --ip=127.0.0.1
+        - --port={{ $cfg.port }}
+        - --no-browser
+        - --ServerApp.root_dir=/workspace
+        - --IdentityProvider.token=$(WORKBENCH_TOKEN)
+        {{- end }}
+        env:
+        - name: HOME
+          value: /workspace
+        - name: WORKBENCH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-secret-key
+              key: secret-key
+        {{- if eq $tool "terminal" }}
+        - name: OPEN_TERMINAL_API_KEY
+          value: $(WORKBENCH_TOKEN)
+        {{- end }}
+        # loopback only, so the probe runs inside the container; any HTTP answer will do
+        startupProbe:
+          exec:
+            command:
+            - curl
+            - -s
+            - -o
+            - /dev/null
+            - http://127.0.0.1:{{ $cfg.port }}/
+          periodSeconds: 5
+          failureThreshold: 60
+        volumeMounts:
+        - name: data
+          mountPath: /workspace
+          subPath: workspace
+        resources:
+          {{- toYaml $.Values.workbench.resources | nindent 10 }}
+        securityContext:
+          {{- include "openwebui.containerSecurityContext" $ | nindent 10 }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
       containers:
       - name: openwebui
         image: {{ .Values.openwebui.image }}
@@ -70,6 +133,27 @@ spec:
             secretKeyRef:
               name: {{ $name }}-secret-key
               key: secret-key
+        {{- if .Values.mcp.enabled }}
+        - name: TOOL_SERVER_CONNECTIONS
+          value: {{ include "openwebui.toolServers" . | quote }}
+        {{- end }}
+        # The workbench sidecars listen on 127.0.0.1 and take the session key as token
+        {{- if .Values.workbench.terminal.enabled }}
+        - name: TERMINAL_SERVER_CONNECTIONS
+          value: {{ list (dict "id" "terminal" "name" "Terminal" "url" (printf "http://127.0.0.1:%v" .Values.workbench.terminal.port) "key" "$(WEBUI_SECRET_KEY)" "auth_type" "bearer" "config" (dict "access_grants" (list (dict "principal_type" "user" "principal_id" "*" "permission" "read")))) | toJson | quote }}
+        {{- end }}
+        {{- if .Values.workbench.jupyter.enabled }}
+        - name: CODE_EXECUTION_ENGINE
+          value: jupyter
+        - name: CODE_INTERPRETER_ENGINE
+          value: jupyter
+        - name: CODE_EXECUTION_JUPYTER_URL
+          value: {{ printf "http://127.0.0.1:%v" .Values.workbench.jupyter.port | quote }}
+        - name: CODE_EXECUTION_JUPYTER_AUTH
+          value: token
+        - name: CODE_EXECUTION_JUPYTER_AUTH_TOKEN
+          value: $(WEBUI_SECRET_KEY)
+        {{- end }}
         # Listens on 127.0.0.1 only, so the probes run inside the container
         startupProbe:
           exec:

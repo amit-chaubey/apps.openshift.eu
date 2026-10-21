@@ -65,6 +65,35 @@ openwebui:
     limits:
       memory: 3Gi
 
+mcp:
+  # MCP endpoints of the gateway (<upstream>/mcp/<endpoint>) as tool servers for every
+  # user, called through the token proxy. Needs persistentConfig false to apply after
+  # the first start
+  enabled: false
+  # empty: the release namespace (tool prefix team) and public
+  endpoints: []
+  # - id: team
+  #   endpoint: my-namespace
+
+workbench:
+  # image with open-terminal and jupyter-server on PATH; the terminal and notebook code
+  # see what this image holds. Both sidecars keep HOME in workspace/ on the data volume
+  image: ""
+  terminal:
+    # Open Terminal sidecar on 127.0.0.1, a terminal for every user in the chat
+    enabled: false
+    port: 8000
+  jupyter:
+    # Jupyter server sidecar on 127.0.0.1 as code execution and code interpreter engine
+    enabled: false
+    port: 8888
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 4Gi
+
 oauthProxy:
   # OpenShift oauth-proxy in front of the UI; the cluster keeps this tag current
   image: image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4
