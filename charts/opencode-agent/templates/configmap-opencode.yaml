@@ -10,6 +10,9 @@
     "command" (list "/tools/kubernetes-mcp-server" "--config" "/etc/opencode-agent/kubernetes-mcp-server.toml" "--disable-multi-cluster")
   ))
 -}}
+{{- with .Values.opencode.disabledProviders }}
+{{- $_ := set $config "disabled_providers" . }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

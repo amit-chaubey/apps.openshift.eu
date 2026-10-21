@@ -106,6 +106,7 @@
         "image": {"type": "string"},
         "plugins": {"type": "array", "items": {"type": "string"}},
         "npmScopes": {"type": "object", "additionalProperties": {"type": "string"}},
+        "disabledProviders": {"type": "array", "items": {"type": "string"}},
         "env": {"type": "object"},
         "config": {"type": "object"},
         "resources": {"type": "object"}

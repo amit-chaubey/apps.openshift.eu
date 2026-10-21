@@ -104,6 +104,10 @@ opencode:
   npmScopes: {}
   # extra environment for the opencode container (name: value)
   env: {}
+  # providers off by default; opencode is opencode.ai's public inference, outside your gateway.
+  # A user turns one back on with an allow policy in ~/.config/opencode/opencode.json
+  disabledProviders:
+  - opencode
   # merged over the generated opencode.json
   config: {}
   # opencode container requests and limits

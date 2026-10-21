@@ -123,6 +123,10 @@ check "containers" 'sorted(c["name"] for c in byo()["extraContainers"]) == ["oau
 check "adapter env" 'env("opencode-a2a")["A2A_PORT"] == "8080" and env("opencode-a2a")["A2A_CLIENT_ALLOWED_HOSTS"] == "127.0.0.1" and byo()["replicas"] == 1'
 check "role line" '"- I am sales" in cfg()["instructions.md"] and "/etc/opencode-agent/instructions.md" in json.loads(cfg()["opencode.json"])["instructions"]'
 check "agent description" 'obj("Agent")["spec"]["description"] == "OpenCode agent of sam. I am sales"'
+check "opencode provider off" 'json.loads(cfg()["opencode.json"])["disabled_providers"] == ["opencode"]'
+OUT=$(render "${BASE[@]}" --set-json 'opencode.disabledProviders=[]')
+check "no disabled providers" '"disabled_providers" not in json.loads(cfg()["opencode.json"])'
+OUT=$(render "${BASE[@]}")
 check "local stdio mcp" 'json.loads(cfg()["opencode.json"])["mcp"]["kubernetes"]["type"] == "local" and "--disable-multi-cluster" in json.loads(cfg()["opencode.json"])["mcp"]["kubernetes"]["command"]'
 check "mcp denies secrets" '{"group": "", "version": "v1", "kind": "Secret"} in tomllib.loads(cfg()["kubernetes-mcp-server.toml"])["denied_resources"]'
 check "npmrc empty" 'cfg()["npmrc"].strip() == ""'
