@@ -51,6 +51,14 @@ mcp:
     pullPolicy: IfNotPresent
   # Collection that holds the memories; one per release
   collection: memory
+  # FastEmbed model that turns memories into vectors; fixed once the collection exists
+  embeddingModel: sentence-transformers/all-MiniLM-L6-v2
+  # Volume the model is downloaded to once, instead of at every start
+  modelCache:
+    enabled: true
+    size: 1Gi
+    # Empty: the cluster default StorageClass
+    storageClass: ""
   # Not 80, 443, 8080 or 8443 (open to every project)
   port: 8000
   # Path the gateway calls; mcp-server-qdrant answers /mcp/ (it redirects /mcp)
@@ -86,5 +94,6 @@ mcp:
       memory: 1Gi
   # Namespaces (label selectors) that may call the tools besides the own one: the gateway's
   ingressNamespaces: []
-  # Let the server reach the internet, for an image that downloads its embedding model at start
-  allowInternet: false
+  # Let the server reach the internet to download its embedding model (Hugging Face);
+  # false for an image with the model built in
+  allowInternet: true

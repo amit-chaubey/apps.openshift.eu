@@ -21,12 +21,14 @@ helm install memory grncloud/qdrant \
 - `connection.configMap` (default: true): ConfigMap `<release>-qdrant-connection` with `QDRANT_URL`, `QDRANT_GRPC_URL` and the name of the key Secret.
 - `networkPolicy.ingressNamespaces` (default: empty): label selectors of further namespaces that may connect to Qdrant.
 - `mcp.enabled` (default: true): run the memory tools. They render only with `mcp.image.repository` and `mcp.image.tag` set.
-- `mcp.image` (default: empty): an image of mcp-server-qdrant. Upstream publishes none; build it from the repository's Dockerfile, with the embedding model downloaded at build time.
+- `mcp.image` (default: empty): an image of mcp-server-qdrant. Upstream publishes none; build the repository's own Dockerfile at a release tag.
 - `mcp.collection` (default: memory): collection that holds the memories.
+- `mcp.embeddingModel` (default: sentence-transformers/all-MiniLM-L6-v2): FastEmbed model, CPU only. A collection keeps the model it was created with; for mixed languages use `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions, about 750Mi of memory in use).
+- `mcp.modelCache.enabled` (default: true), `mcp.modelCache.size` (default: 1Gi): volume the model downloads to once; later starts need no internet.
 - `mcp.targetName` (default: memory): tool prefix on the gateway.
 - `mcp.findDescription`, `mcp.storeDescription`: tool descriptions; the defaults say to search at the start of every task and to save decisions, preferences and lessons learned.
 - `mcp.ingressNamespaces` (default: empty): label selectors of the namespaces that may call the tools, for example the gateway's.
-- `mcp.allowInternet` (default: false): let the tool server reach the internet, for an image that downloads its embedding model at start.
+- `mcp.allowInternet` (default: true): let the tool server reach the internet to download its embedding model from Hugging Face; false once the model is in the cache or built into the image.
 
 Clients of Qdrant itself send the key from Secret `<release>-qdrant-api-key` (key `api-key`) in the `api-key` header:
 

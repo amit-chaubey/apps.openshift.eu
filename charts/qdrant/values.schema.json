@@ -74,6 +74,16 @@
           }
         },
         "collection": {"type": "string", "minLength": 1},
+        "embeddingModel": {"type": "string", "minLength": 1},
+        "modelCache": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "size": {"type": "string", "pattern": "^[0-9]+(Mi|Gi)$"},
+            "storageClass": {"type": "string"}
+          }
+        },
         "port": {"type": "integer", "minimum": 1024, "maximum": 65535, "not": {"enum": [6333, 6334, 8080, 8443]}},
         "path": {"type": "string", "pattern": "^/"},
         "appProtocol": {"type": "string"},

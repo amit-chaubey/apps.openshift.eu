@@ -13,6 +13,11 @@ metadata:
     app.openshift.io/connects-to: {{ list (dict "apiVersion" "apps/v1" "kind" "StatefulSet" "name" (include "qdrant.name" .)) | toJson | quote }}
 spec:
   replicas: 1
+  {{- if .Values.mcp.modelCache.enabled }}
+  # the model cache is a ReadWriteOnce volume
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "qdrant.mcpSelectorLabels" . | nindent 6 }}
@@ -48,6 +53,17 @@ spec:
               key: api-key
         - name: COLLECTION_NAME
           value: {{ .Values.mcp.collection | quote }}
+        - name: EMBEDDING_MODEL
+          value: {{ .Values.mcp.embeddingModel | quote }}
+        {{- if .Values.mcp.modelCache.enabled }}
+        # a random UID has no writable home: caches go to the volume
+        - name: HOME
+          value: /cache
+        - name: FASTEMBED_CACHE_PATH
+          value: /cache/fastembed
+        - name: HF_HOME
+          value: /cache/huggingface
+        {{- end }}
         - name: TOOL_FIND_DESCRIPTION
           value: {{ .Values.mcp.findDescription | quote }}
         - name: TOOL_STORE_DESCRIPTION
@@ -78,6 +94,33 @@ spec:
           periodSeconds: 20
         resources:
           {{- toYaml .Values.mcp.resources | nindent 10 }}
+        {{- if .Values.mcp.modelCache.enabled }}
+        volumeMounts:
+        - name: cache
+          mountPath: /cache
+      volumes:
+      - name: cache
+        persistentVolumeClaim:
+          claimName: {{ $name }}-cache
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-cache
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.mcp.modelCache.size }}
+  {{- with .Values.mcp.modelCache.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service
