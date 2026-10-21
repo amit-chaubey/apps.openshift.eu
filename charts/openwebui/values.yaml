@@ -35,6 +35,11 @@ qdrant:
   # HTTP address of a Qdrant for document vectors, for example http://qdrant:6333. Empty:
   # the built-in store on the data volume
   url: ""
+  # Secret with the API key of that Qdrant, as chart qdrant makes it
+  # (<release>-qdrant-api-key). Empty name: no key is sent
+  apiKeySecret:
+    name: ""
+    key: api-key
 
 secrets:
   # kubernetes: Secrets from the values below. externalSecret: from a secret store

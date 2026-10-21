@@ -118,6 +118,9 @@ OUT=$(render "${BASE[@]}")
 check "builtin vectors" '"VECTOR_DB" not in env("openwebui") and "QDRANT_URI" not in env("openwebui") and env("openwebui")["RAG_EMBEDDING_BATCH_SIZE"] == "64"'
 OUT=$(render "${BASE[@]}" --set qdrant.url=http://qdrant:6333)
 check qdrant 'env("openwebui")["VECTOR_DB"] == "qdrant" and env("openwebui")["QDRANT_URI"] == "http://qdrant:6333"'
+check "qdrant no key" '"QDRANT_API_KEY" not in [e["name"] for e in ctr("openwebui")["env"]]'
+OUT=$(render "${BASE[@]}" --set qdrant.url=http://qdrant:6333 --set qdrant.apiKeySecret.name=qdrant-qdrant-api-key)
+check "qdrant key ref" 'envref("openwebui", "QDRANT_API_KEY") == {"name": "qdrant-qdrant-api-key", "key": "api-key"}'
 if helm template t "$C" --namespace test "${BASE[@]}" --set qdrant.url=qdrant:6333 >/dev/null 2>&1; then
   echo "FAIL qdrant url without scheme accepted"; fail=1
 fi

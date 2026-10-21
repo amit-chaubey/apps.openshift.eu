@@ -41,6 +41,7 @@ oc get route sam-openwebui -o jsonpath='https://{.spec.host}{"\n"}'
 - `team.enabled` (default: false): Admits every member of `oauth.allowedGroups`, not only the owner, with role `user` (`DEFAULT_USER_ROLE`). Requires `oauth.allowedGroups`; `oauth.ownerEmail` is not used.
 - `team.memberTools` (default: false): Members may write their own tools, which run as Python in the pod, and connect tool servers from their browser. Admins always may.
 - `qdrant.url` (default: empty): HTTP address of a Qdrant in reach of the pod, for example `http://qdrant:6333` for chart `qdrant` in the same project. Empty: document vectors stay in the built-in store on the data volume.
+- `qdrant.apiKeySecret.name` (default: empty), `qdrant.apiKeySecret.key` (default: `api-key`): Secret holding the key of that Qdrant, for chart `qdrant` `<release>-qdrant-api-key`. Empty name: no key is sent.
 - `route.host` (default: empty): Hostname. Empty: OpenShift assigns one. Set it at install; a tenant cannot change the hostname of an existing Route. Also sets `WEBUI_URL`.
 - `route.labels`, `route.timeout` (default: empty, 3600s), `route.annotations` (default: cert-manager issuer, used when `route.host` is set).
 - `gateway.upstream` (default: empty): OpenAI-compatible gateway; Open WebUI calls `<upstream>/v1`. Required for models.

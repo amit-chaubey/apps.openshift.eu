@@ -148,6 +148,13 @@ spec:
             secretKeyRef:
               name: {{ $name }}-secret-key
               key: secret-key
+        {{- if and .Values.qdrant.url .Values.qdrant.apiKeySecret.name }}
+        - name: QDRANT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.qdrant.apiKeySecret.name }}
+              key: {{ .Values.qdrant.apiKeySecret.key }}
+        {{- end }}
         {{- if .Values.mcp.enabled }}
         - name: TOOL_SERVER_CONNECTIONS
           value: {{ include "openwebui.toolServers" . | quote }}
