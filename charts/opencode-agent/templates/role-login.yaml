@@ -1,4 +1,4 @@
-{{- if .Values.oauth.allowedGroups }}
+{{- if and .Values.oauth.allowedGroups (not .Values.oauth.loginClusterRole) }}
 # The login proxy admits a user only with this permission (SAR)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

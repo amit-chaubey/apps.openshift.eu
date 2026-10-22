@@ -38,6 +38,7 @@ oc get route sam-openwebui -o jsonpath='https://{.spec.host}{"\n"}'
 - `person.email` (default: empty): OpenShift user name (an email) of the owner.
 - `oauth.ownerEmail` (default: `person.email`): The only user admitted. Empty: `oauth.allowedGroups`; both empty: everyone who may edit the project.
 - `oauth.allowedGroups` (default: empty): OpenShift groups admitted. Only their members log in: the chart grants them the verb `login` on `services/proxy` of the Service, which `admin` and `edit` do not hold, and the login proxy checks that permission. With an owner, the owner must also be in one of them.
+- `oauth.loginClusterRole` (default: empty): ClusterRole holding the verb `login` on `services/proxy`; `oauth.allowedGroups` are bound to it instead of to the chart's own Role. Creating a Role or binding that grants `login` needs that permission, or `bind` on the ClusterRole: an installer without it (a project admin, the project's Argo CD) needs this value.
 - `route.host` (default: empty): Hostname. Empty: OpenShift assigns one. Set it at install; a tenant cannot change the hostname of an existing Route. Also sets `WEBUI_URL`.
 - `route.labels`, `route.timeout` (default: empty, 3600s), `route.annotations` (default: cert-manager issuer, used when `route.host` is set).
 - `gateway.upstream` (default: empty): OpenAI-compatible gateway; Open WebUI calls `<upstream>/v1`. Required for models.

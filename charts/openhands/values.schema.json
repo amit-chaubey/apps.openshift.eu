@@ -114,6 +114,9 @@
         "ownerEmail": {
           "type": "string"
         },
+        "loginClusterRole": {
+          "type": "string"
+        },
         "allowedGroups": {
           "type": "array",
           "items": {

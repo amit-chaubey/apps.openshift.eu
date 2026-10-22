@@ -3,7 +3,9 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "opencode-agent.name" . }}-login
+  {{- $clusterRole := .Values.oauth.loginClusterRole }}
+  # roleRef is immutable: a ClusterRole binding has its own name
+  name: {{ include "opencode-agent.name" . }}-{{ ternary "app-login" "login" (not (empty $clusterRole)) }}
   namespace: {{ .Release.Namespace }}
   labels:
     app: {{ include "opencode-agent.name" $ }}
@@ -12,8 +14,8 @@ metadata:
     {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ include "opencode-agent.name" . }}-login
+  kind: {{ ternary "ClusterRole" "Role" (not (empty $clusterRole)) }}
+  name: {{ default (printf "%s-login" (include "opencode-agent.name" .)) $clusterRole }}
 subjects:
 {{- range .Values.oauth.allowedGroups }}
 - apiGroup: rbac.authorization.k8s.io

@@ -2,7 +2,7 @@ apiVersion: v2
 name: openhands
 description: Shared OpenHands Agent Canvas coding agent with a browser UI behind an OpenShift login
 type: application
-version: 0.1.2
+version: 0.1.3
 appVersion: 1.30.0
 home: https://apps.openshift.eu
 icon: https://raw.githubusercontent.com/OpenHands/OpenHands/main/docs/static/img/logo.png

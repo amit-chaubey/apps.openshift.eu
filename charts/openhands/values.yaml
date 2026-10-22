@@ -65,6 +65,10 @@ oauth:
   # OpenShift groups admitted (with ownerEmail: the owner must be in one).
   # Both empty: everyone who may edit the project
   allowedGroups: []
+  # ClusterRole holding the verb login on services/proxy that allowedGroups are bound
+  # to. Empty: the chart's own Role, which only an installer holding that verb (a
+  # cluster admin) can create
+  loginClusterRole: ""
 
 secrets:
   # kubernetes: Secrets from the values below. externalSecret: from a secret store
