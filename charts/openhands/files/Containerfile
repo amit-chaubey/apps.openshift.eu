@@ -37,8 +37,8 @@ RUN set -eux; \
       'fi' \
       'exec /opt/agent-canvas/entrypoint.sh "$@"' > /usr/local/bin/openhands-uid-entrypoint; \
     chmod 0755 /usr/local/bin/openhands-uid-entrypoint; \
-    sed -i 's/--host :: \\$/--host 127.0.0.1 \\/' /opt/agent-canvas/entrypoint.sh; \
-    [ "$(grep -c -- '--host 127.0.0.1 \\$' /opt/agent-canvas/entrypoint.sh)" = 2 ]; \
+    sed -i -E 's/^( *)STATIC_SERVER_BIND_HOST="(::|0\.0\.0\.0)"$/\1STATIC_SERVER_BIND_HOST="127.0.0.1"/' /opt/agent-canvas/entrypoint.sh; \
+    [ "$(grep -c '^ *STATIC_SERVER_BIND_HOST="127.0.0.1"$' /opt/agent-canvas/entrypoint.sh)" = 2 ]; \
     sed -i 's#<head>#<head><script>try{localStorage.getItem("openhands-onboarded")||localStorage.setItem("openhands-onboarded","1")}catch(e){}</script>#' /opt/agent-canvas/frontend/index.html; \
     grep -q 'localStorage.setItem("openhands-onboarded"' /opt/agent-canvas/frontend/index.html; \
     for d in /home/openhands /projects /openhands; do \

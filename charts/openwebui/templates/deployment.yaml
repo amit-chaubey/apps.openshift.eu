@@ -10,8 +10,8 @@
   "WEBUI_AUTH_TRUSTED_NAME_HEADER" "X-Forwarded-User"
   "WEBUI_AUTH_SIGNOUT_REDIRECT_URL" "/oauth/sign_out"
   "WEBUI_SESSION_COOKIE_SECURE" "true"
-  "ENABLE_SIGNUP" "false"
-  "DEFAULT_USER_ROLE" "pending"
+  "ENABLE_SIGNUP" (ternary "false" "true" (ne (include "openwebui.ownerEmail" .) ""))
+  "DEFAULT_USER_ROLE" (ternary "pending" "user" (ne (include "openwebui.ownerEmail" .) ""))
   "ENABLE_OLLAMA_API" "false"
   "ENABLE_OPENAI_API" "true"
   "OPENAI_API_BASE_URLS" (printf "http://127.0.0.1:%v/v1" .Values.tokenProxy.port)
@@ -206,12 +206,16 @@ spec:
         - --https-address=
         - --upstream=http://127.0.0.1:8080
         - --upstream-timeout={{ .Values.route.timeout }}
+        {{- $owner := include "openwebui.ownerEmail" . }}
+        {{- if $owner }}
         - --authenticated-emails-file=/etc/openwebui/emails.txt
+        {{- end }}
         # Without an email domain the openshift provider admits every email
         - --email-domain=
-        {{- if .Values.oauth.allowedGroups }}
-        # --openshift-group is accepted and ignored; the group check is this SAR
-        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" $name "verb" "get") | toJson }}
+        {{- if or .Values.oauth.allowedGroups (not $owner) }}
+        # --openshift-group is accepted and ignored; the group check is this SAR.
+        # groups: verb login, granted by the login Role only; neither: get, project editors
+        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" $name "verb" (ternary "login" "get" (not (empty .Values.oauth.allowedGroups)))) | toJson }}
         {{- end }}
         # X-Forwarded-Email is set from the session and replaces any sent by the client
         - --pass-user-headers=true

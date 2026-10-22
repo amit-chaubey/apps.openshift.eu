@@ -111,6 +111,9 @@
     "oauth": {
       "type": "object",
       "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
         "allowedGroups": {
           "type": "array",
           "items": {

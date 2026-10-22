@@ -195,12 +195,16 @@ spec:
         - --upstream=http://127.0.0.1:{{ .Values.uiProxy.port }}
         # The UI streams over SSE; keep long requests open
         - --upstream-timeout={{ .Values.route.timeout }}
+        {{- $owner := include "opencode-agent.ownerEmail" . }}
+        {{- if $owner }}
         - --authenticated-emails-file=/etc/oauth-proxy/emails.txt
+        {{- end }}
         # Without an email domain the openshift provider admits every email
         - --email-domain=
-        {{- if .Values.oauth.allowedGroups }}
-        # --openshift-group is accepted and ignored; the group check is this SAR
-        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" "get") | toJson }}
+        {{- if or .Values.oauth.allowedGroups (not $owner) }}
+        # --openshift-group is accepted and ignored; the group check is this SAR.
+        # groups: verb login, granted by the login Role only; neither: get, project editors
+        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" (ternary "login" "get" (not (empty .Values.oauth.allowedGroups)))) | toJson }}
         {{- end }}
         - --pass-basic-auth=false
         - --cookie-name=_{{ $name | replace "-" "_" }}

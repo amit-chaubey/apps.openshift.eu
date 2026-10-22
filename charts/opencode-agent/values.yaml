@@ -20,9 +20,9 @@ route:
 
 oauth:
   # OpenShift user name (an email) of the only person admitted to the UI.
-  # Empty: person.email; both empty: nobody logs in
+  # Empty: person.email; both empty: everyone who may edit the project
   ownerEmail: ""
-  # OpenShift groups the owner must be in; empty: no group check
+  # OpenShift groups admitted, strictly (with an owner: the owner must be in one)
   allowedGroups: []
 
 secrets:

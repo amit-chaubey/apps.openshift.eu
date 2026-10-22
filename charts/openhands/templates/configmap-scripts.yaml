@@ -7,6 +7,11 @@ metadata:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
 data:
+  # the owner's OpenShift user name only
+  emails.txt: |
+    {{- with .Values.oauth.ownerEmail }}
+    {{ . }}
+    {{- end }}
   seed-settings.py: |
 {{ .Files.Get "files/seed-settings.py" | indent 4 }}
   token-proxy.py: |

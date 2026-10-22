@@ -34,7 +34,7 @@ rules:
   resourceNames:
   - {{ $name }}-ui
   verbs:
-  - get
+  - login
 {{- if .Values.oauth.allowedGroups }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1

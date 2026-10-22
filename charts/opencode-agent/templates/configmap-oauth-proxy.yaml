@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/component: server
     {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
 data:
-  # The owner's OpenShift user name only; empty: nobody logs in
+  # The owner's OpenShift user name only; empty: no emails file, the SAR admits project editors
   emails.txt: |
     {{- with include "opencode-agent.ownerEmail" . }}
     {{ . }}

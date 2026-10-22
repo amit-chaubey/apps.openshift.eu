@@ -145,9 +145,17 @@ spec:
         - --https-address=
         - --upstream=http://127.0.0.1:8000
         - --upstream-timeout={{ .Values.route.timeout }}
+        {{- if .Values.oauth.ownerEmail }}
+        - --authenticated-emails-file=/etc/oauth-proxy/emails.txt
+        # without an email domain only the emails file admits
+        - --email-domain=
+        {{- else }}
         - --email-domain=*
-        # --openshift-group is accepted and ignored; the group check is this SAR
-        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" "get") | toJson }}
+        {{- end }}
+        {{- if or .Values.oauth.allowedGroups (not .Values.oauth.ownerEmail) }}
+        # groups: verb login, which only the login Role grants; else project editors
+        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" (include "openhands.loginVerb" .)) | toJson }}
+        {{- end }}
         - --pass-basic-auth=false
         - --cookie-name=_{{ $name | replace "-" "_" }}
         - --cookie-secure=true
@@ -178,6 +186,13 @@ spec:
           {{- toYaml .Values.oauthProxy.resources | nindent 10 }}
         securityContext:
           {{- include "openhands.containerSecurityContext" . | nindent 10 }}
+        {{- if .Values.oauth.ownerEmail }}
+        volumeMounts:
+        - name: scripts
+          mountPath: /etc/oauth-proxy/emails.txt
+          subPath: emails.txt
+          readOnly: true
+        {{- end }}
       {{- if .Values.gateway.upstream }}
       - name: token-proxy
         image: {{ .Values.tokenProxy.image }}
@@ -232,8 +247,10 @@ spec:
   volumeClaimTemplates:
   - metadata:
       name: data
+      # volumeClaimTemplates are immutable: no version label here
       labels:
-        {{- include "openhands.labels" . | nindent 8 }}
+        {{- include "openhands.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/part-of: {{ .Release.Name | quote }}
         app.kubernetes.io/component: storage
     spec:
       accessModes:

@@ -18,5 +18,5 @@ rules:
   resourceNames:
   - {{ include "opencode-agent.name" . }}-ui
   verbs:
-  - get
+  - login
 {{- end }}

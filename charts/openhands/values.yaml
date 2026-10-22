@@ -2,7 +2,7 @@ image:
   # upstream all-in-one image (frontend, agent-server, automation); used as is
   # when build.enabled is false, else the base of the build
   repository: ghcr.io/openhands/agent-canvas
-  tag: 1.25.0
+  tag: 1.30.0
   pullPolicy: IfNotPresent
 
 build:
@@ -60,7 +60,10 @@ route:
     cert-manager.io/issuer-name: letsencrypt
 
 oauth:
-  # OpenShift groups admitted to the UI; empty: nobody logs in
+  # OpenShift user name (an email) of the only person admitted. Empty: allowedGroups
+  ownerEmail: ""
+  # OpenShift groups admitted (with ownerEmail: the owner must be in one).
+  # Both empty: everyone who may edit the project
   allowedGroups: []
 
 secrets:
@@ -70,7 +73,8 @@ secrets:
   sessionApiKey: ""
   # settings encryption key. Empty: generated once
   secretKey: ""
-  # oauth-proxy cookie secret. Empty: generated once
+  # oauth-proxy cookie secret. Empty: generated once. A value that is not 16, 24 or
+  # 32 characters long is hashed to 32
   cookieSecret: ""
   # access token for git.host, also used by glab; glab merge requests need scope api
   gitToken: ""

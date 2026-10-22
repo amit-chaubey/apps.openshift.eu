@@ -10,6 +10,11 @@ app.kubernetes.io/part-of: {{ .Release.Name | quote }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end -}}
 
+{{/* SAR verb of the login: login is granted by the login Role only, get also by admin and edit */}}
+{{- define "openhands.loginVerb" -}}
+{{- ternary "login" "get" (not (empty .Values.oauth.allowedGroups)) -}}
+{{- end -}}
+
 {{- define "openhands.selectorLabels" -}}
 app: {{ include "openhands.name" . }}
 app.kubernetes.io/name: openhands

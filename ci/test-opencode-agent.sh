@@ -172,9 +172,9 @@ check "audience port" 'vol("api-token")["projected"]["sources"][0]["serviceAccou
 
 # group check: a SAR the chart grants to the allowed groups only
 OUT=$(render "${BASE[@]}" --set 'oauth.allowedGroups={team-admins,ops}')
-check "group sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test", "resource": "services/proxy", "resourceName": "sam-agent-ui", "verb": "get"}]'
+check "group sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test", "resource": "services/proxy", "resourceName": "sam-agent-ui", "verb": "login"}]'
 check "group flag unused" 'not arg("--openshift-group")'
-check "login role" 'obj("Role", "sam-agent-login")["rules"] == [{"apiGroups": [""], "resources": ["services/proxy"], "resourceNames": ["sam-agent-ui"], "verbs": ["get"]}]'
+check "login role" 'obj("Role", "sam-agent-login")["rules"] == [{"apiGroups": [""], "resources": ["services/proxy"], "resourceNames": ["sam-agent-ui"], "verbs": ["login"]}]'
 check "login binding" 'obj("RoleBinding", "sam-agent-login")["roleRef"] == {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": "sam-agent-login"} and obj("RoleBinding", "sam-agent-login")["subjects"] == [{"apiGroup": "rbac.authorization.k8s.io", "kind": "Group", "name": "team-admins"}, {"apiGroup": "rbac.authorization.k8s.io", "kind": "Group", "name": "ops"}]'
 
 # the owner is an OpenShift user name; OpenCode sees its local part as the Basic user

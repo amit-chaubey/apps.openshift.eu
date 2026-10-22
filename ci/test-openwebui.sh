@@ -100,8 +100,8 @@ OUT=$(render "${BASE[@]}" --set gateway.upstream=https://api.example.com:8443)
 check "audience port" 'sat()["audience"] == "api.example.com"'
 
 OUT=$(render "${BASE[@]}" --set 'oauth.allowedGroups={team-admins,ops}')
-check "group sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test", "resource": "services/proxy", "resourceName": "sam-openwebui", "verb": "get"}]'
-check "login role" 'obj("Role", "sam-openwebui-login")["rules"] == [{"apiGroups": [""], "resources": ["services/proxy"], "resourceNames": ["sam-openwebui"], "verbs": ["get"]}]'
+check "group sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test", "resource": "services/proxy", "resourceName": "sam-openwebui", "verb": "login"}]'
+check "login role" 'obj("Role", "sam-openwebui-login")["rules"] == [{"apiGroups": [""], "resources": ["services/proxy"], "resourceNames": ["sam-openwebui"], "verbs": ["login"]}]'
 check "login binding" '[s["name"] for s in obj("RoleBinding", "sam-openwebui-login")["subjects"]] == ["team-admins", "ops"] and obj("RoleBinding")["roleRef"]["name"] == "sam-openwebui-login"'
 
 OUT=$(render "${BASE[@]}" --set oauth.ownerEmail=Owner@example.org)

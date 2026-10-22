@@ -39,8 +39,8 @@ The UI keeps the list of open projects in the browser, so it starts empty in a n
 - `route.labels` (default: empty): Extra labels on the Route only.
 - `route.timeout` (default: 3600s): Router timeout; the UI streams.
 - `route.annotations` (default: cert-manager issuer): Used when `route.host` is set.
-- `oauth.ownerEmail` (default: `person.email`): OpenShift user name of the only person admitted to the UI. Both empty: nobody logs in.
-- `oauth.allowedGroups` (default: empty): OpenShift groups the owner must be in. The chart grants these groups `get` on `services/proxy` of the UI Service and the login proxy checks that permission, so a user who holds it through `admin` or `edit` in the project passes as well. Empty: no group check.
+- `oauth.ownerEmail` (default: `person.email`): OpenShift user name of the only person admitted to the UI. Empty: `oauth.allowedGroups`; both empty: everyone who may edit the project.
+- `oauth.allowedGroups` (default: empty): OpenShift groups admitted. Only their members log in: the chart grants them the verb `login` on `services/proxy` of the UI Service, which `admin` and `edit` do not hold, and the login proxy checks that permission. With an owner, the owner must also be in one of them.
 - `oauthProxy.image` (default: `openshift/oauth-proxy:v4.4` from the cluster registry): The login proxy. OpenShift keeps that image stream tag on the oauth-proxy of the running release.
 - `secrets.serverPassword`, `secrets.a2aToken`, `secrets.cookieSecret` (default: empty): Generated once and kept on upgrade.
 - `secrets.type` (default: kubernetes): `externalSecret` reads every secret from a secret store.
