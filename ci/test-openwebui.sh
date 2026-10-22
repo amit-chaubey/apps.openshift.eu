@@ -91,6 +91,10 @@ for s in OAUTH_CLIENT_SECRET OPENID_PROVIDER_URL oauth2-proxy runAsUser; do hasn
 OUT=$(render)
 check "no values" 'obj("Deployment")["metadata"]["name"] == "t-openwebui" and obj("ConfigMap")["data"]["emails.txt"].strip() == "" and "host" not in obj("Route")["spec"] and "WEBUI_URL" not in env("openwebui")'
 check "no values route" '"cert-manager.io/issuer-kind" not in obj("Route")["metadata"].get("annotations", {})'
+# no owner: an empty --email-domain would match no address, so every email passes and the SAR decides
+check "no owner emails" 'arg("--email-domain") == ["*"] and not arg("--authenticated-emails-file") and json.loads(arg("--openshift-sar")[0])[0]["verb"] == "get"'
+OUT=$(render --set person.name=team --set 'oauth.allowedGroups={staff}')
+check "group only emails" 'arg("--email-domain") == ["*"] and not arg("--authenticated-emails-file") and json.loads(arg("--openshift-sar")[0])[0]["verb"] == "login" and env("openwebui")["DEFAULT_USER_ROLE"] == "user"'
 
 OUT=$(render "${BASE[@]}" --set gateway.upstream=https://api.example.com)
 check upstream 'env("token-proxy")["UPSTREAM"] == "https://api.example.com" and sat()["audience"] == "api.example.com"'
