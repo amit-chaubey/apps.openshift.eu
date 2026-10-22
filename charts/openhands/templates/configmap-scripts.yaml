@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "openhands.name" . }}-scripts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+data:
+  seed-settings.py: |
+{{ .Files.Get "files/seed-settings.py" | indent 4 }}
+  token-proxy.py: |
+{{ .Files.Get "files/token-proxy.py" | indent 4 }}
+  kubernetes-mcp-server.toml: |
+    denied_resources = [
+    {{- range .Values.kubernetesMcpServer.deniedResources }}
+      {group = {{ .group | quote }}, version = {{ .version | quote }}, kind = {{ .kind | quote }}},
+    {{- end }}
+    ]

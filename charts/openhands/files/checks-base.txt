@@ -1,0 +1,22 @@
+curl --version
+jq --version
+bash --version
+nc -h
+python3 --version
+git --version
+ssh -V
+skopeo --version
+aws --version
+node --version
+npm --version
+npx --version
+uv --version
+make --version
+tmux -V
+psql --version
+mariadb --version
+openssl version
+dig -v
+java -version
+python3 -c 'import yaml; print("pyyaml", yaml.__version__)'
+pdftotext -v

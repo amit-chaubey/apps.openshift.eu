@@ -1,0 +1,87 @@
+{{- if .Values.build.enabled }}
+{{- $name := include "openhands.name" . }}
+{{- $hash := include "openhands.buildHash" . }}
+{{- if ne .Values.build.output.kind "DockerImage" }}
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: build
+spec:
+  lookupPolicy:
+    local: true
+---
+{{- end }}
+# build context of the Containerfile; the name hash keeps a running build's inputs fixed
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-build-{{ $hash }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: build
+data:
+  install-tools.sh: |
+{{ .Files.Get "files/install-tools.sh" | indent 4 }}
+  verify-tools.sh: |
+{{ .Files.Get "files/verify-tools.sh" | indent 4 }}
+  tools.txt: |
+{{ include "openhands.toolsTxt" . | indent 4 }}
+  checks.txt: |
+{{ include "openhands.checksTxt" . | indent 4 }}
+---
+# the name hash makes ConfigChange rebuild when the Containerfile or the toolset changes
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: {{ $name }}-{{ $hash }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: build
+spec:
+  runPolicy: Serial
+  source:
+    type: Dockerfile
+    dockerfile: |
+      {{- include "openhands.containerfile" . | nindent 6 }}
+    configMaps:
+    - configMap:
+        name: {{ $name }}-build-{{ $hash }}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      {{- with .Values.build.pullSecret }}
+      pullSecret:
+        name: {{ . }}
+      {{- end }}
+      env:
+      - name: BUILD_LOGLEVEL
+        value: "0"
+  output:
+    {{- if eq .Values.build.output.kind "DockerImage" }}
+    to:
+      kind: DockerImage
+      name: {{ include "openhands.image" . }}
+    {{- with .Values.build.output.pushSecret }}
+    pushSecret:
+      name: {{ . }}
+    {{- end }}
+    {{- else }}
+    to:
+      kind: ImageStreamTag
+      name: {{ $name }}:{{ include "openhands.imageTag" . }}
+    {{- end }}
+  {{- with .Values.build.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  triggers:
+  - type: ConfigChange
+  resources:
+    {{- toYaml .Values.build.resources | nindent 4 }}
+{{- end }}

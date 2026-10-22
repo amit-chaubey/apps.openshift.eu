@@ -1,0 +1,164 @@
+image:
+  # upstream all-in-one image (frontend, agent-server, automation); used as is
+  # when build.enabled is false, else the base of the build
+  repository: ghcr.io/openhands/agent-canvas
+  tag: 1.25.0
+  pullPolicy: IfNotPresent
+
+build:
+  # build the image with the toolset below in the project
+  enabled: true
+  # image whose /usr/local/bin binaries, /usr/local/go, /tools, /opt/sonar-scanner and
+  # Ansible collections are copied in, for example an opencode-agent image. Empty:
+  # only the Debian packages and the tools below
+  toolsImage: ""
+  # pull secret for toolsImage and the base image; empty: the builder's own
+  pullSecret: ""
+  # Python (uv), npm and pip tools; keep: true leaves the base image's own command
+  # in place (agent-canvas starts its automation server with its uvicorn)
+  tools:
+  - {kind: uv, command: mkdocs, args: "mkdocs==1.6.1 --with mkdocs-material", check: "mkdocs --version"}
+  - {kind: uv, command: ansible, args: "ansible-core==2.21.5", check: "ansible --version"}
+  - {kind: uv, command: hf, args: "huggingface_hub[cli]==2.2.0", check: "hf version"}
+  - {kind: uv, command: fastapi, args: "fastapi[standard]==0.159.1", check: "fastapi --version"}
+  - {kind: uv, command: uvicorn, keep: true, args: "uvicorn==0.54.0", check: "uvicorn --version"}
+  - {kind: uv, command: semgrep, args: "semgrep==1.182.0", check: "semgrep --version"}
+  - {kind: uv, command: checkov, args: "--python 3.12 checkov==3.3.30", check: "checkov --version"}
+  - {kind: uv, command: open-terminal, args: "open-terminal==0.14.2", check: "open-terminal --help"}
+  - {kind: uv, command: jupyter-server, args: "jupyter-server==2.21.1 --with ipykernel", check: "jupyter-server --version"}
+  - {kind: npm, command: "@bitwarden/cli@2026.10.0", check: "bw --version"}
+  - {kind: npm, command: "@higgsfield/cli@1.2.2", check: "higgsfield --version"}
+  - {kind: npm, command: "confluence-cli@2.30.4", check: "confluence --version"}
+  - {kind: npm, command: "renovate@44.176.1", check: "renovate --version"}
+  - {kind: npm, command: "snyk@1.1308.2", check: "snyk --version"}
+  - {kind: pip, command: "atlassian-python-api==5.0.5", check: "python3 -c 'import atlassian, importlib.metadata as m; print(m.version(\"atlassian-python-api\"))'"}
+  # ImageStreamTag: push to an ImageStream in the project.
+  # DockerImage: push to output.name with output.pushSecret
+  output:
+    kind: ImageStreamTag
+    name: ""
+    pushSecret: ""
+  # node labels for the build pod
+  nodeSelector: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 6Gi
+
+route:
+  # empty: OpenShift assigns a host under the default application domain
+  host: ""
+  # extra labels on the Route only, for example to pick a router shard
+  labels: {}
+  # the UI holds long-lived WebSockets; the router must not cut idle streams
+  timeout: 3600s
+  # used when a host is set; certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+oauth:
+  # OpenShift groups admitted to the UI; empty: nobody logs in
+  allowedGroups: []
+
+secrets:
+  # kubernetes: Secrets from the values below. externalSecret: from a secret store
+  type: kubernetes
+  # agent-server API key the browser enters once. Empty: generated once
+  sessionApiKey: ""
+  # settings encryption key. Empty: generated once
+  secretKey: ""
+  # oauth-proxy cookie secret. Empty: generated once
+  cookieSecret: ""
+  # access token for git.host, also used by glab; glab merge requests need scope api
+  gitToken: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # one vault item per secret, value from the item's password.
+    # Empty name: <release>-<secret>
+    items:
+      sessionApiKey: ""
+      secretKey: ""
+      cookieSecret: ""
+      gitToken: ""
+
+git:
+  # Git host (no scheme) the token is sent to; empty: no token configured
+  host: ""
+  # commit identity
+  userName: ""
+  userEmail: ""
+
+gateway:
+  # model and MCP gateway the token proxy forwards to, for example https://api.example.com
+  upstream: ""
+  # audience of the agent's ServiceAccount token. Empty: the host of upstream
+  audience: ""
+
+llm:
+  # default model, in LiteLLM form, for example openai/<model> for an
+  # OpenAI-compatible gateway. Empty: chosen in the UI. Written into the
+  # settings when the pod starts after this value changed
+  model: ""
+
+# MCP servers reached through the token proxy: {name, path, timeout, enabled} with
+# path on gateway.upstream, timeout in seconds (default 60) and enabled (default
+# true), for example {name: public, path: /mcp/public}. Written like llm.model.
+# The agent-server lists all enabled servers within 30 s together: one slow server
+# leaves the agent without any MCP tools
+mcpServers: []
+
+kubernetesMcpServer:
+  # local stdio MCP server "kubernetes" with the pod's ServiceAccount; needs
+  # /tools/kubernetes-mcp-server, which build.toolsImage provides
+  enabled: false
+  # kinds the server refuses to read or write
+  deniedResources:
+  - {group: "", version: v1, kind: Secret}
+
+# extra environment for the agent-canvas container (name: value)
+env: {}
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    memory: 8Gi
+
+oauthProxy:
+  # OpenShift oauth-proxy in front of the UI; the cluster keeps this tag current
+  image: image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4
+  port: 4180
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+tokenProxy:
+  # image that runs the token proxy script
+  image: registry.access.redhat.com/ubi9/python-312-minimal
+  # loopback port the agent sends model and MCP calls to
+  port: 8099
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+nodeSelector: {}
+affinity: {}
+
+storage:
+  # settings, conversations and the workspace
+  size: 20Gi
+  accessMode: ReadWriteOnce
+  # empty: the default storage class
+  className: ""

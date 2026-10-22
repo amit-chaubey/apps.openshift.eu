@@ -1,0 +1,54 @@
+{{- if .Values.build.toolsImage }}
+FROM {{ .Values.build.toolsImage }} AS tools
+USER 0
+# the tools image's binaries, without its own agent; Python and npm tools are reinstalled,
+# so links into their environments stay behind
+RUN set -eu; mkdir -p /export/bin; \
+    for f in /usr/local/bin/*; do \
+      n=$(basename "$f"); \
+      case "$n" in opencode|opencode2) continue;; esac; \
+      if [ -L "$f" ]; then \
+        case "$(readlink -f "$f")" in /usr/local/go/*|/opt/sonar-scanner/*) cp -P "$f" /export/bin/;; esac; \
+        continue; \
+      fi; \
+      if head -c 4 "$f" | grep -q ELF; then cp "$f" /export/bin/; continue; fi; \
+      case "$(head -1 "$f")" in '#!/usr/bin/env bash'|'#!/usr/bin/env sh') cp "$f" /export/bin/;; esac; \
+    done
+{{- end }}
+
+FROM {{ .Values.image.repository }}:{{ .Values.image.tag }}
+USER root
+{{- if .Values.build.toolsImage }}
+COPY --from=tools /export/bin/ /usr/local/bin/
+COPY --from=tools /usr/local/go /usr/local/go
+COPY --from=tools /tools /tools
+COPY --from=tools /opt/sonar-scanner /opt/sonar-scanner
+COPY --from=tools /usr/share/ansible/collections /usr/share/ansible/collections
+{{- end }}
+COPY install-tools.sh verify-tools.sh tools.txt checks.txt /tmp/build/
+RUN sh /tmp/build/install-tools.sh
+# arbitrary UID: the home and the passwd file belong to group 0.
+# The frontend listens on loopback, behind the login proxy, so it may embed the session key
+RUN set -eux; \
+    printf '%s\n' '#!/bin/sh' \
+      'if ! whoami >/dev/null 2>&1; then' \
+      '  echo "agent:x:$(id -u):0:agent:${HOME}:/bin/bash" >> /etc/passwd' \
+      'fi' \
+      'exec /opt/agent-canvas/entrypoint.sh "$@"' > /usr/local/bin/openhands-uid-entrypoint; \
+    chmod 0755 /usr/local/bin/openhands-uid-entrypoint; \
+    sed -i 's/--host :: \\$/--host 127.0.0.1 \\/' /opt/agent-canvas/entrypoint.sh; \
+    [ "$(grep -c -- '--host 127.0.0.1 \\$' /opt/agent-canvas/entrypoint.sh)" = 2 ]; \
+    for d in /home/openhands /projects /openhands; do \
+      [ -e "$d" ] && chgrp -R 0 "$d" && chmod -R g=u "$d"; \
+    done; \
+    chmod g=u /etc/passwd
+ENV HOME=/home/openhands \
+    PATH=/usr/local/go/bin:/home/openhands/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \
+    NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false TERM=xterm
+USER 10001:0
+RUN sh /tmp/build/verify-tools.sh
+USER 0
+RUN rm -rf /tmp/build
+USER 10001:0
+ENTRYPOINT ["tini", "--", "/usr/local/bin/openhands-uid-entrypoint"]

@@ -1,0 +1,22 @@
+apiVersion: v2
+name: openhands
+description: Shared OpenHands Agent Canvas coding agent with a browser UI behind an OpenShift login
+type: application
+version: 0.1.0
+appVersion: 1.25.0
+home: https://apps.openshift.eu
+icon: https://raw.githubusercontent.com/OpenHands/OpenHands/main/docs/static/img/logo.png
+keywords:
+- ai
+- agent
+- openhands
+- coding
+sources:
+- https://github.com/OpenHands/OpenHands
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: OpenHands
+  charts.openshift.io/provider: GRN.CLOUD B.V.
