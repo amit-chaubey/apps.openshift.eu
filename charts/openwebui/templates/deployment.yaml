@@ -209,9 +209,11 @@ spec:
         {{- $owner := include "openwebui.ownerEmail" . }}
         {{- if $owner }}
         - --authenticated-emails-file=/etc/openwebui/emails.txt
-        {{- end }}
-        # Without an email domain the openshift provider admits every email
+        # without an email domain only the emails file admits
         - --email-domain=
+        {{- else }}
+        - --email-domain=*
+        {{- end }}
         {{- if or .Values.oauth.allowedGroups (not $owner) }}
         # --openshift-group is accepted and ignored; the group check is this SAR.
         # groups: verb login, granted by the login Role only; neither: get, project editors
