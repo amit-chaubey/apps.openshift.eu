@@ -165,6 +165,8 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
+        # No probe: the new pod waits for the old pod's workspace lock, and kagent's
+        # Deployment rolls (no Recreate), so a probe on OpenCode would never pass
         volumeMounts:
         - name: workspace
           mountPath: /workspace
