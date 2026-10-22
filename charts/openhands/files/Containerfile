@@ -28,7 +28,8 @@ COPY --from=tools /usr/share/ansible/collections /usr/share/ansible/collections
 COPY install-tools.sh verify-tools.sh tools.txt checks.txt /tmp/build/
 RUN sh /tmp/build/install-tools.sh
 # arbitrary UID: the home and the passwd file belong to group 0.
-# The frontend listens on loopback, behind the login proxy, so it may embed the session key
+# The frontend listens on loopback, behind the login proxy, so it may embed the session key.
+# The page marks the first-run wizard done: model and MCP come from the agent-server settings
 RUN set -eux; \
     printf '%s\n' '#!/bin/sh' \
       'if ! whoami >/dev/null 2>&1; then' \
@@ -38,6 +39,8 @@ RUN set -eux; \
     chmod 0755 /usr/local/bin/openhands-uid-entrypoint; \
     sed -i 's/--host :: \\$/--host 127.0.0.1 \\/' /opt/agent-canvas/entrypoint.sh; \
     [ "$(grep -c -- '--host 127.0.0.1 \\$' /opt/agent-canvas/entrypoint.sh)" = 2 ]; \
+    sed -i 's#<head>#<head><script>try{localStorage.getItem("openhands-onboarded")||localStorage.setItem("openhands-onboarded","1")}catch(e){}</script>#' /opt/agent-canvas/frontend/index.html; \
+    grep -q 'localStorage.setItem("openhands-onboarded"' /opt/agent-canvas/frontend/index.html; \
     for d in /home/openhands /projects /openhands; do \
       [ -e "$d" ] && chgrp -R 0 "$d" && chmod -R g=u "$d"; \
     done; \

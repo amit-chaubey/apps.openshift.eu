@@ -224,6 +224,29 @@
           }
         }
       }
+    },
+    "agentSecrets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "agentProfiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "acp_server"
+        ],
+        "properties": {
+          "acp_server": {
+            "type": "string"
+          },
+          "acp_model": {
+            "type": "string"
+          }
+        }
+      }
     }
   }
 }

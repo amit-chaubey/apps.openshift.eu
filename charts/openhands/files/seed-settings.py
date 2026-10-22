@@ -58,6 +58,19 @@ def main() -> None:
         if status not in (200, 201):
             print(f"seed: MCP server {name} not written ({status})", file=sys.stderr)
             ok = False
+    # environment of the ACP agents (Claude Code, Codex, Gemini CLI): the UI asks for
+    # these names until the secrets store holds them
+    for name, value in json.loads(os.environ.get("SEED_SECRETS") or "{}").items():
+        if call("PUT", "/api/settings/secrets", {"name": name, "value": value,
+                                                 "description": "set by the chart"}) not in (200, 201):
+            print(f"seed: secret {name} not written", file=sys.stderr)
+            ok = False
+    # selectable ACP agent profiles; the agent-server starts each CLI with its default command
+    for name, prof in json.loads(os.environ.get("SEED_AGENT_PROFILES") or "{}").items():
+        body = {"name": name, "agent_kind": "acp", "acp_command": None, "acp_args": None, **prof}
+        if call("POST", f"/api/agent-profiles/{name}", body) not in (200, 201):
+            print(f"seed: agent profile {name} not written", file=sys.stderr)
+            ok = False
     if ok:
         os.makedirs(os.path.dirname(MARKER), exist_ok=True)
         open(MARKER, "w").close()

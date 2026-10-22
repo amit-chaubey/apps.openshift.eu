@@ -112,6 +112,16 @@ llm:
 # leaves the agent without any MCP tools
 mcpServers: []
 
+# environment of the ACP agents the UI offers (Claude Code, Codex, Gemini CLI), written
+# into the agent-server secrets store like llm.model; name: value. Point the base URLs
+# at the token proxy (http://127.0.0.1:<tokenProxy.port>/...) to use gateway.upstream.
+# Not for real credentials: the values sit in the pod spec
+agentSecrets: {}
+
+# ACP agent profiles offered under "Switch agent profile": name: {acp_server, acp_model},
+# acp_server one of claude-code, codex, gemini-cli, ...; written like llm.model
+agentProfiles: {}
+
 kubernetesMcpServer:
   # local stdio MCP server "kubernetes" with the pod's ServiceAccount; needs
   # /tools/kubernetes-mcp-server, which build.toolsImage provides

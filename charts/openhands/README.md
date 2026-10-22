@@ -48,11 +48,13 @@ oc extract secret/team-session-api-key --keys=value --to=-
 - `mcpServers` (default: empty): `{name, path, timeout}` per MCP server on `gateway.upstream`.
 - `kubernetesMcpServer.enabled` (default: false): Local MCP server `kubernetes`; needs `build.toolsImage` with `/tools/kubernetes-mcp-server`.
 - `kubernetesMcpServer.deniedResources` (default: `Secret`): Kinds that server refuses.
+- `agentSecrets` (default: empty): Environment of the ACP agents (Claude Code, Codex, Gemini CLI), written into the agent-server secrets store, so the UI does not ask for it. Base URLs point at the token proxy, for example `ANTHROPIC_BASE_URL: http://127.0.0.1:8099/anthropic`. Not for real credentials: the values are in the pod spec.
+- `agentProfiles` (default: empty): `name: {acp_server, acp_model}` per ACP agent profile offered under **Switch agent profile**.
 - `env` (default: empty): Extra environment for `agent-canvas`.
 - `storage.size`, `storage.className`, `storage.accessMode` (default: `20Gi`, default class, `ReadWriteOnce`): Volume for settings, conversations and `~/workspace`.
 
 ## Delivery instructions
 
-Open `https://<route.host>/canvas/` and log in with OpenShift; the backend is already connected. A new browser shows a welcome wizard once: choose **Skip for now**, because its LLM step proposes its own default model in place of `llm.model`. In **Settings**, check the model and the MCP servers. Clone repositories into `~/workspace`; git sends the token to `git.host` only, and `glab` uses the same token.
+Open `https://<route.host>/canvas/` and log in with OpenShift; the backend is already connected. The first-run wizard is marked done in the page, so the model and MCP servers seeded from `llm.model` and `mcpServers` are what the UI starts with. In **Settings**, check the model and the MCP servers. Clone repositories into `~/workspace`; git sends the token to `git.host` only, and `glab` uses the same token.
 
 Everyone admitted to the UI uses the same pod, the same ServiceAccount, the same git identity and sees every conversation. The agent's shell sees the git token in its environment and can print it into a conversation, which sends it to the model; give it a token you can rotate. OpenHands adds a `Co-authored-by: openhands` trailer to the commits it writes unless told otherwise.
