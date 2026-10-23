@@ -16,6 +16,8 @@ data:
 {{ .Files.Get "files/seed-settings.py" | indent 4 }}
   token-proxy.py: |
 {{ .Files.Get "files/token-proxy.py" | indent 4 }}
+  mcp-sync.py: |
+{{ .Files.Get "files/mcp-sync.py" | indent 4 }}
   kubernetes-mcp-server.toml: |
     denied_resources = [
     {{- range .Values.kubernetesMcpServer.deniedResources }}

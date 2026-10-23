@@ -8,6 +8,8 @@ One pod holds three containers: `agent-canvas`, the OpenShift `oauth-proxy` in f
 
 With `build.enabled` the chart builds the image in the project from the upstream image. It adds Debian packages (`git`, `jq`, `make`, `ssh`, `curl`, `aws`, `psql`, `mariadb`, `skopeo`, `tmux`, `dig`, `rsync`, Java 21, `pdftotext`) and the Python, npm and pip tools in `build.tools` at their pinned versions. With `build.toolsImage` it also copies every binary in that image's `/usr/local/bin`, its Go toolchain, `/tools`, `/opt/sonar-scanner` and Ansible collections, so the agent gets exactly the command-line toolset of, for example, an `opencode-agent` image. The build runs every tool once as a non-root user and fails when one does not start. The image runs under the `restricted-v2` SCC with an arbitrary UID.
 
+With `mcpDiscovery.enabled` a fourth container, `mcp-sync`, turns every kagent `RemoteMCPServer` in the project into an MCP server of the agent and keeps that list in step every `mcpDiscovery.interval` seconds. A server on `gateway.upstream` is called through the token proxy with the pod's ServiceAccount token; a server that needs headers from a Secret is skipped. Servers a user adds in the UI are never changed, and the user's on/off switch of a discovered server is kept. With `git.host` it also writes the git token into the agent-server secrets store as `git.uiSecretName`, which turns on the UI's repository and merge request features.
+
 With `kubernetesMcpServer.enabled` the agent also gets a local MCP server `kubernetes` (`/tools/kubernetes-mcp-server`, from the tools image) that acts with the pod's ServiceAccount on its own project and refuses the kinds in `kubernetesMcpServer.deniedResources`.
 
 ## Install
@@ -48,6 +50,11 @@ oc extract secret/team-session-api-key --keys=value --to=-
 - `gateway.audience` (default: the host of `gateway.upstream`): Audience of that token.
 - `llm.model` (default: empty): Default model in LiteLLM form, for example `openai/<model>`.
 - `mcpServers` (default: empty): `{name, path, timeout}` per MCP server on `gateway.upstream`.
+- `mcpDiscovery.enabled` (default: true): MCP servers from the project's `RemoteMCPServer` objects; needs the kagent CRDs, does nothing without them.
+- `mcpDiscovery.interval` (default: 60): Seconds between two passes.
+- `mcpDiscovery.labelSelector` (default: empty): Only `RemoteMCPServer` objects with these labels.
+- `mcpDiscovery.clusterRole` (default: `kagent-remotemcpserver-view`): ClusterRole of the kagent installation that reads `RemoteMCPServer` objects, bound in the release namespace; empty for no binding.
+- `git.uiSecretName` (default: `GITLAB_TOKEN`): Secrets store name of the git token the UI reads; `GITHUB_TOKEN` for a GitHub host, empty to not write it.
 - `kubernetesMcpServer.enabled` (default: false): Local MCP server `kubernetes`; needs `build.toolsImage` with `/tools/kubernetes-mcp-server`.
 - `kubernetesMcpServer.deniedResources` (default: `Secret`): Kinds that server refuses.
 - `agentSecrets` (default: empty): Environment of the ACP agents (Claude Code, Codex, Gemini CLI), written into the agent-server secrets store, so the UI does not ask for it. Base URLs point at the token proxy, for example `ANTHROPIC_BASE_URL: http://127.0.0.1:8099/anthropic`. Not for real credentials: the values are in the pod spec.

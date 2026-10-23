@@ -16,6 +16,26 @@ subjects:
 - kind: ServiceAccount
   name: {{ $name }}
   namespace: {{ .Release.Namespace }}
+{{- if and .Values.mcpDiscovery.enabled .Values.mcpDiscovery.clusterRole }}
+---
+# mcp-sync reads the namespace's RemoteMCPServers; the ClusterRole comes with kagent
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-mcp-discovery
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.mcpDiscovery.clusterRole }}
+subjects:
+- kind: ServiceAccount
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
 {{- $clusterRole := .Values.oauth.loginClusterRole }}
 {{- if not $clusterRole }}
 ---

@@ -144,6 +144,9 @@
         "host": {
           "type": "string",
           "pattern": "^$|^[a-z0-9.-]+(:[0-9]+)?$"
+        },
+        "uiSecretName": {
+          "type": "string"
         }
       }
     },
@@ -251,6 +254,27 @@
           "acp_model": {
             "type": "string"
           }
+        }
+      }
+    },
+    "mcpDiscovery": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "interval": {
+          "type": "integer",
+          "minimum": 10
+        },
+        "labelSelector": {
+          "type": "string"
+        },
+        "resources": {
+          "type": "object"
+        },
+        "clusterRole": {
+          "type": "string"
         }
       }
     }

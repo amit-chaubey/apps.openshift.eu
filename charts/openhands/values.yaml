@@ -97,6 +97,9 @@ secrets:
 git:
   # Git host (no scheme) the token is sent to; empty: no token configured
   host: ""
+  # secrets store name the UI reads to offer its git provider features (GITLAB_TOKEN,
+  # GITHUB_TOKEN, BITBUCKET_TOKEN or FORGEJO_TOKEN); empty: not written
+  uiSecretName: GITLAB_TOKEN
   # commit identity
   userName: ""
   userEmail: ""
@@ -129,6 +132,25 @@ agentSecrets: {}
 # ACP agent profiles offered under "Switch agent profile": name: {acp_server, acp_model},
 # acp_server one of claude-code, codex, gemini-cli, ...; written like llm.model
 agentProfiles: {}
+
+# MCP servers from the namespace's kagent RemoteMCPServers, kept in step every interval:
+# a URL on gateway.upstream goes through the token proxy; one that needs headers from a
+# Secret is skipped. Entries the user added in the UI are left alone
+mcpDiscovery:
+  enabled: true
+  # seconds between two passes
+  interval: 60
+  # only RemoteMCPServers with these labels, for example key=value. Empty: all
+  labelSelector: ""
+  # ClusterRole, installed with kagent, that reads RemoteMCPServers; bound in the
+  # release namespace. Empty: no binding (the ServiceAccount's edit role may cover it)
+  clusterRole: kagent-remotemcpserver-view
+  resources:
+    requests:
+      cpu: 5m
+      memory: 32Mi
+    limits:
+      memory: 96Mi
 
 kubernetesMcpServer:
   # local stdio MCP server "kubernetes" with the pod's ServiceAccount; needs

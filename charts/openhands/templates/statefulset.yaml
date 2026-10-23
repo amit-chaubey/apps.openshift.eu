@@ -228,6 +228,47 @@ spec:
         securityContext:
           {{- include "openhands.containerSecurityContext" . | nindent 10 }}
       {{- end }}
+      {{- if or .Values.mcpDiscovery.enabled (and .Values.git.host .Values.git.uiSecretName) }}
+      - name: mcp-sync
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /app/mcp-sync.py
+        env:
+        - name: LOCAL_BACKEND_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-session-api-key
+              key: value
+        - name: INTERVAL
+          value: {{ .Values.mcpDiscovery.interval | quote }}
+        - name: DISCOVERY
+          value: {{ .Values.mcpDiscovery.enabled | quote }}
+        - name: LABEL_SELECTOR
+          value: {{ .Values.mcpDiscovery.labelSelector | quote }}
+        - name: UPSTREAM
+          value: {{ .Values.gateway.upstream | quote }}
+        - name: TOKEN_PROXY_PORT
+          value: {{ .Values.tokenProxy.port | quote }}
+        {{- if and .Values.git.host .Values.git.uiSecretName }}
+        - name: GIT_SECRET_NAME
+          value: {{ .Values.git.uiSecretName | quote }}
+        - name: GIT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-git-token
+              key: value
+        {{- end }}
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+          readOnly: true
+        resources:
+          {{- toYaml .Values.mcpDiscovery.resources | nindent 10 }}
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
       volumes:
       - name: scripts
         configMap:
