@@ -277,6 +277,16 @@
           "type": "string"
         }
       }
+    },
+    "mcpOAuth": {
+      "type": "object",
+      "properties": {
+        "callbackPort": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      }
     }
   }
 }

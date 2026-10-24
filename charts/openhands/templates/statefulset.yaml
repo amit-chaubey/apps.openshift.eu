@@ -67,6 +67,13 @@ spec:
           value: {{ toJson .Values.agentSecrets | quote }}
         - name: SEED_AGENT_PROFILES
           value: {{ toJson .Values.agentProfiles | quote }}
+        {{- if and .Values.build.enabled .Values.route.host .Values.mcpOAuth.callbackPort }}
+        # MCP OAuth logins return to the route, not to localhost (mcp_oauth_redirect.py)
+        - name: MCP_OAUTH_REDIRECT_URL
+          value: {{ printf "https://%s/mcp-oauth/callback" .Values.route.host | quote }}
+        - name: MCP_OAUTH_CALLBACK_PORT
+          value: {{ .Values.mcpOAuth.callbackPort | quote }}
+        {{- end }}
         - name: SEED_HASH
           value: {{ list (include "openhands.seedLlm" .) (include "openhands.seedMcp" .) (toJson .Values.agentSecrets) (toJson .Values.agentProfiles) | join "\n" | sha256sum | trunc 8 | quote }}
         {{- if .Values.git.host }}

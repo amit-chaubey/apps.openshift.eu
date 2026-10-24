@@ -28,6 +28,10 @@ INTERVAL = int(os.environ.get("INTERVAL", "60"))
 SELECTOR = os.environ.get("LABEL_SELECTOR", "")
 DISCOVERY = os.environ.get("DISCOVERY", "true") == "true"
 DESCRIPTION_PREFIX = "RemoteMCPServer "
+# icon URL of a server: this annotation on the RemoteMCPServer, else the logo of a known name
+ICON_ANNOTATION = "openhands.dev/icon"
+KNOWN_ICONS = {"atlassian", "confluence", "github", "gitlab", "grafana", "jira", "n8n",
+               "netbox", "notion", "odoo", "qdrant", "sentry", "wordpress"}
 GIT_SECRET_NAME = os.environ.get("GIT_SECRET_NAME", "")
 
 
@@ -81,12 +85,18 @@ def to_server(obj: dict) -> dict | None:
     if not url:
         return None
     meta = obj["metadata"]
-    return {
+    server = {
         "url": url,
         "transport": "sse" if spec.get("protocol") == "SSE" else "streamable-http",
         "description": f"{DESCRIPTION_PREFIX}{meta['namespace']}/{meta['name']}",
         "timeout": 60,
     }
+    icon = (meta.get("annotations") or {}).get(ICON_ANNOTATION)
+    if not icon and meta["name"] in KNOWN_ICONS:
+        icon = f"https://cdn.simpleicons.org/{meta['name']}"
+    if icon:
+        server["icon"] = icon
+    return server
 
 
 def sync(namespace: str) -> None:

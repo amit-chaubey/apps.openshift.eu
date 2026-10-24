@@ -82,7 +82,7 @@ the cluster, else a new random one. Takes value, existing (Secret data), key, le
 
 {{/* A changed Containerfile, build script or toolset gets a new image tag */}}
 {{- define "openhands.buildHash" -}}
-{{- list (include "openhands.containerfile" .) (.Files.Get "files/install-tools.sh") (.Files.Get "files/verify-tools.sh") (include "openhands.toolsTxt" .) (include "openhands.checksTxt" .) | join "\n" | sha256sum | trunc 8 -}}
+{{- list (include "openhands.containerfile" .) (.Files.Get "files/install-tools.sh") (.Files.Get "files/verify-tools.sh") (.Files.Get "files/mcp_oauth_redirect.py") (include "openhands.toolsTxt" .) (include "openhands.checksTxt" .) | join "\n" | sha256sum | trunc 8 -}}
 {{- end -}}
 
 {{- define "openhands.imageTag" -}}

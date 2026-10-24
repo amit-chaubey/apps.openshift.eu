@@ -30,7 +30,7 @@ oc get route team -o jsonpath='https://{.spec.host}/canvas/{"\n"}'
 oc extract secret/team-session-api-key --keys=value --to=-
 ```
 
-- `image.repository`, `image.tag` (default: `ghcr.io/openhands/agent-canvas`, `1.30.0`): Upstream image, and the base of the build.
+- `image.repository`, `image.tag` (default: `ghcr.io/openhands/agent-canvas`, `1.33.0`): Upstream image, and the base of the build.
 - `build.enabled` (default: true): Build the image with the toolset in the project.
 - `build.toolsImage` (default: empty): Image whose binaries, Go toolchain, `/tools`, `/opt/sonar-scanner` and Ansible collections are copied in. Empty: Debian packages and `build.tools` only.
 - `build.pullSecret` (default: empty): Pull secret for `build.toolsImage` and the base image.
@@ -55,6 +55,7 @@ oc extract secret/team-session-api-key --keys=value --to=-
 - `mcpDiscovery.labelSelector` (default: empty): Only `RemoteMCPServer` objects with these labels.
 - `mcpDiscovery.clusterRole` (default: `kagent-remotemcpserver-view`): ClusterRole of the kagent installation that reads `RemoteMCPServer` objects, bound in the release namespace; empty for no binding.
 - `git.uiSecretName` (default: `GITLAB_TOKEN`): Secrets store name of the git token the UI reads; `GITHUB_TOKEN` for a GitHub host, empty to not write it.
+- `mcpOAuth.callbackPort` (default: 18765): With `build.enabled` and `route.host`, MCP servers added in the UI that log in with OAuth return to `https://<route.host>/mcp-oauth/callback` (behind the OpenShift login) instead of `http://localhost:<port>/callback`; one login at a time. 0 keeps the upstream localhost redirect.
 - `kubernetesMcpServer.enabled` (default: false): Local MCP server `kubernetes`; needs `build.toolsImage` with `/tools/kubernetes-mcp-server`.
 - `kubernetesMcpServer.deniedResources` (default: `Secret`): Kinds that server refuses.
 - `agentSecrets` (default: empty): Environment of the ACP agents (Claude Code, Codex, Gemini CLI), written into the agent-server secrets store, so the UI does not ask for it. Base URLs point at the token proxy, for example `ANTHROPIC_BASE_URL: http://127.0.0.1:8099/anthropic`. Not for real credentials: the values are in the pod spec.

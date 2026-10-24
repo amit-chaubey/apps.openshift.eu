@@ -25,11 +25,12 @@ COPY --from=tools /tools /tools
 COPY --from=tools /opt/sonar-scanner /opt/sonar-scanner
 COPY --from=tools /usr/share/ansible/collections /usr/share/ansible/collections
 {{- end }}
-COPY install-tools.sh verify-tools.sh tools.txt checks.txt /tmp/build/
+COPY install-tools.sh verify-tools.sh tools.txt checks.txt mcp_oauth_redirect.py /tmp/build/
 RUN sh /tmp/build/install-tools.sh
 # arbitrary UID: the home and the passwd file belong to group 0.
 # The frontend listens on loopback, behind the login proxy, so it may embed the session key.
-# The page marks the first-run wizard done: model and MCP come from the agent-server settings
+# The page marks the first-run wizard done: model and MCP come from the agent-server settings.
+# MCP OAuth redirects go to the public route (mcp_oauth_redirect.py), path /mcp-oauth
 RUN set -eux; \
     printf '%s\n' '#!/bin/sh' \
       'if ! whoami >/dev/null 2>&1; then' \
@@ -41,6 +42,12 @@ RUN set -eux; \
     [ "$(grep -c '^ *STATIC_SERVER_BIND_HOST="127.0.0.1"$' /opt/agent-canvas/entrypoint.sh)" = 2 ]; \
     sed -i 's#<head>#<head><script>try{localStorage.getItem("openhands-onboarded")||localStorage.setItem("openhands-onboarded","1")}catch(e){}</script>#' /opt/agent-canvas/frontend/index.html; \
     grep -q 'localStorage.setItem("openhands-onboarded"' /opt/agent-canvas/frontend/index.html; \
+    cp /tmp/build/mcp_oauth_redirect.py /opt/agent-canvas/tools/; \
+    sed -i 's/^AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool"$/AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool,mcp_oauth_redirect"/' /opt/agent-canvas/entrypoint.sh; \
+    grep -q '^AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool,mcp_oauth_redirect"$' /opt/agent-canvas/entrypoint.sh; \
+    sed -i 's#^\( *\)--route "/api/automation=#\1--route "/mcp-oauth=http://127.0.0.1:${MCP_OAUTH_CALLBACK_PORT:-18765}" \\\n\1--route "/api/automation=#' /opt/agent-canvas/entrypoint.sh; \
+    n=$(grep -c -- '--route "/mcp-oauth=' /opt/agent-canvas/entrypoint.sh); \
+    [ "$n" -ge 1 ] && [ "$n" = "$(grep -c -- '--route "/api/automation=' /opt/agent-canvas/entrypoint.sh)" ]; \
     for d in /home/openhands /projects /openhands; do \
       [ -e "$d" ] && chgrp -R 0 "$d" && chmod -R g=u "$d"; \
     done; \
