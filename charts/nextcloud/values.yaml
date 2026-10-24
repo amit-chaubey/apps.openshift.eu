@@ -27,11 +27,11 @@ hsts:
 secrets:
   # kubernetes: Secrets from the values below. externalSecret: a secret store
   type: kubernetes
-  # with type kubernetes: External Secrets Operator makes nextcloud-credentials and
-  # generates each of its empty passwords once (Password generator)
+  # with type kubernetes: External Secrets Operator makes nextcloud-admin,
+  # nextcloud-mariadb and nextcloud-mariadb-root and generates each empty password once
   generator:
     enabled: false
-    # labels and annotations of the generated Secret nextcloud-credentials
+    # labels and annotations of the generated Secret nextcloud-admin
     secretTemplate:
       labels: {}
       annotations: {}
@@ -77,12 +77,11 @@ secrets:
       turn-secret: nextcloud-turn
       ai-api-key: nextcloud-ai
 
-# Outgoing mail server; empty: Nextcloud sends no mail
-smtp:
-  host: ""
-
 database:
   enabled: true
+  # true for a release installed before 0.6: MariaDB cannot change its root password
+  # Secret, so the root password stays in nextcloud-credentials. helm detects it itself
+  legacyRootSecret: false
   image: docker.io/mariadb:11.4.10
   replicas: 1
   metrics:
@@ -362,10 +361,9 @@ nextcloud:
     host: nextcloud.example.org
     existingSecret:
       enabled: true
-      secretName: nextcloud-credentials
-      usernameKey: nextcloud-username
-      passwordKey: nextcloud-password
-      smtpHostKey: smtp-host
+      secretName: nextcloud-admin
+      usernameKey: username
+      passwordKey: password
     # the image starts as root and drops to www-data itself
     securityContext:
       runAsUser: 0
@@ -464,9 +462,9 @@ nextcloud:
     database: nextcloud
     existingSecret:
       enabled: true
-      secretName: nextcloud-credentials
-      usernameKey: mariadb-username
-      passwordKey: mariadb-password
+      secretName: nextcloud-mariadb
+      usernameKey: username
+      passwordKey: password
   mariadb:
     enabled: false
   postgresql:

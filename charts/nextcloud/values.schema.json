@@ -82,15 +82,6 @@
         }
       }
     },
-    "smtp": {
-      "type": "object",
-      "properties": {
-        "host": {
-          "type": "string",
-          "title": "Outgoing mail server"
-        }
-      }
-    },
     "hsts": {
       "type": "object",
       "properties": {

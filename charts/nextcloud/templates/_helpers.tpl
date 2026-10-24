@@ -172,6 +172,13 @@ spec:
   {{- end }}
 {{- end -}}
 
+{{/* "true" when the MariaDB root password stays in nextcloud-credentials (before 0.6). */}}
+{{- define "wrapper.legacyRootSecret" -}}
+{{- $m := lookup "k8s.mariadb.com/v1alpha1" "MariaDB" .Release.Namespace "nextcloud-mariadb" -}}
+{{- $ref := (($m).spec).rootPasswordSecretKeyRef | default dict -}}
+{{- if or .Values.database.legacyRootSecret (eq ($ref.name | default "") "nextcloud-credentials") -}}true{{- end -}}
+{{- end -}}
+
 {{/* Labels that are the same on every object of the chart. */}}
 {{- define "nextcloud.commonLabels" -}}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
