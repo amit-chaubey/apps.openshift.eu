@@ -40,6 +40,8 @@ for c in charts/*/; do
     grep -q "^$s" "$c/README.md" 2>/dev/null || { echo "FAIL $n: README lacks $s"; fail=1; }
   done
   [ -f "$c/values.schema.json" ] || { echo "FAIL $n: no values.schema.json"; fail=1; }
+  v=$(awk '/^version:/{print $2}' "$c/Chart.yaml")
+  [ -s "release-notes/$n/$v.md" ] || { echo "FAIL $n: no release-notes/$n/$v.md"; fail=1; }
 done
 if command -v gitleaks >/dev/null; then
   gitleaks detect --source . --no-git --redact >/dev/null || { echo "FAIL gitleaks"; fail=1; }

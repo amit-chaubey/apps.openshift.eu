@@ -32,5 +32,7 @@ jobs:
       run: python3 -m unittest ci/test_opencode_agent_ui_proxy.py
     - name: Test openwebui chart
       run: ci/test-openwebui.sh
+    - name: Test SBOM image collection
+      run: python3 -m unittest ci/test_sbom.py
     - name: Scan history for secrets
       run: gitleaks detect --source . --redact

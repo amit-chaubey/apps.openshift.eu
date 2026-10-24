@@ -1,25 +1,31 @@
 #!/bin/bash
-# Releases one chart by hand: GitHub Release with the package, index.yaml on gh-pages.
-# Use it while the release workflow cannot run. The index is rebuilt from the packages
-# of all releases, so it always describes what a download returns.
+# Releases one chart: GitHub Release with the package, its release notes and its SBOM,
+# then index.yaml on gh-pages. The release workflow runs it, and so can a person.
+# The index is rebuilt from the packages of all releases, so it always describes what
+# a download returns.
 # usage: ci/release.sh <chart>
 set -euo pipefail
 cd "$(dirname "$0")/.."
 C=${1:?chart name}
-command -v gitleaks >/dev/null || { echo "gitleaks is required for a release"; exit 1; }
+for t in gitleaks syft; do
+  command -v $t >/dev/null || { echo "$t is required for a release"; exit 1; }
+done
 REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 git checkout -q main && git pull -q --ff-only origin main
 [ -z "$(git status --porcelain)" ] || { echo "working tree is not clean"; exit 1; }
 ci/check.sh
 V=$(awk '/^version:/{print $2}' "charts/$C/Chart.yaml"); TAG="$C-$V"
+N="release-notes/$C/$V.md"
+[ -s "$N" ] || { echo "$N is missing"; exit 1; }
 P=$(mktemp -d)
 if gh release view "$TAG" >/dev/null 2>&1; then
   echo "release $TAG exists"
 else
   helm package "charts/$C" -d "$P" >/dev/null
-  gh release create "$TAG" "$P/$C-$V.tgz" --target main --title "$TAG" \
-    --notes "$(awk -F': ' '/^description:/{print $2}' "charts/$C/Chart.yaml")" >/dev/null
-  rm -f "$P/$C-$V.tgz"
+  ci/sbom.py "charts/$C" "$P/$C-$V.cdx.json"
+  gh release create "$TAG" "$P/$C-$V.tgz" "$P/$C-$V.cdx.json" --target main --title "$TAG" \
+    --notes-file "$N" >/dev/null
+  rm -f "$P/$C-$V.tgz" "$P/$C-$V.cdx.json"
   echo "release $TAG created"
 fi
 for t in $(gh release list --limit 1000 --json tagName --jq '.[].tagName'); do

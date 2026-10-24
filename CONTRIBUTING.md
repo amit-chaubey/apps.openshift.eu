@@ -107,6 +107,32 @@ Every object a chart renders from its own templates carries these labels in
 - `README.md` of a chart has exactly the sections Purpose, Install and Delivery
   instructions.
 
+### Release notes
+
+- Every chart version has release notes in `release-notes/<chart>/<version>.md`, in the
+  same pull request that raises the version. `ci/check.sh` fails without them.
+- The notes are written for the person who runs the application, not for the chart
+  author: what changes for them, and what they must do on upgrade.
+
+      # <chart> <version>
+
+      Released <YYYY-MM-DD>.
+
+      ## Changes
+
+      ### <one change, in a sentence>
+
+      <what it means for a running application>
+
+      ## Upgrade
+
+      <an action the user must take, or "Nothing to do.">
+
+- The release attaches the notes and an SBOM (`<chart>-<version>.cdx.json`, CycloneDX, all
+  images the chart renders, made by `ci/sbom.py` with syft) to the GitHub Release. An image
+  built in the cluster's own registry cannot be scanned from outside; the SBOM lists it as
+  `unscanned`.
+
 ### Upgrades
 
 - `helm upgrade` from the previous released version, with the same values, changes no
@@ -141,3 +167,4 @@ metadata, never on a pod template, each as a literal line in the template.
 - The description says what changed, why, and how it was tested: at least a fresh install
   and an upgrade from the released version, both as a user without cluster-admin.
 - A chart is released when its `version` changes on `main`.
+- A new `version` comes with `release-notes/<chart>/<version>.md`.

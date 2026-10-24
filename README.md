@@ -27,5 +27,7 @@ portable to an arbitrary Kubernetes cluster.
 
 The full rules for a pull request are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-A chart is released when the `version` in its `Chart.yaml` changes on `main`. While the
-release workflow cannot run, `ci/release.sh <chart>` produces the same release by hand.
+A chart is released when the `version` in its `Chart.yaml` changes on `main`: the release
+workflow runs `ci/release.sh <chart>`, which a person can also run by hand (it needs
+`gitleaks` and `syft`). Each GitHub Release carries the package, the release notes from
+`release-notes/<chart>/<version>.md` and an SBOM of the chart's images.
