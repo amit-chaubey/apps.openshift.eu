@@ -1,7 +1,7 @@
 {{/*
 Rules of the upstream writer and getter Roles. Template names are global and the parent
 chart's are read last, so these replace upstream's wildcard rules, which a tenant cannot
-grant. The platform kagent-operator grants the controller's full rules in this namespace.
+grant. The kagent.dev rules need the platform's aggregated edit role to cover every kagent kind.
 */}}
 {{- define "kagent.writer.rules" -}}
 - apiGroups:
@@ -9,13 +9,32 @@ grant. The platform kagent-operator grants the controller's full rules in this n
   resources:
   - agents
   - modelconfigs
+  - modelproviderconfigs
   - remotemcpservers
   - mcpservers
+  - toolservers
+  - memories
+  - sandboxagents
+  - agentharnesses
   verbs:
   - create
   - update
   - patch
   - delete
+- apiGroups:
+  - kagent.dev
+  resources:
+  - agents/finalizers
+  - modelconfigs/finalizers
+  - modelproviderconfigs/finalizers
+  - remotemcpservers/finalizers
+  - mcpservers/finalizers
+  - toolservers/finalizers
+  - memories/finalizers
+  - sandboxagents/finalizers
+  - agentharnesses/finalizers
+  verbs:
+  - update
 - apiGroups:
   - ""
   resources:
@@ -63,12 +82,33 @@ grant. The platform kagent-operator grants the controller's full rules in this n
   resources:
   - agents
   - modelconfigs
+  - modelproviderconfigs
   - remotemcpservers
   - mcpservers
+  - toolservers
+  - memories
+  - sandboxagents
+  - agentharnesses
   verbs:
   - get
   - list
   - watch
+- apiGroups:
+  - kagent.dev
+  resources:
+  - agents/status
+  - modelconfigs/status
+  - modelproviderconfigs/status
+  - remotemcpservers/status
+  - mcpservers/status
+  - toolservers/status
+  - memories/status
+  - sandboxagents/status
+  - agentharnesses/status
+  verbs:
+  - get
+  - update
+  - patch
 - apiGroups:
   - ""
   resources:

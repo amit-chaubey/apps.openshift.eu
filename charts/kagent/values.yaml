@@ -106,11 +106,10 @@ networkPolicy:
   # namespaces whose agent pods reach the controller API (sessions, A2A).
   # Empty: the release namespace only
   agentNamespaceSelector: {}
-  # agent pods within those namespaces; the controller trusts the identity a caller
-  # sends (trusted-proxy), so admit only the agents
-  agentPodSelector:
-    matchLabels:
-      app.kubernetes.io/managed-by: kagent
+  # pods within those namespaces. The controller does not verify the token a caller
+  # sends (trusted-proxy), so these namespaces are the tenant boundary for
+  # ServiceAccounts: select the tenant's namespaces only. Empty: every pod there
+  agentPodSelector: {}
 
 # Overrides of the upstream kagent chart (alias upstream). Set rbac.namespaces to the
 # release namespace (Argo CD: parameter upstream.rbac.namespaces[0]=$ARGOCD_APP_NAMESPACE):
@@ -136,10 +135,11 @@ upstream:
       mountPath: /etc/kagent/postgres
       readOnly: true
   ui:
-    # the Route goes to the login proxy; the upstream Route to the UI is left
-    # without ingress by the NetworkPolicies
     service:
       type: ClusterIP
+    # the login Route of this chart is the only way in
+    route:
+      enabled: false
   database:
     postgres:
       # the Secret of the CloudNativePG Cluster (database.cnpg)
@@ -154,19 +154,30 @@ upstream:
           runAsNonRoot: true
           seccompProfile:
             type: RuntimeDefault
-  # login.provider oidc; OpenShift assigns the UID of the project
+  # login.provider oidc; OpenShift assigns the UID of the project. An Application sets
+  # enabled, extraEnv (OIDC_ISSUER_URL, OIDC_REDIRECT_URL, UPSTREAM_URL) and
+  # extraArgs.allowed-group: the tenant's realm roles, comma separated, which the
+  # client scope puts in the claim groups
   oauth2-proxy:
     securityContext:
       runAsUser: null
       runAsGroup: null
+    config:
+      existingSecret: kagent-oidc
+    extraArgs:
+      # Keycloak has no scope groups; a default client scope carries the claim
+      scope: openid profile email
+      # a bearer caller passes the same allowed-group check as a browser session
+      skip-jwt-bearer-tokens: true
+      # the login page and static assets only; upstream also skips
+      # api/agentharnesses/*/gateway (substrate, not deployed) with any suffix
+      skip-auth-regex: ^/(login$|_next/static/|_next/image|login-bg\.(jpg|png|webp)$|logo-[a-z0-9-]+\.png$|favicon\.ico$)
   # cluster-wide parts come from the platform kagent-operator
   kmcp:
     enabled: false
   kagent-tools:
     enabled: false
   grafana-mcp:
-    enabled: false
-  querydoc:
     enabled: false
   k8s-agent:
     enabled: false
