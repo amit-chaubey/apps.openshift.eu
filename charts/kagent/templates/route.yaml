@@ -1,0 +1,30 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "tenant.login" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: route
+    {{- with .Values.route.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    haproxy.router.openshift.io/timeout: {{ .Values.route.timeout }}
+    {{- if and .Values.route.host .Values.route.annotations }}
+    {{- toYaml .Values.route.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with .Values.route.host }}
+  host: {{ . }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "tenant.frontService" . }}
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

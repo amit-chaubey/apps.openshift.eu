@@ -1,0 +1,18 @@
+{{- if eq .Values.login.provider "openshift" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tenant.login" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: login
+spec:
+  selector:
+    {{- include "tenant.loginSelectorLabels" . | nindent 4 }}
+  ports:
+  - name: http
+    port: {{ .Values.login.port }}
+    targetPort: http
+    protocol: TCP
+{{- end }}

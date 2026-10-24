@@ -1,0 +1,103 @@
+route:
+  # empty: OpenShift assigns a host under the default application domain
+  host: ""
+  # extra labels on the Route only, for example to pick a router shard
+  labels: {}
+  # agent answers stream; the router must not cut long requests
+  timeout: 3600s
+  # used when a host is set; certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+login:
+  # openshift: OpenShift oauth-proxy, one shared kagent user (controller auth mode
+  # unsecure). oidc: upstream oauth2-proxy against an OIDC provider, a kagent user per
+  # person (set upstream.oauth2-proxy and upstream.controller.auth.mode trusted-proxy)
+  provider: openshift
+  # OpenShift groups admitted, strictly. Empty: everyone who may edit the project
+  allowedGroups: []
+  # ClusterRole holding the verb login on services/proxy that allowedGroups are bound
+  # to. Empty: the chart's own Role, which only an installer holding that verb (a
+  # cluster admin) can create
+  loginClusterRole: ""
+  # OpenShift oauth-proxy in front of the UI; the cluster keeps this tag current
+  image: image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4
+  port: 4180
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+secrets:
+  # kubernetes: the chart keeps the login cookie key in a Secret it generates once
+  type: kubernetes
+  # login cookie key. Empty: generated once and kept on upgrade
+  cookieSecret: ""
+
+networkPolicy:
+  enabled: true
+  # namespaces whose agent pods reach the controller API (sessions, A2A).
+  # Empty: the release namespace only
+  agentNamespaceSelector: {}
+
+# Overrides of the upstream kagent chart (alias upstream). Set rbac.namespaces to the
+# release namespace (Argo CD: parameter upstream.rbac.namespaces[0]=$ARGOCD_APP_NAMESPACE):
+# empty renders cluster-wide RBAC, which this chart refuses
+upstream:
+  fullnameOverride: kagent
+  nameOverride: kagent
+  rbac:
+    namespaces: []
+  controller:
+    # the login proxy has authenticated the browser; the controller takes no JWT
+    auth:
+      mode: unsecure
+  ui:
+    # the Route goes to the login proxy; the upstream Route to the UI is left
+    # without ingress by the NetworkPolicies
+    service:
+      type: ClusterIP
+  database:
+    postgres:
+      bundled:
+        # OpenShift assigns the UID of the project
+        podSecurityContext:
+          fsGroup: null
+          runAsUser: null
+          runAsGroup: null
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+  # cluster-wide parts come from the platform kagent-operator
+  kmcp:
+    enabled: false
+  kagent-tools:
+    enabled: false
+  grafana-mcp:
+    enabled: false
+  querydoc:
+    enabled: false
+  k8s-agent:
+    enabled: false
+  kgateway-agent:
+    enabled: false
+  istio-agent:
+    enabled: false
+  promql-agent:
+    enabled: false
+  observability-agent:
+    enabled: false
+  argo-rollouts-agent:
+    enabled: false
+  helm-agent:
+    enabled: false
+  cilium-policy-agent:
+    enabled: false
+  cilium-manager-agent:
+    enabled: false
+  cilium-debug-agent:
+    enabled: false

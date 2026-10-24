@@ -1,0 +1,28 @@
+apiVersion: v2
+name: kagent
+description: kagent agent controller and UI for one tenant behind the OpenShift login; the platform kagent-operator provides the CRDs and the access to team namespaces
+type: application
+version: 0.1.0
+appVersion: 0.9.6
+home: https://apps.openshift.eu
+icon: https://raw.githubusercontent.com/kagent-dev/kagent/main/img/icon-light.svg
+keywords:
+- ai
+- agents
+- kagent
+- mcp
+sources:
+- https://github.com/kagent-dev/kagent
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: kagent
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+dependencies:
+# parent and upstream chart are both named kagent
+- name: kagent
+  version: 0.9.6
+  repository: oci://ghcr.io/kagent-dev/kagent/helm
+  alias: upstream

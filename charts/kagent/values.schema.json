@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "route": {
+      "type": "object",
+      "properties": {
+        "host": {"type": "string"},
+        "labels": {"type": "object", "additionalProperties": {"type": "string"}},
+        "timeout": {"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"},
+        "annotations": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "login": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {"enum": ["openshift", "oidc"]},
+        "allowedGroups": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "loginClusterRole": {"type": "string"},
+        "image": {"type": "string", "minLength": 1},
+        "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
+        "resources": {"type": "object"}
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "type": {"enum": ["kubernetes", "externalSecret"]},
+        "cookieSecret": {"type": "string"}
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "agentNamespaceSelector": {"type": "object"}
+      }
+    },
+    "upstream": {
+      "type": "object",
+      "properties": {
+        "fullnameOverride": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,40}[a-z0-9])?$"},
+        "rbac": {
+          "type": "object",
+          "properties": {
+            "namespaces": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    }
+  }
+}

@@ -14,9 +14,12 @@ for c in charts/*/; do
     done
     helm dependency build "$c" >/dev/null || { echo "FAIL $n: helm dependency build"; fail=1; continue; }
   fi
-  helm lint "$c" >/dev/null || { echo "FAIL $n: helm lint"; fail=1; }
+  # values a chart needs to render at all, as in chart-testing
+  ci=""
+  [ -f "$c/ci/test-values.yaml" ] && ci="-f $c/ci/test-values.yaml"
+  helm lint "$c" --namespace test $ci >/dev/null || { echo "FAIL $n: helm lint"; fail=1; }
   for mode in kubernetes externalSecret; do
-    args="--set secrets.type=$mode"
+    args="$ci --set secrets.type=$mode"
     [ "$mode" = externalSecret ] && args="$args --set secrets.externalSecret.storeName=vault-test"
     out=$(helm template test "$c" --namespace test $args) || { echo "FAIL $n: render $mode"; fail=1; continue; }
     bad=$(echo "$out" | grep -E '^kind: (Namespace|ClusterRole|ClusterRoleBinding|ClusterPolicy|CustomResourceDefinition|Subscription|OperatorGroup|SecurityContextConstraints)$' || true)

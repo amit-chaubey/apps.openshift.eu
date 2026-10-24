@@ -1,0 +1,5 @@
+# CI renders in namespace test
+upstream:
+  rbac:
+    namespaces:
+    - test
