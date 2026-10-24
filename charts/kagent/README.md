@@ -44,8 +44,12 @@ With Argo CD, set the namespace from the destination: `spec.source.helm.paramete
 - `database.cnpg.storage.size`, `storage.storageClass`, `imageName`, `resources` (default: 1Gi, cluster default, operator default, empty).
 - `database.cnpg.operatorNamespaceSelector` (default: `kubernetes.io/metadata.name: openshift-operators`): Namespace of the CloudNativePG operator, admitted to the instances.
 - `networkPolicy.enabled` (default: true), `networkPolicy.agentNamespaceSelector` (default: empty): Namespaces whose agent pods reach the controller API on port 8083. `networkPolicy.agentPodSelector` (default: `app.kubernetes.io/managed-by: kagent`) limits it to the agent pods; empty admits every pod of those namespaces. With `route.host` the router also reaches cert-manager's HTTP-01 solver.
+- `remoteMCPServers` (default: empty): RemoteMCPServers in the release namespace for MCP servers of your own: `name`, `description`, `url`, `protocol` (`STREAMABLE_HTTP` or `SSE`), `timeout`, `allowedNamespaces` (default `{from: Same}`; `{from: Selector, selector: ...}` lets Agents in other namespaces use it) and `headers`. A header takes its value from `vaultItem` (a remote key of `secrets.externalSecret.storeName`, property `vaultProperty`, default `login.password`, written into Secret `mcp-<name>` behind an optional `prefix` such as `Bearer `) or from `existingSecret` (`name`, `key`).
+- `examples.enabled` (default: false): The tool server of the upstream example agents, RemoteMCPServer `kagent-tool-server`, bound to `examples.tools.clusterRole` (default `view`) in the release namespace only. Switch the agents on per agent with `upstream.<agent>.enabled` (for example `k8s-agent`, `helm-agent`); the chart refuses them without `examples.enabled`. Upstream's own `kagent-tools` binds cluster-admin and stays refused.
 - `upstream.providers` (default: upstream OpenAI with Secret `kagent-openai`): The default model. Create the API key Secret, or point `upstream.providers.openAI.config.baseUrl` at an OpenAI-compatible gateway.
 - `upstream.controller.env` (default: empty): Extra controller environment, for example `WATCH_NAMESPACES` from a pod annotation the platform writes.
+
+Upstream's controller Roles `kagent-writer-role` and `kagent-getter-role` carry wildcard rules that a project admin cannot grant, so the chart renders them with explicit rules within a project admin's rights; the platform's kagent-operator grants the controller its full rules in every namespace of the tenant, the release namespace included.
 
 ## Delivery instructions
 

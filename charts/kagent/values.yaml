@@ -73,6 +73,34 @@ database:
       matchLabels:
         kubernetes.io/metadata.name: openshift-operators
 
+# The upstream example agents: set upstream.<agent>.enabled per agent (Helm cannot switch
+# subcharts from here). This adds their tool server, RemoteMCPServer kagent-tool-server,
+# bound to clusterRole in the release namespace only; never cluster-wide
+examples:
+  enabled: false
+  tools:
+    image: ghcr.io/kagent-dev/kagent/tools:0.1.3
+    clusterRole: view
+    args:
+    - --read-only
+    - --tools
+    - k8s,helm,utils
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+# RemoteMCPServers of the release namespace, for the tenant's own MCP servers. Each:
+# name, description, url, protocol (STREAMABLE_HTTP or SSE), timeout, allowedNamespaces
+# (default {from: Same}; {from: Selector, selector: ...} shares it with other namespaces)
+# and headers: name, optional prefix ("Bearer "), and the value from vaultItem (a remote
+# key of secrets.externalSecret.storeName, property vaultProperty, default
+# login.password) or existingSecret {name, key}
+remoteMCPServers: []
+
 networkPolicy:
   enabled: true
   # namespaces whose agent pods reach the controller API (sessions, A2A).

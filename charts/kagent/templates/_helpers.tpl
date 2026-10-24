@@ -93,6 +93,21 @@ app.kubernetes.io/instance: {{ .Release.Name | quote }}
 {{- fail "database.cnpg.enabled false: set upstream.database.postgres.urlFile, url or bundled.enabled, and upstream.controller.volumes and volumeMounts to []" -}}
 {{- end -}}
 {{- if dig "kagent-tools" "enabled" false .Values.upstream -}}
-{{- fail "upstream.kagent-tools binds cluster-admin; team namespaces get tools from the platform" -}}
+{{- fail "upstream.kagent-tools binds cluster-admin; team namespaces get tools from the platform, the example agents from examples.enabled" -}}
+{{- end -}}
+{{- range $agent := list "k8s-agent" "kgateway-agent" "istio-agent" "promql-agent" "observability-agent" "argo-rollouts-agent" "helm-agent" "cilium-policy-agent" "cilium-manager-agent" "cilium-debug-agent" -}}
+{{- if and (dig $agent "enabled" false $.Values.upstream) (not $.Values.examples.enabled) -}}
+{{- fail (printf "upstream.%s needs examples.enabled: it calls the example tool server kagent-tool-server" $agent) -}}
+{{- end -}}
+{{- end -}}
+{{- range .Values.remoteMCPServers -}}
+{{- range .headers -}}
+{{- if and .vaultItem (not $.Values.secrets.externalSecret.storeName) -}}
+{{- fail "remoteMCPServers[].headers[].vaultItem needs secrets.externalSecret.storeName" -}}
+{{- end -}}
+{{- if not (or .vaultItem .existingSecret) -}}
+{{- fail (printf "remoteMCPServers[].headers %s: set vaultItem or existingSecret" .name) -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}

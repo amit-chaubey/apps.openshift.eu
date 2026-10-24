@@ -1,0 +1,77 @@
+{{- $es := .Values.secrets.externalSecret }}
+{{- range $s := .Values.remoteMCPServers }}
+{{- $vault := list }}
+{{- range $i, $h := $s.headers }}{{ if $h.vaultItem }}{{ $vault = append $vault (dict "i" $i "h" $h) }}{{ end }}{{ end }}
+{{- if $vault }}
+---
+# header values of RemoteMCPServer {{ $s.name }} from the tenant vault
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: mcp-{{ $s.name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  refreshInterval: {{ $es.refreshInterval }}
+  secretStoreRef:
+    kind: {{ $es.storeKind }}
+    name: {{ $es.storeName }}
+  target:
+    name: mcp-{{ $s.name }}
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      data:
+        {{- range $vault }}
+        h{{ .i }}: {{ printf "%s{{ .h%d }}" (.h.prefix | default "") .i | quote }}
+        {{- end }}
+  data:
+  {{- range $vault }}
+  - secretKey: h{{ .i }}
+    remoteRef:
+      key: {{ .h.vaultItem }}
+      property: {{ .h.vaultProperty | default "login.password" }}
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+      nullBytePolicy: Ignore
+  {{- end }}
+{{- end }}
+---
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: {{ $s.name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  description: {{ required "remoteMCPServers[].description is required" $s.description | quote }}
+  url: {{ required "remoteMCPServers[].url is required" $s.url | quote }}
+  protocol: {{ $s.protocol | default "STREAMABLE_HTTP" }}
+  timeout: {{ $s.timeout | default "30s" }}
+  sseReadTimeout: {{ $s.sseReadTimeout | default "5m0s" }}
+  terminateOnClose: true
+  {{- with $s.headers }}
+  headersFrom:
+  {{- range $i, $h := . }}
+  - name: {{ $h.name }}
+    valueFrom:
+      type: Secret
+      {{- if $h.vaultItem }}
+      name: mcp-{{ $s.name }}
+      key: h{{ $i }}
+      {{- else }}
+      name: {{ $h.existingSecret.name }}
+      key: {{ $h.existingSecret.key }}
+      {{- end }}
+  {{- end }}
+  {{- end }}
+  allowedNamespaces:
+    {{- toYaml ($s.allowedNamespaces | default (dict "from" "Same")) | nindent 4 }}
+{{- end }}
