@@ -5,47 +5,182 @@
     "route": {
       "type": "object",
       "properties": {
-        "host": {"type": "string"},
-        "labels": {"type": "object", "additionalProperties": {"type": "string"}},
-        "timeout": {"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"},
-        "annotations": {"type": "object", "additionalProperties": {"type": "string"}}
+        "host": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
       }
     },
     "login": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "provider": {"enum": ["openshift", "oidc"]},
-        "allowedGroups": {"type": "array", "items": {"type": "string", "minLength": 1}},
-        "loginClusterRole": {"type": "string"},
-        "image": {"type": "string", "minLength": 1},
-        "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
-        "resources": {"type": "object"}
+        "provider": {
+          "enum": [
+            "openshift",
+            "oidc"
+          ]
+        },
+        "allowedGroups": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "loginClusterRole": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "resources": {
+          "type": "object"
+        },
+        "oidc": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clientId": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     "secrets": {
       "type": "object",
       "properties": {
-        "type": {"enum": ["kubernetes", "externalSecret"]},
-        "cookieSecret": {"type": "string"}
+        "type": {
+          "enum": [
+            "kubernetes",
+            "externalSecret"
+          ]
+        },
+        "cookieSecret": {
+          "type": "string"
+        },
+        "externalSecret": {
+          "type": "object",
+          "properties": {
+            "storeKind": {
+              "enum": [
+                "ClusterSecretStore",
+                "SecretStore"
+              ]
+            },
+            "storeName": {
+              "type": "string"
+            },
+            "refreshInterval": {
+              "type": "string"
+            },
+            "items": {
+              "type": "object",
+              "properties": {
+                "oidcClientSecret": {
+                  "type": "string"
+                },
+                "oidcCookieSecret": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "networkPolicy": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": {"type": "boolean"},
-        "agentNamespaceSelector": {"type": "object"}
+        "enabled": {
+          "type": "boolean"
+        },
+        "agentNamespaceSelector": {
+          "type": "object"
+        },
+        "agentPodSelector": {
+          "type": "object"
+        }
       }
     },
     "upstream": {
       "type": "object",
       "properties": {
-        "fullnameOverride": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,40}[a-z0-9])?$"},
+        "fullnameOverride": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]{0,40}[a-z0-9])?$"
+        },
         "rbac": {
           "type": "object",
           "properties": {
-            "namespaces": {"type": "array", "items": {"type": "string"}}
+            "namespaces": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "cnpg": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "instances": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "storage": {
+              "type": "object",
+              "properties": {
+                "size": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "storageClass": {
+                  "type": "string"
+                }
+              }
+            },
+            "imageName": {
+              "type": "string"
+            },
+            "resources": {
+              "type": "object"
+            },
+            "operatorNamespaceSelector": {
+              "type": "object"
+            }
           }
         }
       }

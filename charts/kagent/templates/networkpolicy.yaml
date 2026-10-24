@@ -86,6 +86,57 @@ spec:
     - namespaceSelector:
         matchLabels:
           policy-group.network.openshift.io/host-network: ""
+{{- if .Values.database.cnpg.enabled }}
+---
+# The CloudNativePG operator reads the instance status
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-allow-cnpg-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: network
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: {{ include "tenant.postgres" . }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 8000
+    from:
+    - namespaceSelector:
+        {{- toYaml .Values.database.cnpg.operatorNamespaceSelector | nindent 8 }}
+{{- end }}
+{{- if .Values.route.host }}
+---
+# cert-manager's HTTP-01 solver answers Let's Encrypt through the router
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fullname }}-allow-acme-solver
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: network
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          policy-group.network.openshift.io/ingress: ""
+    - namespaceSelector:
+        matchLabels:
+          policy-group.network.openshift.io/host-network: ""
+{{- end }}
 {{- with .Values.networkPolicy.agentNamespaceSelector }}
 ---
 # Agent pods of the team namespaces store sessions and call agents through the controller
@@ -105,8 +156,15 @@ spec:
   policyTypes:
   - Ingress
   ingress:
-  - from:
+  - ports:
+    - protocol: TCP
+      port: 8083
+    from:
     - namespaceSelector:
         {{- toYaml . | nindent 8 }}
+      {{- with $.Values.networkPolicy.agentPodSelector }}
+      podSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 {{- end }}
 {{- end }}

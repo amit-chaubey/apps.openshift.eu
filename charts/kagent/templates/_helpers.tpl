@@ -3,6 +3,16 @@
 {{- printf "%s-login" .Values.upstream.fullnameOverride -}}
 {{- end -}}
 
+{{/* CloudNativePG Cluster of the controller; upstream.controller.volumes mounts <name>-app */}}
+{{- define "tenant.postgres" -}}
+{{- printf "%s-postgres" .Values.upstream.fullnameOverride -}}
+{{- end -}}
+
+{{/* Secret with client-id, client-secret and cookie-secret for oauth2-proxy */}}
+{{- define "tenant.oidcSecret" -}}
+{{- printf "%s-oidc" .Values.upstream.fullnameOverride -}}
+{{- end -}}
+
 {{/* Labels on every object of the chart; app and component are set per object */}}
 {{- define "tenant.labels" -}}
 app: {{ include "tenant.login" . }}
@@ -69,8 +79,18 @@ app.kubernetes.io/instance: {{ .Release.Name | quote }}
 {{- if or (not (dig "oauth2-proxy" "enabled" false .Values.upstream)) (ne $mode "trusted-proxy") -}}
 {{- fail "login.provider oidc needs upstream.oauth2-proxy.enabled and upstream.controller.auth.mode trusted-proxy" -}}
 {{- end -}}
+{{- if and (eq .Values.secrets.type "externalSecret") (ne (dig "oauth2-proxy" "config" "existingSecret" "" .Values.upstream) (include "tenant.oidcSecret" .)) -}}
+{{- fail (printf "secrets.type externalSecret writes Secret %s: set upstream.oauth2-proxy.config.existingSecret to it" (include "tenant.oidcSecret" .)) -}}
+{{- end -}}
 {{- else if ne $mode "unsecure" -}}
 {{- fail "login.provider openshift needs upstream.controller.auth.mode unsecure: the OpenShift login issues no JWT" -}}
+{{- end -}}
+{{- $pg := dig "database" "postgres" dict .Values.upstream -}}
+{{- if and .Values.database.cnpg.enabled (or (dig "bundled" "enabled" false $pg) (ne (dig "urlFile" "" $pg) "/etc/kagent/postgres/uri")) -}}
+{{- fail "database.cnpg.enabled needs upstream.database.postgres.urlFile /etc/kagent/postgres/uri and bundled.enabled false (the defaults)" -}}
+{{- end -}}
+{{- if and (not .Values.database.cnpg.enabled) (eq (dig "urlFile" "" $pg) "/etc/kagent/postgres/uri") -}}
+{{- fail "database.cnpg.enabled false: set upstream.database.postgres.urlFile, url or bundled.enabled, and upstream.controller.volumes and volumeMounts to []" -}}
 {{- end -}}
 {{- if dig "kagent-tools" "enabled" false .Values.upstream -}}
 {{- fail "upstream.kagent-tools binds cluster-admin; team namespaces get tools from the platform" -}}

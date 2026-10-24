@@ -17,6 +17,9 @@ login:
   provider: openshift
   # OpenShift groups admitted, strictly. Empty: everyone who may edit the project
   allowedGroups: []
+  oidc:
+    # client id at the OIDC provider, written into the Secret kagent-oidc
+    clientId: ""
   # ClusterRole holding the verb login on services/proxy that allowedGroups are bound
   # to. Empty: the chart's own Role, which only an installer holding that verb (a
   # cluster admin) can create
@@ -33,16 +36,53 @@ login:
       memory: 128Mi
 
 secrets:
-  # kubernetes: the chart keeps the login cookie key in a Secret it generates once
+  # kubernetes: the chart keeps the OpenShift login cookie key in a Secret it generates
+  # once. externalSecret: with login.provider oidc, an ExternalSecret writes the Secret
+  # kagent-oidc (client-id, client-secret, cookie-secret) that
+  # upstream.oauth2-proxy.config.existingSecret names
   type: kubernetes
   # login cookie key. Empty: generated once and kept on upgrade
   cookieSecret: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # remote keys whose property login.password holds the value
+    items:
+      oidcClientSecret: ""
+      oidcCookieSecret: ""
+
+database:
+  # CloudNativePG Cluster kagent-postgres in the release namespace; the controller reads
+  # its URL from the Secret kagent-postgres-app (upstream.database.postgres.urlFile and
+  # upstream.controller.volumes below). Needs the CloudNativePG operator. false: set
+  # upstream.database.postgres (bundled.enabled, url or urlFile) and
+  # upstream.controller.volumes and volumeMounts to []
+  cnpg:
+    enabled: true
+    instances: 1
+    storage:
+      size: 1Gi
+      # empty: the cluster's default StorageClass
+      storageClass: ""
+    # empty: the operator's default PostgreSQL image
+    imageName: ""
+    resources: {}
+    # namespaces of the CloudNativePG operator, which reads the instance status
+    operatorNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: openshift-operators
 
 networkPolicy:
   enabled: true
   # namespaces whose agent pods reach the controller API (sessions, A2A).
   # Empty: the release namespace only
   agentNamespaceSelector: {}
+  # agent pods within those namespaces; the controller trusts the identity a caller
+  # sends (trusted-proxy), so admit only the agents
+  agentPodSelector:
+    matchLabels:
+      app.kubernetes.io/managed-by: kagent
 
 # Overrides of the upstream kagent chart (alias upstream). Set rbac.namespaces to the
 # release namespace (Argo CD: parameter upstream.rbac.namespaces[0]=$ARGOCD_APP_NAMESPACE):
@@ -56,6 +96,17 @@ upstream:
     # the login proxy has authenticated the browser; the controller takes no JWT
     auth:
       mode: unsecure
+    volumes:
+    - name: postgres-app
+      secret:
+        secretName: kagent-postgres-app
+        items:
+        - key: uri
+          path: uri
+    volumeMounts:
+    - name: postgres-app
+      mountPath: /etc/kagent/postgres
+      readOnly: true
   ui:
     # the Route goes to the login proxy; the upstream Route to the UI is left
     # without ingress by the NetworkPolicies
@@ -63,7 +114,10 @@ upstream:
       type: ClusterIP
   database:
     postgres:
+      # the Secret of the CloudNativePG Cluster (database.cnpg)
+      urlFile: /etc/kagent/postgres/uri
       bundled:
+        enabled: false
         # OpenShift assigns the UID of the project
         podSecurityContext:
           fsGroup: null
@@ -72,6 +126,11 @@ upstream:
           runAsNonRoot: true
           seccompProfile:
             type: RuntimeDefault
+  # login.provider oidc; OpenShift assigns the UID of the project
+  oauth2-proxy:
+    securityContext:
+      runAsUser: null
+      runAsGroup: null
   # cluster-wide parts come from the platform kagent-operator
   kmcp:
     enabled: false
