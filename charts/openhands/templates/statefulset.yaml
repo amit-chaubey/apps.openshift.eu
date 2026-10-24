@@ -284,6 +284,59 @@ spec:
         securityContext:
           {{- include "openhands.containerSecurityContext" . | nindent 10 }}
       {{- end }}
+      {{- if .Values.a2a.enabled }}
+      # A2A server for other agents and kagent; the agent-server stays on loopback
+      - name: a2a
+        image: {{ include "openhands.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - python3
+        - /app/a2a-shim.py
+        ports:
+        - name: a2a
+          containerPort: {{ .Values.a2a.port }}
+        env:
+        - name: LOCAL_BACKEND_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-session-api-key
+              key: value
+        - name: A2A_PORT
+          value: {{ .Values.a2a.port | quote }}
+        - name: A2A_NAME
+          value: {{ $name }}
+        - name: A2A_DESCRIPTION
+          value: {{ default "OpenHands coding agent" .Values.a2a.description | quote }}
+        - name: A2A_PUBLIC_URL
+          value: {{ include "openhands.a2aPublicUrl" . | quote }}
+        {{- with include "openhands.a2aTenant" . }}
+        # bearer JWTs of the tenant: kagent forwards its caller's token
+        - name: A2A_TENANT
+          value: {{ . }}
+        - name: A2A_JWT_ISSUERS
+          value: {{ include "openhands.a2aJwtIssuers" $ | quote }}
+        {{- end }}
+        {{- with .Values.a2a.staticTokenSecret }}
+        - name: A2A_STATIC_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ . }}
+              key: token
+        {{- end }}
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: a2a
+          periodSeconds: 20
+        resources:
+          {{- toYaml .Values.a2a.resources | nindent 10 }}
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
       volumes:
       - name: scripts
         configMap:

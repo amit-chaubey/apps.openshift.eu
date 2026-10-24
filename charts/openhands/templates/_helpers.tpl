@@ -133,3 +133,35 @@ seccompProfile:
 {{- end -}}
 {{- toJson $servers -}}
 {{- end -}}
+
+{{/* URL other agents reach the A2A shim on: the kagent agent's Service, else the shim's */}}
+{{- define "openhands.a2aPublicUrl" -}}
+{{- $name := include "openhands.name" . -}}
+{{- if and .Values.a2a.kagent.enabled (.Capabilities.APIVersions.Has "kagent.dev/v1alpha2/Agent") -}}
+{{- printf "http://%s.%s.svc:8080" $name .Release.Namespace -}}
+{{- else -}}
+{{- printf "http://%s-a2a.%s.svc:8080" $name .Release.Namespace -}}
+{{- end -}}
+{{- end -}}
+
+{{/* tenant whose callers the A2A shim admits by JWT; empty: JWTs off */}}
+{{- define "openhands.a2aTenant" -}}
+{{- $t := .Values.a2a.tenantAuth -}}
+{{- if and $t.enabled (or $t.kubernetesIssuer $t.oidcIssuers) -}}
+{{- default (first (splitList "-" .Release.Namespace)) $t.tenant -}}
+{{- end -}}
+{{- end -}}
+
+{{/* JSON list of trusted JWT issuers for the A2A shim */}}
+{{- define "openhands.a2aJwtIssuers" -}}
+{{- $t := .Values.a2a.tenantAuth -}}
+{{- $sa := "/var/run/secrets/kubernetes.io/serviceaccount" -}}
+{{- $issuers := list -}}
+{{- with $t.kubernetesIssuer -}}
+{{- $issuers = append $issuers (dict "issuer" . "kind" "kubernetes" "ca_file" (printf "%s/ca.crt" $sa) "token_file" (printf "%s/token" $sa)) -}}
+{{- end -}}
+{{- range $t.oidcIssuers -}}
+{{- $issuers = append $issuers (dict "issuer" . "kind" "oidc") -}}
+{{- end -}}
+{{- toJson $issuers -}}
+{{- end -}}

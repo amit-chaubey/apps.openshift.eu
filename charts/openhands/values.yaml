@@ -161,6 +161,44 @@ mcpPublish:
   # refused servers
   resync: 600
 
+# A2A server for the agent: other agents and kagent chat with it. The instance is one agent
+# (a conversation per A2A context); every titled conversation is also a sub-agent
+# "<release>/<title>" at /agents/<slug>/
+a2a:
+  enabled: true
+  # container port of the shim inside the pod
+  port: 8090
+  # description on the agent card and in kagent
+  description: ""
+  # Secret with key token, a static bearer credential besides the tenant JWTs. Empty: none
+  staticTokenSecret: ""
+  # admit bearer JWTs of the tenant: ServiceAccount tokens from a namespace <tenant> or
+  # <tenant>-*, OIDC tokens whose groups claim holds <tenant> or <tenant>-*
+  tenantAuth:
+    enabled: true
+    # empty: the release namespace up to its first "-"
+    tenant: ""
+    # the cluster's ServiceAccount token issuer; empty: none
+    kubernetesIssuer: https://kubernetes.default.svc
+    # OIDC issuers, for example https://login.example/realms/<realm>
+    oidcIssuers: []
+  resources:
+    requests:
+      cpu: 10m
+      memory: 96Mi
+    limits:
+      memory: 256Mi
+  # register the agent in kagent (BYO Agent named like the release) when kagent is installed
+  kagent:
+    enabled: true
+    # the relay pod kagent runs in front of the shim
+    resources:
+      requests:
+        cpu: 5m
+        memory: 32Mi
+      limits:
+        memory: 96Mi
+
 # MCP servers added in the UI that log in with OAuth return to
 # https://<route.host>/mcp-oauth/callback instead of localhost, which a hosted agent's
 # browser cannot reach; needs build.enabled and route.host. One login runs at a time

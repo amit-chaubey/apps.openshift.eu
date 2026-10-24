@@ -15,3 +15,23 @@ spec:
   - name: http
     port: {{ .Values.oauthProxy.port }}
     targetPort: ui
+{{- if .Values.a2a.enabled }}
+---
+# the A2A shim; reached by agents of the namespace and the kagent relay
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "openhands.name" . }}-a2a
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: a2a
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "openhands.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: a2a
+    port: 8080
+    targetPort: a2a
+{{- end }}

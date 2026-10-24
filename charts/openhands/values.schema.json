@@ -300,6 +300,60 @@
           "minimum": 60
         }
       }
+    },
+    "a2a": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "description": {
+          "type": "string"
+        },
+        "staticTokenSecret": {
+          "type": "string"
+        },
+        "tenantAuth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "tenant": {
+              "type": "string"
+            },
+            "kubernetesIssuer": {
+              "type": "string"
+            },
+            "oidcIssuers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "resources": {
+          "type": "object"
+        },
+        "kagent": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        }
+      }
     }
   }
 }

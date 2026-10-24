@@ -1,0 +1,37 @@
+{{- $name := include "openhands.name" . }}
+{{- if and .Values.a2a.enabled .Values.a2a.kagent.enabled (.Capabilities.APIVersions.Has "kagent.dev/v1alpha2/Agent") }}
+# kagent runs a BYO agent as its own Deployment on port 8080; that pod relays to the
+# shim, because the agent-server listens on loopback inside this release's pod
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: a2a
+spec:
+  type: BYO
+  description: {{ default "OpenHands coding agent" .Values.a2a.description | quote }}
+  byo:
+    deployment:
+      image: {{ .Values.tokenProxy.image }}
+      cmd: python3
+      args:
+      - /app/a2a-relay.py
+      # an existing account: kagent creates none, so the release's own name stays free
+      serviceAccountName: default
+      env:
+      - name: UPSTREAM
+        value: http://{{ $name }}-a2a.{{ .Release.Namespace }}.svc:8080
+      volumes:
+      - name: scripts
+        configMap:
+          name: {{ $name }}-scripts
+      volumeMounts:
+      - name: scripts
+        mountPath: /app
+        readOnly: true
+      resources:
+        {{- toYaml .Values.a2a.kagent.resources | nindent 8 }}
+{{- end }}
