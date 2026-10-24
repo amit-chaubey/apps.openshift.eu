@@ -287,6 +287,19 @@
           "maximum": 65535
         }
       }
+    },
+    "mcpPublish": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "resync": {
+          "type": "integer",
+          "minimum": 60
+        }
+      }
     }
   }
 }

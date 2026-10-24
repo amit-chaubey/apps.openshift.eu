@@ -152,6 +152,15 @@ mcpDiscovery:
     limits:
       memory: 96Mi
 
+# Remote MCP servers a user adds in the UI become AgentgatewayBackends of the namespace,
+# so the platform publishes them to the whole team. OAuth and in-pod servers stay personal.
+# The ServiceAccount's edit role must cover AgentgatewayBackends
+mcpPublish:
+  enabled: true
+  # seconds between two passes that also compare the stored credentials and retry
+  # refused servers
+  resync: 600
+
 # MCP servers added in the UI that log in with OAuth return to
 # https://<route.host>/mcp-oauth/callback instead of localhost, which a hosted agent's
 # browser cannot reach; needs build.enabled and route.host. One login runs at a time

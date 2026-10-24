@@ -235,7 +235,7 @@ spec:
         securityContext:
           {{- include "openhands.containerSecurityContext" . | nindent 10 }}
       {{- end }}
-      {{- if or .Values.mcpDiscovery.enabled (and .Values.git.host .Values.git.uiSecretName) }}
+      {{- if or .Values.mcpDiscovery.enabled .Values.mcpPublish.enabled (and .Values.git.host .Values.git.uiSecretName) }}
       - name: mcp-sync
         image: {{ .Values.tokenProxy.image }}
         imagePullPolicy: IfNotPresent
@@ -258,6 +258,14 @@ spec:
           value: {{ .Values.gateway.upstream | quote }}
         - name: TOKEN_PROXY_PORT
           value: {{ .Values.tokenProxy.port | quote }}
+        - name: PUBLISH
+          value: {{ .Values.mcpPublish.enabled | quote }}
+        - name: RESYNC
+          value: {{ .Values.mcpPublish.resync | quote }}
+        - name: AGENT
+          value: {{ $name }}
+        - name: MANAGED_SERVERS
+          value: {{ keys (include "openhands.seedMcp" . | fromJson) | sortAlpha | join "," | quote }}
         {{- if and .Values.git.host .Values.git.uiSecretName }}
         - name: GIT_SECRET_NAME
           value: {{ .Values.git.uiSecretName | quote }}
