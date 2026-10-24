@@ -115,6 +115,12 @@ seccompProfile:
 {{- if .Values.gateway.upstream -}}
 {{- $_ := set $llm "base_url" (printf "http://127.0.0.1:%v/v1" .Values.tokenProxy.port) -}}
 {{- $_ := set $llm "api_key" "token-proxy" -}}
+{{- with .Values.llm.connection.name -}}
+{{- $_ := set $llm "connection" (dict "display_name" . "provider" $.Values.llm.connection.provider) -}}
+{{- end -}}
+{{- with .Values.llm.models -}}
+{{- $_ := set $llm "models" . -}}
+{{- end -}}
 {{- end -}}
 {{- with .Values.llm.model -}}
 {{- $_ := set $llm "model" . -}}

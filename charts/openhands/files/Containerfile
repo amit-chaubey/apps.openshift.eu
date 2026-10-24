@@ -1,8 +1,8 @@
 {{- if .Values.build.toolsImage }}
 FROM {{ .Values.build.toolsImage }} AS tools
 USER 0
-# the tools image's binaries, without its own agent; Python and npm tools are reinstalled,
-# so links into their environments stay behind
+# the tools image's binaries, without its own agent (opencode is built for musl); Python and
+# npm tools are reinstalled, so links into their environments stay behind
 RUN set -eu; mkdir -p /export/bin; \
     for f in /usr/local/bin/*; do \
       n=$(basename "$f"); \
@@ -52,7 +52,8 @@ RUN set -eux; \
       [ -e "$d" ] && chgrp -R 0 "$d" && chmod -R g=u "$d"; \
     done; \
     chmod g=u /etc/passwd
-ENV HOME=/home/openhands \
+# Claude Code refuses its Bash tool without SHELL
+ENV HOME=/home/openhands SHELL=/bin/bash \
     PATH=/usr/local/go/bin:/home/openhands/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \
     NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false TERM=xterm

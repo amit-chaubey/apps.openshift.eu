@@ -19,7 +19,7 @@ MARKER = os.path.join(os.environ.get("HOME", "/tmp"), ".openhands", "agent-canva
                       ".seeded-" + os.environ.get("SEED_HASH", "none"))
 
 
-def call(method: str, path: str, body: dict | None = None) -> int:
+def request(method: str, path: str, body: dict | None = None) -> tuple[int, object]:
     req = urllib.request.Request(
         API + path, method=method,
         data=None if body is None else json.dumps(body).encode(),
@@ -27,11 +27,60 @@ def call(method: str, path: str, body: dict | None = None) -> int:
                  "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.status
+            raw = resp.read()
+            return resp.status, json.loads(raw) if raw else None
     except urllib.error.HTTPError as err:
-        return err.code
-    except OSError:
-        return 0
+        return err.code, None
+    except (OSError, ValueError):
+        return 0, None
+
+
+def call(method: str, path: str, body: dict | None = None) -> int:
+    return request(method, path, body)[0]
+
+
+def seed_connection(llm: dict, conn: dict, models: list[str]) -> bool:
+    """Provider connection the LLM settings page lists, one profile per model on it."""
+    status, conns = request("GET", "/api/llm/provider-connections")
+    if status != 200:
+        return False
+    body = {"display_name": conn["display_name"], "provider": conn["provider"],
+            "base_url": llm["base_url"], "api_key": llm["api_key"]}
+    found = [c for c in conns or [] if c.get("display_name") == conn["display_name"]]
+    if found:
+        status = call("PATCH", f"/api/llm/provider-connections/{found[0]['id']}", body)
+    else:
+        status = call("POST", "/api/llm/provider-connections", body)
+    status, conns = request("GET", "/api/llm/provider-connections")
+    found = [c for c in conns or [] if c.get("display_name") == conn["display_name"]]
+    if not found:
+        print("seed: provider connection not written", file=sys.stderr)
+        return False
+    conn_id = found[0]["id"]
+    ok = True
+    names = {}
+    for model in dict.fromkeys([llm.get("model"), *models]):
+        if not model:
+            continue
+        # profile names are path segments; the model keeps its gateway prefix
+        names[model] = model.rsplit("/", 1)[-1]
+        if call("POST", f"/api/profiles/{names[model]}",
+                {"llm": {"model": model, "provider_connection_id": conn_id},
+                 "include_secrets": False}) not in (200, 201):
+            print(f"seed: profile {names[model]} not written", file=sys.stderr)
+            ok = False
+    if llm.get("model") in names:
+        if call("POST", f"/api/profiles/{names[llm['model']]}/activate") != 200:
+            ok = False
+    # the agent-server turns the plain llm settings into a profile "default" without a
+    # connection; the connection's profiles replace it
+    status, listing = request("GET", "/api/profiles")
+    for prof in (listing or {}).get("profiles", []):
+        if (prof.get("name") == "default" and not prof.get("provider_connection_id")
+                and prof.get("base_url") == llm["base_url"]
+                and listing.get("active_profile") != "default"):
+            call("DELETE", "/api/profiles/default")
+    return ok
 
 
 def main() -> None:
@@ -45,7 +94,11 @@ def main() -> None:
         return
     ok = True
     llm = json.loads(os.environ.get("SEED_LLM") or "{}")
+    conn = llm.pop("connection", None)
+    models = llm.pop("models", [])
     if llm and call("PATCH", "/api/settings", {"agent_settings_diff": {"llm": llm}}) != 200:
+        ok = False
+    if conn and llm.get("base_url") and not seed_connection(llm, conn, models):
         ok = False
     for name, server in json.loads(os.environ.get("SEED_MCP") or "{}").items():
         # the agent-server starts stdio servers with a reduced environment

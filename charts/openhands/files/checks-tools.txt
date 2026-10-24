@@ -42,3 +42,4 @@ cosign version
 sonar-scanner --version
 /tools/kubernetes-mcp-server --version
 ansible-galaxy collection list kubernetes.core
+shfmt --version

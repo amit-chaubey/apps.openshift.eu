@@ -20,3 +20,20 @@ dig -v
 java -version
 python3 -c 'import yaml; print("pyyaml", yaml.__version__)'
 pdftotext -v
+rg --version
+xxd -v
+vi --version
+lsof -v
+pstree -V
+ps --version
+ip -V
+ping -V
+traceroute --version
+whois --version
+echo 1+1 | bc
+dos2unix --version
+gpg --version
+iostat -V
+cpio --version
+file --version
+sh -c "test \"\$SHELL\" = /bin/bash && echo SHELL=\$SHELL"

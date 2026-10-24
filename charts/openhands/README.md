@@ -53,6 +53,9 @@ oc extract secret/team-session-api-key --keys=value --to=-
 - `gateway.upstream` (default: empty): OpenAI-compatible model and MCP gateway; the ServiceAccount token is its credential.
 - `gateway.audience` (default: the host of `gateway.upstream`): Audience of that token.
 - `llm.model` (default: empty): Default model in LiteLLM form, for example `openai/<model>`.
+- `llm.models` (default: empty): Further models of the gateway, same form, offered as profiles under **Settings > LLM**.
+- `llm.connection.name` (default: `Gateway`): Provider connection to `gateway.upstream` listed under **Settings > LLM**; it holds `llm.model` (active) and `llm.models` as profiles. Empty: no connection.
+- `llm.connection.provider` (default: `openai`): LiteLLM provider of the gateway's API.
 - `mcpServers` (default: empty): `{name, path, timeout}` per MCP server on `gateway.upstream`.
 - `mcpDiscovery.enabled` (default: true): MCP servers from the project's `RemoteMCPServer` objects; needs the kagent CRDs, does nothing without them.
 - `mcpDiscovery.interval` (default: 60): Seconds between two passes.

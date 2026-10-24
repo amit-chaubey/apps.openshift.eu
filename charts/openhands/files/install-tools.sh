@@ -13,7 +13,9 @@ apt-get install -y --no-install-recommends \
   bash ca-certificates curl git jq make netcat-openbsd openssh-client \
   python3 python3-pip python3-venv python3-yaml tar gzip unzip bzip2 xz-utils zstd \
   awscli tmux ncurses-bin openssl bind9-dnsutils rsync tree less \
-  postgresql-client mariadb-client openjdk-21-jre-headless skopeo poppler-utils
+  postgresql-client mariadb-client openjdk-21-jre-headless skopeo poppler-utils \
+  ripgrep xxd vim-tiny lsof psmisc procps iproute2 iputils-ping traceroute whois \
+  bc dos2unix gnupg sysstat cpio file
 rm -rf /var/lib/apt/lists/*
 
 [ -n "${TOOLS:-}" ] || TOOLS=$(dirname "$0")/tools.txt
