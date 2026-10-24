@@ -27,6 +27,14 @@ hsts:
 secrets:
   # kubernetes: Secrets from the values below. externalSecret: a secret store
   type: kubernetes
+  # with type kubernetes: External Secrets Operator makes nextcloud-credentials and
+  # generates each of its empty passwords once (Password generator)
+  generator:
+    enabled: false
+    # labels and annotations of the generated Secret nextcloud-credentials
+    secretTemplate:
+      labels: {}
+      annotations: {}
   adminUsername: admin
   # password of the first administrator; empty: generated
   adminPassword: ""

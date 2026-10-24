@@ -27,6 +27,7 @@ password:
 | `nextcloud.persistence.nextcloudData.size` | `25Gi` | Space for user files. |
 | `secrets.type` | `kubernetes` | `externalSecret` reads the secrets from a secret store. |
 | `secrets.adminPassword` | empty | Password of the first administrator. Empty: generated. |
+| `secrets.generator.enabled` | `false` | The External Secrets Operator makes `nextcloud-credentials` and generates its empty passwords once. |
 | `smtp.host` | empty | Outgoing mail server. |
 | `global.publicAddress.shared` | `false` | Share one public address between the public Services of the project. See Delivery instructions. |
 | `mailu.enabled` | `true` | Run a Mailu mail server in the same project. Its values are those of the `mailu` chart, under `mailu`. |
@@ -66,6 +67,12 @@ Secrets left empty are generated at the first install and kept on every upgrade 
 Argo CD or `helm template`, cannot read the existing Secrets and generates new values on
 every render: set every secret of an enabled component there. A changed database
 password after the first install stops the database. Use letters and digits only.
+
+With `secrets.generator.enabled` the External Secrets Operator generates the empty
+administrator and database passwords in `nextcloud-credentials` (Password generator,
+`refreshPolicy: CreatedOnce`), so they stay the same under Argo CD as well. Labels and
+annotations for that Secret go in `secrets.generator.secretTemplate`. Uninstalling the
+release deletes the Secret together with its ExternalSecret.
 
 A script configures Nextcloud each time its pod starts: it installs and connects the
 apps of the enabled components (OnlyOffice, push server, whiteboard, Talk, AI) and
