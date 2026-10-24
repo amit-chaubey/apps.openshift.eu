@@ -40,8 +40,18 @@ DISCOVERY = os.environ.get("DISCOVERY", "true") == "true"
 DESCRIPTION_PREFIX = "RemoteMCPServer "
 # icon URL of a server: this annotation on the RemoteMCPServer, else the logo of a known name
 ICON_ANNOTATION = "openhands.dev/icon"
-KNOWN_ICONS = {"atlassian", "confluence", "github", "gitlab", "grafana", "jira", "n8n",
-               "netbox", "notion", "odoo", "qdrant", "sentry", "wordpress"}
+SIMPLE_ICONS = "https://cdn.simpleicons.org/"
+KNOWN_ICONS = {
+    **{n: SIMPLE_ICONS + n for n in (
+        "atlassian", "bitwarden", "confluence", "github", "gitlab", "grafana", "helm", "jira",
+        "kubernetes", "n8n", "nextcloud", "notion", "odoo", "opnsense", "prometheus", "qdrant",
+        "sentry", "vaultwarden", "wordpress")},
+    "kagent-tools": "https://raw.githubusercontent.com/kagent-dev/kagent/main/img/icon-light.svg",
+    "librenms": "https://raw.githubusercontent.com/librenms/librenms/master/html/images/librenms_logo_light.svg",
+    "memory": SIMPLE_ICONS + "qdrant",
+    "netbox": "https://raw.githubusercontent.com/netbox-community/netbox/main/netbox/project-static/img/netbox_icon.svg",
+    "warden": SIMPLE_ICONS + "vaultwarden",
+}
 GIT_SECRET_NAME = os.environ.get("GIT_SECRET_NAME", "")
 PUBLISH = os.environ.get("PUBLISH", "false") == "true"
 AGENT = os.environ.get("AGENT", "")
@@ -300,8 +310,8 @@ def to_server(obj: dict) -> dict | None:
         "timeout": 60,
     }
     icon = (meta.get("annotations") or {}).get(ICON_ANNOTATION)
-    if not icon and meta["name"] in KNOWN_ICONS:
-        icon = f"https://cdn.simpleicons.org/{meta['name']}"
+    if not icon:
+        icon = KNOWN_ICONS.get(meta["name"])
     if icon:
         server["icon"] = icon
     return server

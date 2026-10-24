@@ -125,9 +125,10 @@ llm:
     # LiteLLM provider of the gateway's API
     provider: openai
 
-# MCP servers reached through the token proxy: {name, path, timeout, enabled} with
-# path on gateway.upstream, timeout in seconds (default 60) and enabled (default
-# true), for example {name: public, path: /mcp/public}. Written like llm.model.
+# MCP servers reached through the token proxy: {name, path, timeout, enabled, icon} with
+# path on gateway.upstream, timeout in seconds (default 60), enabled (default true) and
+# icon an image URL for its card, for example {name: public, path: /mcp/public}.
+# Written like llm.model.
 # The agent-server lists all enabled servers within 30 s together: one slow server
 # leaves the agent without any MCP tools
 mcpServers: []

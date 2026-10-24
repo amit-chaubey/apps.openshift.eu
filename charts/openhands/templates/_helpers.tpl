@@ -132,10 +132,12 @@ seccompProfile:
 {{- define "openhands.seedMcp" -}}
 {{- $servers := dict -}}
 {{- range .Values.mcpServers -}}
-{{- $_ := set $servers .name (dict "url" (printf "http://127.0.0.1:%v%s" $.Values.tokenProxy.port .path) "transport" "streamable-http" "timeout" (default 60 .timeout) "enabled" (ne .enabled false)) -}}
+{{- $s := dict "url" (printf "http://127.0.0.1:%v%s" $.Values.tokenProxy.port .path) "transport" "streamable-http" "timeout" (default 60 .timeout) "enabled" (ne .enabled false) -}}
+{{- with .icon }}{{ $_ := set $s "icon" . }}{{ end -}}
+{{- $_ := set $servers .name $s -}}
 {{- end -}}
 {{- if .Values.kubernetesMcpServer.enabled -}}
-{{- $_ := set $servers "kubernetes" (dict "command" "/tools/kubernetes-mcp-server" "args" (list "--config" "/opt/openhands-scripts/kubernetes-mcp-server.toml" "--disable-multi-cluster") "transport" "stdio" "timeout" 60 "passEnv" (list "KUBERNETES_SERVICE_HOST" "KUBERNETES_SERVICE_PORT")) -}}
+{{- $_ := set $servers "kubernetes" (dict "command" "/tools/kubernetes-mcp-server" "args" (list "--config" "/opt/openhands-scripts/kubernetes-mcp-server.toml" "--disable-multi-cluster") "transport" "stdio" "timeout" 60 "icon" "https://cdn.simpleicons.org/kubernetes" "passEnv" (list "KUBERNETES_SERVICE_HOST" "KUBERNETES_SERVICE_PORT")) -}}
 {{- end -}}
 {{- toJson $servers -}}
 {{- end -}}

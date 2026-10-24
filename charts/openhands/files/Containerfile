@@ -25,8 +25,10 @@ COPY --from=tools /tools /tools
 COPY --from=tools /opt/sonar-scanner /opt/sonar-scanner
 COPY --from=tools /usr/share/ansible/collections /usr/share/ansible/collections
 {{- end }}
-COPY install-tools.sh verify-tools.sh tools.txt checks.txt mcp_oauth_redirect.py /tmp/build/
+COPY install-tools.sh verify-tools.sh tools.txt checks.txt mcp_oauth_redirect.py patch-mcp-icons.py /tmp/build/
 RUN sh /tmp/build/install-tools.sh
+# installed MCP server cards show the icon of the server's settings
+RUN python3 /tmp/build/patch-mcp-icons.py
 # arbitrary UID: the home and the passwd file belong to group 0.
 # The frontend listens on loopback, behind the login proxy, so it may embed the session key.
 # The page marks the first-run wizard done: model and MCP come from the agent-server settings.
