@@ -79,9 +79,21 @@ a2a:
   # through the token proxy. Empty: no A2A tools
   peers: []
   # opencode-a2a release with the OpenCode 2.x API (OPENCODE_API_VERSION=v2)
-  version: 2.0.0+hoolia.1
+  version: 2.0.0+hoolia.2
   # pip requirement the adapter image installs; a source archive needs no git
-  package: opencode-a2a @ https://github.com/hoolia/opencode-a2a/archive/refs/tags/v2.0.0%2Bhoolia.1.tar.gz
+  package: opencode-a2a @ https://github.com/hoolia/opencode-a2a/archive/refs/tags/v2.0.0%2Bhoolia.2.tar.gz
+  # Callers of the agent's tenant reach it with their own bearer JWT, next to the static
+  # credentials: a ServiceAccount token from a namespace <tenant> or <tenant>-*, or an
+  # OIDC token whose groups claim holds <tenant> or <tenant>-*. kagent forwards its
+  # caller's token. Needs the adapter version above or later
+  tenantAuth:
+    enabled: true
+    # empty: the release namespace up to its first "-"
+    tenant: ""
+    # the cluster's ServiceAccount token issuer; empty: none
+    kubernetesIssuer: https://kubernetes.default.svc
+    # OIDC issuers, for example https://login.example/realms/<realm>
+    oidcIssuers: []
   # the A2A task store needs SQLite 3.35 or later (RETURNING); UBI 9 ships 3.34
   baseImage: registry.access.redhat.com/ubi10/python-312-minimal
   # prebuilt adapter image; required when builds.enabled is false

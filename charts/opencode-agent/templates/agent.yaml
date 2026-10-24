@@ -71,6 +71,13 @@ spec:
           secretKeyRef:
             name: {{ $name }}-a2a-auth
             key: credentials
+      {{- with include "opencode-agent.a2aTenant" . }}
+      # bearer JWTs of the tenant: kagent forwards its caller's token
+      - name: A2A_TENANT
+        value: {{ . }}
+      - name: A2A_JWT_ISSUERS
+        value: {{ include "opencode-agent.a2aJwtIssuers" $ | quote }}
+      {{- end }}
       # Outbound a2a_call goes through the token proxy, which adds the token
       - name: A2A_CLIENT_ALLOWED_HOSTS
         value: 127.0.0.1

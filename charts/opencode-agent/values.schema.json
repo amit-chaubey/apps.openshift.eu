@@ -5,50 +5,114 @@
     "person": {
       "type": "object",
       "properties": {
-        "name": {"type": "string", "pattern": "^$|^[a-z0-9]([-a-z0-9]{0,40}[a-z0-9])?$"},
-        "email": {"type": "string", "pattern": "^$|^[^@\\s]+@[^@\\s]+$"},
-        "role": {"type": "string"}
+        "name": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9]{0,40}[a-z0-9])?$"
+        },
+        "email": {
+          "type": "string",
+          "pattern": "^$|^[^@\\s]+@[^@\\s]+$"
+        },
+        "role": {
+          "type": "string"
+        }
       }
     },
     "route": {
       "type": "object",
       "properties": {
-        "host": {"type": "string"},
-        "labels": {"type": "object", "additionalProperties": {"type": "string"}},
-        "timeout": {"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"},
-        "annotations": {"type": "object", "additionalProperties": {"type": "string"}}
+        "host": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
       }
     },
     "oauth": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "ownerEmail": {"type": "string", "pattern": "^$|^[^@\\s]+@[^@\\s]+$"},
-        "allowedGroups": {"type": "array", "items": {"type": "string", "minLength": 1}},
-        "loginClusterRole": {"type": "string"}
+        "ownerEmail": {
+          "type": "string",
+          "pattern": "^$|^[^@\\s]+@[^@\\s]+$"
+        },
+        "allowedGroups": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "loginClusterRole": {
+          "type": "string"
+        }
       }
     },
     "secrets": {
       "type": "object",
       "properties": {
-        "type": {"enum": ["kubernetes", "externalSecret"]},
-        "cookieSecret": {"type": "string"},
-        "serverPassword": {"type": "string"},
-        "a2aToken": {"type": "string"},
-        "gitToken": {"type": "string"},
+        "type": {
+          "enum": [
+            "kubernetes",
+            "externalSecret"
+          ]
+        },
+        "cookieSecret": {
+          "type": "string"
+        },
+        "serverPassword": {
+          "type": "string"
+        },
+        "a2aToken": {
+          "type": "string"
+        },
+        "gitToken": {
+          "type": "string"
+        },
         "externalSecret": {
           "type": "object",
           "properties": {
-            "storeKind": {"enum": ["ClusterSecretStore", "SecretStore"]},
-            "storeName": {"type": "string"},
-            "refreshInterval": {"type": "string"},
+            "storeKind": {
+              "enum": [
+                "ClusterSecretStore",
+                "SecretStore"
+              ]
+            },
+            "storeName": {
+              "type": "string"
+            },
+            "refreshInterval": {
+              "type": "string"
+            },
             "items": {
               "type": "object",
               "properties": {
-                "cookieSecret": {"type": "string"},
-                "serverPassword": {"type": "string"},
-                "a2aToken": {"type": "string"},
-                "gitToken": {"type": "string"}
+                "cookieSecret": {
+                  "type": "string"
+                },
+                "serverPassword": {
+                  "type": "string"
+                },
+                "a2aToken": {
+                  "type": "string"
+                },
+                "gitToken": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -58,43 +122,109 @@
     "git": {
       "type": "object",
       "properties": {
-        "url": {"type": "string", "pattern": "^$|^(https?|ssh)://|^[^@]+@[^:]+:"},
-        "branch": {"type": "string", "minLength": 1}
+        "url": {
+          "type": "string",
+          "pattern": "^$|^(https?|ssh)://|^[^@]+@[^:]+:"
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "gateway": {
       "type": "object",
       "properties": {
-        "upstream": {"type": "string", "pattern": "^$|^https?://"},
-        "audience": {"type": "string"}
+        "upstream": {
+          "type": "string",
+          "pattern": "^$|^https?://"
+        },
+        "audience": {
+          "type": "string"
+        }
       }
     },
     "a2a": {
       "type": "object",
       "properties": {
-        "gatewayNamespace": {"type": "string"},
-        "allowedHosts": {"type": "array", "items": {"type": "string"}},
-        "publicUrl": {"type": "string", "pattern": "^$|^https?://"},
-        "version": {"type": "string", "minLength": 1},
-        "package": {"type": "string", "minLength": 1},
-        "baseImage": {"type": "string", "minLength": 1},
-        "image": {"type": "string"},
-        "resources": {"type": "object"},
+        "gatewayNamespace": {
+          "type": "string"
+        },
+        "allowedHosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "publicUrl": {
+          "type": "string",
+          "pattern": "^$|^https?://"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "package": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseImage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "image": {
+          "type": "string"
+        },
+        "resources": {
+          "type": "object"
+        },
         "peers": {
           "type": "array",
           "items": {
             "oneOf": [
-              {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"},
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+              },
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["name"],
+                "required": [
+                  "name"
+                ],
                 "properties": {
-                  "name": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"},
-                  "namespace": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"}
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+                  }
                 }
               }
             ]
+          }
+        },
+        "tenantAuth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "tenant": {
+              "type": "string"
+            },
+            "kubernetesIssuer": {
+              "type": "string"
+            },
+            "oidcIssuers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       }
@@ -102,79 +232,176 @@
     "opencode": {
       "type": "object",
       "properties": {
-        "version": {"type": "string", "minLength": 1},
-        "baseImage": {"type": "string", "minLength": 1},
-        "image": {"type": "string"},
-        "plugins": {"type": "array", "items": {"type": "string"}},
-        "npmScopes": {"type": "object", "additionalProperties": {"type": "string"}},
-        "disabledProviders": {"type": "array", "items": {"type": "string"}},
-        "env": {"type": "object"},
-        "config": {"type": "object"},
-        "resources": {"type": "object"}
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseImage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "image": {
+          "type": "string"
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "npmScopes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "disabledProviders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object"
+        },
+        "config": {
+          "type": "object"
+        },
+        "resources": {
+          "type": "object"
+        }
       }
     },
     "tools": {
       "type": "object",
       "properties": {
-        "goImage": {"type": "string", "minLength": 1},
-        "odfRepository": {"type": "string", "pattern": "^https://"}
+        "goImage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "odfRepository": {
+          "type": "string",
+          "pattern": "^https://"
+        }
       }
     },
     "kubernetesMcpServer": {
       "type": "object",
-      "properties": {"image": {"type": "string", "minLength": 1}}
+      "properties": {
+        "image": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "builds": {
       "type": "object",
       "properties": {
-        "enabled": {"type": "boolean"},
-        "registry": {"type": "string", "minLength": 1},
-        "resources": {"type": "object"},
-        "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}}
+        "enabled": {
+          "type": "boolean"
+        },
+        "registry": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resources": {
+          "type": "object"
+        },
+        "nodeSelector": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
       }
     },
-    "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}},
-    "affinity": {"type": "object"},
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "affinity": {
+      "type": "object"
+    },
     "oauthProxy": {
       "type": "object",
       "properties": {
-        "image": {"type": "string", "minLength": 1},
-        "port": {"type": "integer"},
-        "resources": {"type": "object"}
+        "image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer"
+        },
+        "resources": {
+          "type": "object"
+        }
       }
     },
     "uiProxy": {
       "type": "object",
       "properties": {
-        "port": {"type": "integer"},
-        "resources": {"type": "object"}
+        "port": {
+          "type": "integer"
+        },
+        "resources": {
+          "type": "object"
+        }
       }
     },
     "tokenProxy": {
       "type": "object",
       "properties": {
-        "image": {"type": "string", "minLength": 1},
-        "port": {"type": "integer"},
-        "resources": {"type": "object"}
+        "image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer"
+        },
+        "resources": {
+          "type": "object"
+        }
       }
     },
     "serviceAccount": {
       "type": "object",
-      "properties": {"name": {"type": "string"}}
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
     },
     "storage": {
       "type": "object",
       "properties": {
-        "size": {"type": "string", "minLength": 1},
-        "accessMode": {"enum": ["ReadWriteMany"]},
-        "className": {"type": "string"}
+        "size": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accessMode": {
+          "enum": [
+            "ReadWriteMany"
+          ]
+        },
+        "className": {
+          "type": "string"
+        }
       }
     },
     "networkPolicy": {
       "type": "object",
       "properties": {
-        "enabled": {"type": "boolean"},
-        "a2aNamespaces": {"type": "array", "items": {"type": "string"}}
+        "enabled": {
+          "type": "boolean"
+        },
+        "a2aNamespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     }
   }
