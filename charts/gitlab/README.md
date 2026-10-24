@@ -33,6 +33,8 @@ about ten minutes. Log in as `root` with:
 | `secrets.rootPassword` | empty | Password of `root` at the first start. Empty: generated. |
 | `secrets.valkeyPassword` | empty | Password of the cache. Empty: generated once and kept. |
 | `gitlab.extraValues` | empty | Values merged over the ones given to the GitLab chart. |
+| `mcp.annotations` | MCP path and target name | Annotations on the GitLab Service for MCP gateways that discover MCP servers (GitLab serves MCP at `/api/v4/mcp`). |
+| `mcp.labels` | empty | Labels on the GitLab Service, for example the one a tenant-wide MCP endpoint selects. |
 
 The default requests add up to about 0.9 CPU and 4.7Gi of memory; the database
 migration at install and upgrade adds 0.25 CPU and 200Mi for a few minutes.

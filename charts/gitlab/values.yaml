@@ -35,6 +35,16 @@ gitlab:
   # merged over the values this chart gives the GitLab chart
   extraValues: {}
 
+# Metadata on the GitLab Service (gitlab-webservice-default) for MCP gateways that
+# discover MCP servers; GitLab serves its MCP server at /api/v4/mcp. The port carries no
+# MCP appProtocol, so no gateway uses it until one selects the Service
+mcp:
+  annotations:
+    agentgateway.dev/mcp-path: /api/v4/mcp
+    agentgateway.dev/mcp-target-name: gitlab
+  # for example the label a tenant-wide MCP endpoint selects
+  labels: {}
+
 # empty: the default StorageClass of the cluster
 storageClassName: ""
 
