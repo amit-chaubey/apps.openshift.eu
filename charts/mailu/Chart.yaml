@@ -2,7 +2,7 @@ apiVersion: v2
 name: mailu
 description: Mail server with SMTP, IMAP, webmail, spam filter and admin interface
 type: application
-version: 0.1.6
+version: 0.1.7
 appVersion: "2024.06.46"
 home: https://apps.openshift.eu
 icon: https://mailu.io/master/_images/logo.png

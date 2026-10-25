@@ -73,6 +73,8 @@ networkPolicy:
 # ServiceMonitors, alert rules and the NetworkPolicy for the scraper
 monitoring:
   enabled: false
+  # alert rules next to the ServiceMonitors; false where the platform alerts centrally
+  alerts: true
   # label of the namespaces that may scrape
   namespaceLabels:
     network.openshift.io/policy-group: monitoring
@@ -93,8 +95,8 @@ imapsync:
   replicaCount: 1
   image:
     repository: gilleslamiral/imapsync
-    tag: latest
-    pullPolicy: Always
+    tag: "2.326"
+    pullPolicy: IfNotPresent
   nginx:
     image:
       repository: nginxinc/nginx-unprivileged

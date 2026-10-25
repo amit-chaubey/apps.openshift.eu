@@ -46,6 +46,7 @@ Read the webmail address and the password of the first account (`admin@<domain>`
 | `route.hostname` | empty | Hostname of webmail. Empty: OpenShift assigns one. |
 | `certificate.enabled` | `false` | Request a certificate for `upstream.hostnames` from `certificate.issuerName`. |
 | `monitoring.enabled` | `false` | ServiceMonitors and alert rules. Needs the right to create them. |
+| `monitoring.alerts` | `true` | `false` keeps the ServiceMonitors and leaves out the alert rules, for a platform that alerts centrally. |
 | `imapsync.enabled` | `false` | Page to copy mailboxes from another mail server. |
 
 Web access goes through the Route: the router ends TLS and sends plain HTTP to the mail
