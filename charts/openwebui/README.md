@@ -16,7 +16,7 @@ Choices:
 
 - Signup is off and the first user is the admin: the owner, the only email the proxy admits.
 - Chats, uploads, settings (SQLite) and the embedding model cache live on one volume. The Deployment uses `strategy: Recreate`, so the old pod stops before the new one starts and the volume can be ReadWriteOnce.
-- Ollama, telemetry and the version check are off.
+- Ollama, telemetry and the version check are off. The local embedding model encodes 64 chunks per batch.
 - With `openwebui.persistentConfig` (default true), settings the owner changes in the admin panel survive restarts and win over the values of this chart after the first start.
 
 ## Install
@@ -49,6 +49,9 @@ oc get route sam-openwebui -o jsonpath='https://{.spec.host}{"\n"}'
 - `serviceAccount.labels` (default: empty): Labels on the instance's ServiceAccount, for example the one a platform uses to register it as a client of that realm.
 - `openwebui.image` (default: `ghcr.io/open-webui/open-webui:v0.12.3`), `openwebui.title` (default: empty), `openwebui.persistentConfig` (default: true).
 - `openwebui.env` (default: empty): Extra Open WebUI environment variables, name to value; they override the chart's.
+- `openwebui.memberTools` (default: false): Users, not only admins, may write their own tools, which run as Python in the pod, and connect tool servers from their browser.
+- `qdrant.url` (default: empty): HTTP address of a Qdrant in reach of the pod, for example `http://qdrant-qdrant:6333` for chart `qdrant` with release `qdrant` in the same project. Empty: document vectors stay in the built-in store on the data volume.
+- `qdrant.apiKeySecret.name` (default: empty), `qdrant.apiKeySecret.key` (default: `api-key`): Secret with the key of that Qdrant; for chart `qdrant` it is `<release>-qdrant-api-key`. Empty name: no key is sent.
 - `openwebui.resources` (default: 100m CPU and 2Gi requested, 4 CPU and 16Gi limit).
 - `secrets.cookieSecret`, `secrets.secretKey` (default: empty): Login cookie key and Open WebUI session key, generated once and kept on upgrade.
 - `secrets.type` (default: kubernetes): `externalSecret` reads both from a secret store.

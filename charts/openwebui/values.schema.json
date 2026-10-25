@@ -144,8 +144,34 @@
             ]
           }
         },
+        "memberTools": {
+          "type": "boolean"
+        },
         "resources": {
           "type": "object"
+        }
+      }
+    },
+    "qdrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^$|^https?://[^\\s]+$"
+        },
+        "apiKeySecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       }
     },

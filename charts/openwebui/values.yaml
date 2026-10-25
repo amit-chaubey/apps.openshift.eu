@@ -67,6 +67,9 @@ openwebui:
   persistentConfig: true
   # extra environment (name: value), see the Open WebUI environment reference
   env: {}
+  # true: users, not only admins, may write tools (Python in this pod) and connect tool
+  # servers from their browser
+  memberTools: false
   # requests and limits; the first start loads a local embedding model
   resources:
     requests:
@@ -75,6 +78,16 @@ openwebui:
     limits:
       cpu: "4"
       memory: 16Gi
+
+qdrant:
+  # HTTP address of a Qdrant for document vectors, for example http://qdrant-qdrant:6333.
+  # Empty: the built-in store on the data volume
+  url: ""
+  # Secret with the API key of that Qdrant, as chart qdrant makes it
+  # (<release>-qdrant-api-key). Empty name: no key is sent
+  apiKeySecret:
+    name: ""
+    key: api-key
 
 mcp:
   # MCP endpoints of the gateway (<upstream>/mcp/<endpoint>) as tool servers for every

@@ -20,7 +20,16 @@
   "DO_NOT_TRACK" "true"
   "ANONYMIZED_TELEMETRY" "false"
   "ENABLE_VERSION_UPDATE_CHECK" "false"
+  "RAG_EMBEDDING_BATCH_SIZE" "64"
 -}}
+{{- if .Values.openwebui.memberTools }}
+{{- $_ := set $env "USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS" "true" }}
+{{- $_ := set $env "USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS" "true" }}
+{{- end }}
+{{- with .Values.qdrant.url }}
+{{- $_ := set $env "VECTOR_DB" "qdrant" }}
+{{- $_ := set $env "QDRANT_URI" . }}
+{{- end }}
 {{- with .Values.route.host }}
 {{- $_ := set $env "WEBUI_URL" (printf "https://%s" .) }}
 {{- end }}
@@ -133,6 +142,13 @@ spec:
             secretKeyRef:
               name: {{ $name }}-secret-key
               key: secret-key
+        {{- if and .Values.qdrant.url .Values.qdrant.apiKeySecret.name }}
+        - name: QDRANT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.qdrant.apiKeySecret.name }}
+              key: {{ .Values.qdrant.apiKeySecret.key }}
+        {{- end }}
         {{- if .Values.mcp.enabled }}
         - name: TOOL_SERVER_CONNECTIONS
           value: {{ include "openwebui.toolServers" . | quote }}

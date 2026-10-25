@@ -111,6 +111,23 @@ check "login binding" '[s["name"] for s in obj("RoleBinding", "sam-openwebui-log
 OUT=$(render "${BASE[@]}" --set oauth.ownerEmail=Owner@example.org)
 check "owner override" 'obj("ConfigMap")["data"]["emails.txt"].split() == ["Owner@example.org"]'
 
+# member tools: admins only unless switched on
+OUT=$(render "${BASE[@]}")
+check "member tools off" '"USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS" not in env("openwebui") and "USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS" not in env("openwebui")'
+OUT=$(render "${BASE[@]}" --set openwebui.memberTools=true)
+check "member tools on" 'env("openwebui")["USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS"] == "true" and env("openwebui")["USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS"] == "true"'
+
+# vectors: built-in store unless a Qdrant address is given
+OUT=$(render "${BASE[@]}")
+check "builtin vectors" '"VECTOR_DB" not in env("openwebui") and "QDRANT_URI" not in env("openwebui") and env("openwebui")["RAG_EMBEDDING_BATCH_SIZE"] == "64"'
+OUT=$(render "${BASE[@]}" --set qdrant.url=http://qdrant-qdrant:6333)
+check qdrant 'env("openwebui")["VECTOR_DB"] == "qdrant" and env("openwebui")["QDRANT_URI"] == "http://qdrant-qdrant:6333"'
+check "qdrant no key" '"QDRANT_API_KEY" not in [e["name"] for e in ctr("openwebui")["env"]]'
+OUT=$(render "${BASE[@]}" --set qdrant.url=http://qdrant-qdrant:6333 --set qdrant.apiKeySecret.name=qdrant-qdrant-api-key)
+check "qdrant key ref" 'envref("openwebui", "QDRANT_API_KEY") == {"name": "qdrant-qdrant-api-key", "key": "api-key"} and len({e["name"] for e in ctr("openwebui")["env"]}) == len(ctr("openwebui")["env"])'
+OUT=$(render "${BASE[@]}" --set qdrant.apiKeySecret.name=qdrant-qdrant-api-key)
+check "key without qdrant" '"QDRANT_API_KEY" not in [e["name"] for e in ctr("openwebui")["env"]]'
+
 OUT=$(render "${BASE[@]}" --set openwebui.title=Chat --set openwebui.persistentConfig=false --set openwebui.env.ENABLE_SIGNUP=true --set openwebui.env.RAG_TOP_K=5)
 check "env override" 'env("openwebui")["WEBUI_NAME"] == "Chat" and env("openwebui")["ENABLE_PERSISTENT_CONFIG"] == "false" and env("openwebui")["ENABLE_SIGNUP"] == "true" and env("openwebui")["RAG_TOP_K"] == "5" and len({e["name"] for e in ctr("openwebui")["env"]}) == len(ctr("openwebui")["env"])'
 
@@ -134,7 +151,7 @@ has "required storeName" "secrets.externalSecret.storeName is required"
 
 # invalid values fail the render
 NL=$'a@example.org\nb@example.org'
-for v in route.timeout=1d oauth.ownerEmail=owner person.email=sam "person.email=$NL" storage.accessMode=ReadWriteOncePod person.name=Sam openwebui.foo=bar secrets.type=vault; do
+for v in route.timeout=1d oauth.ownerEmail=owner person.email=sam "person.email=$NL" storage.accessMode=ReadWriteOncePod person.name=Sam openwebui.foo=bar secrets.type=vault qdrant.url=qdrant-qdrant:6333 qdrant.foo=bar openwebui.memberTools=yes; do
   if helm template t "$C" --namespace test "${BASE[@]}" --set-string "$v" >/dev/null 2>&1; then
     echo "FAIL invalid value accepted: ${v%%=*}"; fail=1
   fi
