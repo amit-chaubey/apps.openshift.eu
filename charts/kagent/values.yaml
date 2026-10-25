@@ -20,6 +20,20 @@ login:
   oidc:
     # client id at the OIDC provider, written into the Secret kagent-oidc
     clientId: ""
+    # the login client as an EDP KeycloakClient in the release namespace, with the
+    # client secret of the Secret kagent-oidc; needs the EDP Keycloak operator and a
+    # realm the namespace may use (a tenant's clientId starts with <tenant>-)
+    keycloakClient:
+      create: false
+      realmRef:
+        kind: ClusterKeycloakRealm
+        name: public
+      defaultClientScopes:
+      - basic
+      - email
+      - profile
+      - roles
+      - web-origins
   # ClusterRole holding the verb login on services/proxy that allowedGroups are bound
   # to. Empty: the chart's own Role, which only an installer holding that verb (a
   # cluster admin) can create

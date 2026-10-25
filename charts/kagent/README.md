@@ -33,6 +33,7 @@ With Argo CD, set the namespace from the destination: `spec.source.helm.paramete
 - `route.host` (default: empty): Hostname. Empty: OpenShift assigns one. Set it at install; a tenant cannot change the hostname of an existing Route.
 - `route.labels`, `route.timeout` (default: empty, 3600s), `route.annotations` (default: cert-manager issuer, used when `route.host` is set).
 - `login.provider` (default: openshift): `openshift` or `oidc`, see Purpose.
+- `login.oidc.keycloakClient.create` (default: false): also write the login client as an EDP `KeycloakClient` in the release namespace (realm `login.oidc.keycloakClient.realmRef`, clientId `login.oidc.clientId`, redirect `https://<route.host>/oauth2/callback`, client secret from `kagent-oidc`). On a shared realm a tenant's clientId starts with `<tenant>-`.
 - `login.allowedGroups` (default: empty): OpenShift groups admitted. Only their members log in: the chart grants them the verb `login` on `services/proxy` of the login Service, which `admin` and `edit` do not hold. Empty: everyone who may edit the project.
 - `login.loginClusterRole` (default: empty): ClusterRole holding the verb `login` on `services/proxy`; `login.allowedGroups` are bound to it instead of to the chart's own Role. An installer without that permission (a project admin, the project's Argo CD) needs this value.
 - `login.image` (default: `openshift/oauth-proxy:v4.4` from the cluster registry), `login.port` (default: 4180), `login.resources`.
