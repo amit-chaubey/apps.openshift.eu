@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Keep the agent-server MCP servers in step with the namespace's RemoteMCPServers.
 
-Every interval it lists the kagent RemoteMCPServers of the pod's namespace and writes
-one MCP server per object: a URL on gateway.upstream goes through the token proxy, any
+Every interval it lists the OpenShift Projects the pod's ServiceAccount may see and the
+kagent RemoteMCPServers in each (a namespace that refuses the list is skipped, so
+Kubernetes RBAC decides what the agent sees), and writes one MCP server per object: a URL on gateway.upstream goes through the token proxy, any
 other URL is used as is, except when the object needs headers from a Secret. Entries
-it wrote carry DESCRIPTION_PREFIX; those whose object is gone are removed, a same-named
+it wrote carry DESCRIPTION_PREFIX; a name that occurs in two namespaces becomes
+<namespace>-<name> for the other namespace; those whose object is gone are removed, a same-named
 entry the user added wins, and the user's enabled switch is kept. Without the kagent
 CRDs it writes nothing. It also writes GIT_SECRET_NAME into the secrets store, which
 turns on the UI's git provider features. Never exits on an error.
@@ -113,6 +115,23 @@ def remote_mcp_servers(namespace: str) -> list[dict] | None:
     except (OSError, ValueError) as err:
         log(f"listing RemoteMCPServers: {err}")
         return None
+
+
+def visible_servers(namespace: str) -> list[dict]:
+    """RemoteMCPServers of the other Projects the ServiceAccount may see and list."""
+    status, projects = kube("GET", "/apis/project.openshift.io/v1/projects")
+    if status != 200:
+        return []
+    query = "?labelSelector=" + urllib.parse.quote(SELECTOR) if SELECTOR else ""
+    found = []
+    for project in projects.get("items", []):
+        ns = project["metadata"]["name"]
+        if ns == namespace:
+            continue
+        status, listed = kube("GET", f"/apis/kagent.dev/v1alpha2/namespaces/{ns}/remotemcpservers{query}")
+        if status == 200:
+            found.extend(listed.get("items", []))
+    return found
 
 
 def kube(method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
@@ -322,16 +341,20 @@ def sync(namespace: str, current: dict) -> None:
     objects = remote_mcp_servers(namespace)
     if objects is None:
         return
+    # this agent's own UI entries already reach the servers it published
+    objects = [o for o in objects if o["metadata"]["name"] not in OWN]
+    own_names = {o["metadata"]["name"] for o in objects}
     wanted = {}
-    for obj in objects:
-        if obj["metadata"]["name"] in OWN:
-            # this agent's own UI entry already reaches it directly
-            continue
+    for obj in objects + visible_servers(namespace):
+        meta = obj["metadata"]
+        key = meta["name"]
+        if meta["namespace"] != namespace and key in own_names | set(wanted):
+            key = f"{meta['namespace']}-{meta['name']}"
         server = to_server(obj)
         if server is None:
-            log(f"skipped {obj['metadata']['name']}: needs headers from a Secret")
+            log(f"skipped {meta['namespace']}/{meta['name']}: needs headers from a Secret")
         else:
-            wanted[obj["metadata"]["name"]] = server
+            wanted[key] = server
     for name, server in wanted.items():
         have = current.get(name)
         if have is None:
