@@ -50,6 +50,18 @@ With Argo CD, set the namespace from the destination: `spec.source.helm.paramete
 - `upstream.providers` (default: upstream OpenAI with Secret `kagent-openai`): The default model. Create the API key Secret, or point `upstream.providers.openAI.config.baseUrl` at an OpenAI-compatible gateway.
 - `upstream.controller.env` (default: empty): Extra controller environment, for example `WATCH_NAMESPACES` from a pod annotation the platform writes.
 
+### Tenant realm or shared realm
+
+The login goes to the tenant's own Keycloak realm when the tenant has one, otherwise to the shared realm. The platform decides, not the chart: the tenant's Application sets three values to the same realm.
+
+| Value | Tenant with its own realm (grncloud, realm `grn.cloud`) | Tenant on the shared realm (realm `public`) |
+|---|---|---|
+| `upstream.oauth2-proxy.extraEnv` `OIDC_ISSUER_URL` | `https://<keycloak>/realms/grn.cloud` | `https://<keycloak>/realms/public` |
+| `login.oidc.keycloakClient` | `create: true`, `realmRef` the tenant's `ClusterKeycloakRealm`: the tenant owns its login client | `create: false`: the platform writes the client in the shared realm, tenants cannot |
+| `extraArgs.allowed-group` | the tenant's groups, for example `grncloud-admins,grncloud-engineering` | the same groups |
+
+Either way the claim `groups` holds the tenant's groups with the tenant prefix: in a tenant realm the client scope `tenant-groups` emits its realm roles behind the prefix (`admins` as `grncloud-admins`); in the shared realm a person brokered from the tenant realm carries the same names as realm roles. Downstream checks (`allowed-group`, agents' tenant token check) therefore see one shape; add the tenant realm's issuer to the agents' `a2a.tenantAuth.oidcIssuers`.
+
 ### Who gets in
 
 kagent itself checks nobody: in `trusted-proxy` mode the controller decodes the caller's JWT without verifying it and its authorizer allows every request. The login proxy and the NetworkPolicies are the boundary, and inside it everyone may do everything:

@@ -2,7 +2,7 @@ apiVersion: v2
 name: kagent
 description: kagent agent controller and UI for one tenant behind the OpenShift login; the platform kagent-operator provides the CRDs and the access to team namespaces
 type: application
-version: 0.5.0
+version: 0.5.1
 appVersion: 0.10.4
 home: https://apps.openshift.eu
 icon: https://raw.githubusercontent.com/kagent-dev/kagent/main/img/icon-light.svg
