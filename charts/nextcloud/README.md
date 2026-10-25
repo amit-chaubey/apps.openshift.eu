@@ -33,7 +33,7 @@ password:
 | `hsts.enabled` | `true` | Send the Strict-Transport-Security header `hsts.header` on every hostname of this chart. |
 | `settings.maintenanceWindowStart` | `1` | Hour (UTC) at which the heavy daily jobs start. Empty: not set. |
 | `settings.defaultPhoneRegion` | empty | Country code for phone numbers without one, such as `NL`. Empty: not set. |
-| `settings.repairOnUpgrade` | `true` | Once per Nextcloud version: add missing database indices and run the expensive repair steps. |
+| `settings.repairOnUpgrade` | `true` | Once per Nextcloud version: update the store apps (a major upgrade disables apps without a compatible release), add missing database indices and run the expensive repair steps. |
 | `settings.setupTimeout` | `300` | Seconds the setup script may take at a start. A step that fails or does not finish is skipped and logged as `setup: skipped`; it runs again at the next start. |
 | `cache.enabled` | `true` | Redis for file locking and cache. Always runs when notify_push, the whiteboard or the worker is on. |
 | `notifyPush.enabled` | `true` | Push server for the desktop and mobile clients, under `/push`. |
@@ -100,6 +100,21 @@ Nextcloud and the worker:
     oc rollout restart deployment/nextcloud-taskprocessing
 
 The second command applies only with `ai.enabled` or `taskprocessing.enabled`.
+
+## Nextcloud versions
+
+Nextcloud upgrades one major version at a time and never downgrades. Each chart release
+that changes the major version moves exactly one major further, so an instance upgrades by
+taking every such release in order:
+
+| Chart | Nextcloud |
+|---|---|
+| 0.1.0 to 0.7.0 | 33 |
+| 0.8.0 | 34 |
+
+An instance that skips a release with a new major does not start: the image refuses the
+jump (`It is only possible to upgrade one major version at a time`) and leaves the data
+untouched. Install the skipped release first. A new install starts at the latest release.
 
 ## Delivery instructions
 

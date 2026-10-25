@@ -14,7 +14,7 @@ settings:
   maintenanceWindowStart: 1
   # country code for phone numbers without one, such as NL; empty: not set
   defaultPhoneRegion: ""
-  # once per version: missing database indices and expensive repair steps
+  # once per version: app updates, missing database indices and expensive repair steps
   repairOnUpgrade: true
   # seconds the setup script may take; the steps left over wait for a restart
   setupTimeout: 300
@@ -379,7 +379,7 @@ nextcloud:
     app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"StatefulSet","name":"nextcloud-mariadb"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-redis"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-imaginary"},{"apiVersion":"apps/v1","kind":"Deployment","name":"onlyoffice"},{"apiVersion":"apps/v1","kind":"Deployment","name":"nextcloud-signaling"},{"apiVersion":"apps/v1","kind":"Deployment","name":"mailu-front"}]'
   image:
     flavor: apache
-    tag: 33.0.10-apache@sha256:ca04a99f5a081030dd6c494bdfbb1cbc2bf3e2e10c0f9fcdc3be031ac3803f77
+    tag: 34.0.5-apache@sha256:1f9212adecae32010cdbf137d7e0db78d08c696dc3e77f1eddcbf902d10209b4
   replicaCount: 1
   nextcloud:
     host: nextcloud.example.org
