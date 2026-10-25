@@ -4,11 +4,13 @@
 Runs as the postStart hook once per change of those values (SEED_HASH); a later
 edit in the UI is kept until the values change again. SEED_LLM is a JSON llm
 diff, SEED_MCP a JSON map of server name to MCP server settings, where passEnv
-names pod environment variables to hand to a stdio server. Always exits 0
+names pod environment variables to hand to a stdio server. With gatewayModels,
+profiles for new gateway models are added on every start. Always exits 0
 so a failed seed never kills the container.
 """
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -95,23 +97,68 @@ def seed_connection(llm: dict, conn: dict, models: list[str]) -> bool:
     return ok
 
 
-def main() -> None:
-    if os.path.exists(MARKER):
+def gateway_models(llm: dict, conn: dict) -> list[str]:
+    """Every model the gateway lists, in the form of llm.model (provider prefix)."""
+    req = urllib.request.Request(llm["base_url"].rstrip("/") + "/models",
+                                 headers={"Authorization": "Bearer " + llm.get("api_key", "")})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            listing = json.loads(resp.read())
+    except (OSError, ValueError) as exc:
+        print(f"seed: gateway models not listed: {exc}", file=sys.stderr)
+        return []
+    return [f"{conn['provider']}/{m['id']}" for m in listing.get("data", []) if m.get("id")]
+
+
+def add_gateway_profiles(llm: dict, conn: dict) -> None:
+    """Profiles for gateway models that have none yet; existing profiles stay as edited."""
+    status, conns = request("GET", "/api/llm/provider-connections")
+    found = [c for c in conns or [] if c.get("display_name") == conn["display_name"]]
+    status, listing = request("GET", "/api/profiles")
+    if not found or status != 200:
         return
+    profiles = (listing or {}).get("profiles", [])
+    taken = {p.get("name") for p in profiles}
+    known = {p.get("model") for p in profiles}
+    for model in gateway_models(llm, conn):
+        if model in known:
+            continue
+        # profile names allow letters, digits, dot, dash and underscore only
+        name = re.sub(r"[^A-Za-z0-9._-]", "-", model.rsplit("/", 1)[-1])
+        if name in taken:
+            name = re.sub(r"[^A-Za-z0-9._-]", "-", model.split("/", 1)[-1])
+        if name in taken:
+            continue
+        if call("POST", f"/api/profiles/{name}",
+                {"llm": {"model": model, "provider_connection_id": found[0]["id"]},
+                 "include_secrets": False}) in (200, 201):
+            taken.add(name)
+        else:
+            print(f"seed: profile {name} not written", file=sys.stderr)
+
+
+def main() -> None:
     for _ in range(120):
         if call("GET", "/alive") == 200:
             break
         time.sleep(2)
     else:
         return
-    ok = True
     llm = json.loads(os.environ.get("SEED_LLM") or "{}")
     conn = llm.pop("connection", None)
     models = llm.pop("models", [])
+    every = llm.pop("gatewayModels", False)
+    if os.path.exists(MARKER):
+        if every and conn and llm.get("base_url"):
+            add_gateway_profiles(llm, conn)
+        return
+    ok = True
     if llm and call("PATCH", "/api/settings", {"agent_settings_diff": {"llm": llm}}) != 200:
         ok = False
     if conn and llm.get("base_url") and not seed_connection(llm, conn, models):
         ok = False
+    if every and conn and llm.get("base_url"):
+        add_gateway_profiles(llm, conn)
     for name, server in json.loads(os.environ.get("SEED_MCP") or "{}").items():
         # the agent-server starts stdio servers with a reduced environment
         pass_env = server.pop("passEnv", [])

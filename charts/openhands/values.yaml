@@ -132,6 +132,9 @@ llm:
   model: ""
   # further models of the gateway offered under Settings > LLM, same form as model
   models: []
+  # true: also a profile for every model the gateway lists at /v1/models, added at
+  # each pod start; profiles that exist are left as they are
+  gatewayModels: true
   # provider connection to gateway.upstream listed under Settings > LLM, holding
   # llm.model and llm.models as profiles. Empty name: no connection
   connection:

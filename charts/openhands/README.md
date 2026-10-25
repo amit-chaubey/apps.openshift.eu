@@ -58,6 +58,7 @@ oc extract secret/team-session-api-key --keys=value --to=-
 - `serviceAccount.labels` (default: empty): Labels on the agent's ServiceAccount, for example the one a platform uses to register it as a client of that realm.
 - `llm.model` (default: empty): Default model in LiteLLM form, for example `openai/<model>`.
 - `llm.models` (default: empty): Further models of the gateway, same form, offered as profiles under **Settings > LLM**.
+- `llm.gatewayModels` (default: `true`): Also a profile for every model the gateway lists at `/v1/models`, added at each pod start. A profile that exists is left as it is.
 - `llm.connection.name` (default: `Gateway`): Provider connection to `gateway.upstream` listed under **Settings > LLM**; it holds `llm.model` (active) and `llm.models` as profiles. Empty: no connection.
 - `llm.connection.provider` (default: `openai`): LiteLLM provider of the gateway's API.
 - `skills.marketplaces` (default: empty): Skill marketplaces in Claude Code or OpenHands plugin format, `{name, source, ref, repoPath, autoLoad}` with `source` `github:<owner>/<repo>`; they replace the marketplaces registered in the UI.

@@ -121,6 +121,9 @@ seccompProfile:
 {{- with .Values.llm.models -}}
 {{- $_ := set $llm "models" . -}}
 {{- end -}}
+{{- if .Values.llm.gatewayModels -}}
+{{- $_ := set $llm "gatewayModels" true -}}
+{{- end -}}
 {{- end -}}
 {{- with .Values.llm.model -}}
 {{- $_ := set $llm "model" . -}}
