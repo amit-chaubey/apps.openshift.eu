@@ -291,20 +291,44 @@ class AgentTokenTest(ProxyCase):
         self.assertEqual(self.upstream.requests, [])
         self.assertNotIn("sa-for-the-realm", body + "".join(logs.output))
 
+    def test_via_the_tenant_realm_its_token_is_the_assertion(self):
+        self.tenant_endpoint = FakeTokenEndpoint()
+        self.start_token_endpoint()
+        self.proxy.shutdown()
+        self.proxy.server_close()
+        self.settings = tp.Settings(
+            token_file=self.token_file, upstream=self.upstream.url, port=0,
+            agent_token_url=self.token_endpoint.url, agent_token_assertion_file=self.assertion_file,
+            agent_token_paths=("/mcp",), agent_token_via_url=self.tenant_endpoint.url)
+        self.proxy = tp.build_server(self.settings, port=0)
+        threading.Thread(target=self.proxy.serve_forever, daemon=True).start()
+        self.addCleanup(self.proxy.server_close)
+        self.port = self.proxy.server_port
+        for _ in range(2):
+            _, resp = self.get("/mcp/grncloud-engineering/gitlab")
+            resp.read()
+        self.proxy.shutdown()
+        self.assertEqual(self.tenant_endpoint.forms[0]["client_assertion"], "sa-for-the-realm")
+        self.assertEqual(self.token_endpoint.forms[0]["client_assertion"], "kc-1")
+        self.assertEqual(len(self.tenant_endpoint.forms), 1)
+        self.assertEqual(len(self.token_endpoint.forms), 1)
+        self.assertEqual(self.upstream.requests[0][2]["Authorization"], "Bearer kc-1")
+
     def test_without_agent_token_settings_mcp_keeps_the_serviceaccount_token(self):
         _, resp = self.get("/mcp/public")
         resp.read()
         self.assertEqual(self.upstream.requests[0][2]["Authorization"], "Bearer projected-1")
 
     def test_settings_from_env_read_the_agent_token_variables(self):
-        keys = ("UPSTREAM", "AGENT_TOKEN_URL", "AGENT_TOKEN_ASSERTION_FILE", "AGENT_TOKEN_PATHS")
+        keys = ("UPSTREAM", "AGENT_TOKEN_URL", "AGENT_TOKEN_ASSERTION_FILE", "AGENT_TOKEN_PATHS", "AGENT_TOKEN_VIA_URL")
         saved = {k: os.environ.pop(k, None) for k in keys}
         try:
             os.environ.update({"UPSTREAM": "http://x", "AGENT_TOKEN_URL": "http://k/token",
-                               "AGENT_TOKEN_PATHS": "/mcp, /a2a"})
+                               "AGENT_TOKEN_PATHS": "/mcp, /a2a", "AGENT_TOKEN_VIA_URL": "http://t/token"})
             s = tp.Settings.from_env()
             self.assertEqual(s.agent_token_paths, ("/mcp", "/a2a"))
             self.assertEqual(s.agent_token_assertion_file, "/var/run/secrets/agent-token/token")
+            self.assertEqual(s.agent_token_via_url, "http://t/token")
         finally:
             for key, value in saved.items():
                 os.environ.pop(key, None)

@@ -11,7 +11,9 @@ With AGENT_TOKEN_URL set, requests under AGENT_TOKEN_PATHS (default /mcp)
 carry the agent's own agent token instead: a client_credentials grant
 authenticated with a second projected ServiceAccount token whose audience
 is the realm (federated client authentication), kept until shortly before
-it expires.
+it expires. With AGENT_TOKEN_VIA_URL set as well, that first grant goes to the
+tenant's own realm, and its token is the client assertion at AGENT_TOKEN_URL:
+the agent's identity lives in the tenant realm, which the shared realm federates.
 """
 from __future__ import annotations
 
@@ -68,6 +70,7 @@ class Settings:
     agent_token_url: str = ""
     agent_token_assertion_file: str = DEFAULT_ASSERTION_FILE
     agent_token_paths: tuple[str, ...] = ("/mcp",)
+    agent_token_via_url: str = ""
 
     def validate(self) -> None:
         missing = [
@@ -88,6 +91,7 @@ class Settings:
             agent_token_url=os.environ.get("AGENT_TOKEN_URL", "").strip(),
             agent_token_assertion_file=os.environ.get("AGENT_TOKEN_ASSERTION_FILE", DEFAULT_ASSERTION_FILE).strip(),
             agent_token_paths=paths,
+            agent_token_via_url=os.environ.get("AGENT_TOKEN_VIA_URL", "").strip(),
         )
 
 
@@ -118,9 +122,9 @@ class TokenSource:
 class AgentTokenSource:
     """The agent's agent token, from a federated client_credentials grant, cached."""
 
-    def __init__(self, settings: Settings) -> None:
-        self._url = settings.agent_token_url
-        self._assertion = TokenSource(Settings(settings.agent_token_assertion_file, "", 0))
+    def __init__(self, url: str, assertion: TokenSource | AgentTokenSource) -> None:
+        self._url = url
+        self._assertion = assertion
         self._lock = threading.Lock()
         self._token = ""
         self._expires = 0.0
@@ -149,6 +153,14 @@ class AgentTokenSource:
             self._token = token
             self._expires = time.monotonic() + max(lifetime - RENEW_MARGIN, 0)
             return token
+
+
+def agent_token_source(settings: Settings) -> AgentTokenSource:
+    """The agent token, through the tenant realm first when AGENT_TOKEN_VIA_URL is set."""
+    assertion: TokenSource | AgentTokenSource = TokenSource(Settings(settings.agent_token_assertion_file, "", 0))
+    if settings.agent_token_via_url:
+        assertion = AgentTokenSource(settings.agent_token_via_url, assertion)
+    return AgentTokenSource(settings.agent_token_url, assertion)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -283,7 +295,7 @@ def build_server(settings: Settings, port: int | None = None) -> ThreadingHTTPSe
     handler = type("BoundHandler", (Handler,), {
         "settings": settings,
         "tokens": TokenSource(settings),
-        "agent_token": AgentTokenSource(settings) if settings.agent_token_url else None,
+        "agent_token": agent_token_source(settings) if settings.agent_token_url else None,
     })
     server = ThreadingHTTPServer(("127.0.0.1", settings.port if port is None else port), handler)
     server.daemon_threads = True
