@@ -17,7 +17,7 @@ OpenAI-compatible API, a database backup to object storage and monitoring are op
 Install one release per project. The first start takes a few minutes. Read the first
 password:
 
-    oc get secret nextcloud-credentials -o jsonpath='{.data.nextcloud-password}' | base64 -d
+    oc get secret nextcloud-admin -o jsonpath='{.data.password}' | base64 -d
 
 | Value | Default | Meaning |
 |---|---|---|
@@ -27,7 +27,7 @@ password:
 | `nextcloud.persistence.nextcloudData.size` | `25Gi` | Space for user files. |
 | `secrets.type` | `kubernetes` | `externalSecret` reads the secrets from a secret store. |
 | `secrets.adminPassword` | empty | Password of the first administrator. Empty: generated. |
-| `smtp.host` | empty | Outgoing mail server. |
+| `secrets.generator.enabled` | `false` | The External Secrets Operator makes the credentials Secrets and generates their empty passwords once. |
 | `global.publicAddress.shared` | `false` | Share one public address between the public Services of the project. See Delivery instructions. |
 | `mailu.enabled` | `true` | Run a Mailu mail server in the same project. Its values are those of the `mailu` chart, under `mailu`. |
 | `hsts.enabled` | `true` | Send the Strict-Transport-Security header `hsts.header` on every hostname of this chart. |
@@ -42,6 +42,12 @@ password:
 | `ai.enabled` | `false` | Assistant and the OpenAI integration app. Also runs the worker and Redis. |
 | `ai.url` | empty | Address of the OpenAI-compatible API, ending in `/v1`. Required with `ai.enabled`. |
 | `secrets.aiApiKey` | empty | Key of that API. Required with `ai.enabled`; never generated. |
+| `oidc.enabled` | `true` | Login with an OpenID Connect provider (app `user_oidc`) once `oidc.discoveryUri` and `oidc.clientId` are set; local logins keep working. |
+| `oidc.discoveryUri` | empty | The provider's `/.well-known/openid-configuration`. |
+| `oidc.clientId` | empty | Client at the provider; its secret is `secrets.oidcClientSecret` (required, never generated). |
+| `oidc.groupsClaim` | `groups` | Claim with the user's groups; groups matching `oidc.groupsRegex` are created and kept in step. |
+| `oidc.groupsRegex` | empty | Only users with a matching group may log in, for example `^(admin\|acme-admins)$`. A group `admin` in the claim makes the user an administrator. Empty: no restriction. |
+| `oidc.bearer` | `true` | API and WebDAV calls with a Bearer token of the provider; the user is created on the first call. |
 | `ai.models.completion` | empty | Default model for text. Also `image`, `speechToText`, `textToSpeech`. Empty: the choice of the app. |
 | `ai.providers.*` | text kinds on | Kinds of task the endpoint serves: `chat`, `text`, `translation`, `imageAnalysis`, `imageGeneration`, `speechToText`, `textToSpeech`. |
 | `talk.enabled` | `false` | Nextcloud Talk with a signaling server, NATS, a TURN server and call recording. |
@@ -66,6 +72,21 @@ Secrets left empty are generated at the first install and kept on every upgrade 
 Argo CD or `helm template`, cannot read the existing Secrets and generates new values on
 every render: set every secret of an enabled component there. A changed database
 password after the first install stops the database. Use letters and digits only.
+
+The credentials are three Secrets, each with the keys `username` and `password`:
+`nextcloud-admin` (first administrator), `nextcloud-mariadb` (database user `nextcloud`)
+and `nextcloud-mariadb-root` (`password` only). The MariaDB database reads only the two
+`nextcloud-mariadb` Secrets. An upgrade from 0.5 or older takes the passwords over from the
+former Secret `nextcloud-credentials`. MariaDB does not allow its root password Secret to
+change, so such a release keeps the root password in `nextcloud-credentials` (key
+`mariadb-root-password`) instead of `nextcloud-mariadb-root`. `helm upgrade` detects that
+itself; with Argo CD or `helm template` set `database.legacyRootSecret=true`.
+
+With `secrets.generator.enabled` the External Secrets Operator generates each empty
+password in these Secrets once (Password generator, `refreshPolicy: CreatedOnce`), so they
+stay the same under Argo CD as well. Labels and annotations for `nextcloud-admin` go in
+`secrets.generator.secretTemplate`. Uninstalling the release deletes the Secrets together
+with their ExternalSecrets.
 
 A script configures Nextcloud each time its pod starts: it installs and connects the
 apps of the enabled components (OnlyOffice, push server, whiteboard, Talk, AI) and

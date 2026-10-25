@@ -1,0 +1,73 @@
+# Team of the tenant the server serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the server belongs to; required with team
+tenant: ""
+
+image:
+  repository: ghcr.io/sooperset/mcp-atlassian
+  tag: 0.23.1
+  pullPolicy: IfNotPresent
+
+# Atlassian Cloud site; both URLs may be empty to serve only one product
+jira:
+  url: ""
+confluence:
+  url: ""
+
+credentials:
+  # perCaller: the server holds no account; every request carries its caller's own
+  # Atlassian account (Authorization: Basic base64(email:api_token) or Bearer) and a request
+  # without one is refused. shared: one account for every caller, from existingSecret
+  mode: perCaller
+  # Request header an MCP gateway copies into the backend Authorization, so a caller can
+  # authenticate to the gateway and to Atlassian at once (Service annotation
+  # agentgateway.dev/mcp-credential-header). Empty: no annotation
+  gatewayHeader: X-Atlassian-Authorization
+  # shared mode: Secret with JIRA_USERNAME, JIRA_API_TOKEN (and CONFLUENCE_* if different)
+  existingSecret: ""
+
+# Extra plain environment variables of the server, name to value
+env: {}
+
+port: 8000
+path: /mcp
+
+mcp:
+  # Port appProtocol an MCP gateway discovers
+  appProtocol: agentgateway.dev/mcp
+  # Tool prefix on the gateway (<targetName>_<tool>)
+  targetName: atlassian
+
+service:
+  # Extra Service labels, for example the platform's exposure label
+  labels: {}
+  annotations: {}
+
+podLabels: {}
+podAnnotations: {}
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+networkPolicy:
+  enabled: true
+  # Namespaces (label selectors) that may call the server besides its own, e.g. the gateway's
+  ingressNamespaces: []
+  egress:
+    # The server reaches the public internet only (Atlassian Cloud)
+    enabled: true
+    exceptCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - 169.254.0.0/16
+    - 127.0.0.0/8
+    dnsNamespace: openshift-dns
+    dnsPort: 5353

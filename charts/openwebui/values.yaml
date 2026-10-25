@@ -1,3 +1,9 @@
+# Team of the tenant the app serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the app belongs to; required with team
+tenant: ""
+
 person:
   # short lowercase name; objects are named <name>-openwebui. Empty: the release name
   name: ""
@@ -18,28 +24,14 @@ route:
 
 oauth:
   # OpenShift user name (an email) of the only person admitted. Empty: person.email;
-  # both empty: nobody logs in
+  # both empty: everyone who may edit the project
   ownerEmail: ""
-  # OpenShift groups the owner must be in; empty: no group check
+  # OpenShift groups admitted, strictly (with an owner: the owner must be in one)
   allowedGroups: []
-
-team:
-  # true: every member of oauth.allowedGroups logs in, not only the owner, and gets an
-  # account with role user. Needs oauth.allowedGroups
-  enabled: false
-  # true: members may write their own tools, which run as Python in this pod, and connect
-  # tool servers from their browser. Admins always may
-  memberTools: false
-
-qdrant:
-  # HTTP address of a Qdrant for document vectors, for example http://qdrant:6333. Empty:
-  # the built-in store on the data volume
-  url: ""
-  # Secret with the API key of that Qdrant, as chart qdrant makes it
-  # (<release>-qdrant-api-key). Empty name: no key is sent
-  apiKeySecret:
-    name: ""
-    key: api-key
+  # ClusterRole holding the verb login on services/proxy that allowedGroups are bound
+  # to. Empty: the chart's own Role, which only an installer holding that verb (a
+  # cluster admin) can create
+  loginClusterRole: ""
 
 secrets:
   # kubernetes: Secrets from the values below. externalSecret: from a secret store
@@ -79,9 +71,10 @@ openwebui:
   resources:
     requests:
       cpu: 100m
-      memory: 1Gi
+      memory: 2Gi
     limits:
-      memory: 3Gi
+      cpu: "4"
+      memory: 16Gi
 
 mcp:
   # MCP endpoints of the gateway (<upstream>/mcp/<endpoint>) as tool servers for every
@@ -123,20 +116,34 @@ oauthProxy:
       cpu: 10m
       memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 256Mi
 
 tokenProxy:
   # image that runs the token proxy script
   image: registry.access.redhat.com/ubi9/python-312-minimal
   # loopback port Open WebUI sends model calls to
   port: 8099
+  # calls under paths carry the instance's own OpenID Connect token instead of the
+  # ServiceAccount token: a client_credentials grant at tokenUrl, authenticated with a
+  # ServiceAccount token for audience (federated client authentication). Empty: off
+  agentToken:
+    tokenUrl: ""
+    # usually the realm's issuer URL
+    audience: ""
+    paths:
+    - /mcp
   # token proxy requests and limits
   resources:
     requests:
       cpu: 10m
       memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 256Mi
+
+serviceAccount:
+  # labels on the instance's ServiceAccount, for example the one a platform uses to
+  # register it as an OpenID Connect client
+  labels: {}
 
 storage:
   # chats, uploads, settings (SQLite) and the embedding model cache

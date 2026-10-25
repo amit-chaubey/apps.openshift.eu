@@ -62,7 +62,7 @@ the cluster, else a new random one. Takes value, existing (Secret data), key, le
 
 {{/* Data of the Secret of that name in the release namespace, or an empty dict */}}
 {{- define "opencode-agent.existing" -}}
-{{- $found := lookup "v1" "Secret" .root.Release.Namespace .name -}}
+{{- $found := lookup "v1" "Secret" (include "opencode-agent.namespace" .root) .name -}}
 {{- if $found -}}
 {{- toJson (default dict $found.data) -}}
 {{- else -}}
@@ -72,7 +72,7 @@ the cluster, else a new random one. Takes value, existing (Secret data), key, le
 
 {{- define "opencode-agent.opencodeImage" -}}
 {{- if .Values.builds.enabled -}}
-{{- printf "%s/%s/%s-opencode:%s" .Values.builds.registry .Release.Namespace (include "opencode-agent.name" .) (include "opencode-agent.opencodeTag" .) -}}
+{{- printf "%s/%s/%s-opencode:%s" .Values.builds.registry (include "opencode-agent.namespace" .) (include "opencode-agent.name" .) (include "opencode-agent.opencodeTag" .) -}}
 {{- else -}}
 {{- default (printf "%s:%s" .Values.opencode.baseImage .Values.opencode.version) .Values.opencode.image -}}
 {{- end -}}
@@ -80,7 +80,7 @@ the cluster, else a new random one. Takes value, existing (Secret data), key, le
 
 {{- define "opencode-agent.a2aImage" -}}
 {{- if .Values.builds.enabled -}}
-{{- printf "%s/%s/%s-opencode-a2a:%s" .Values.builds.registry .Release.Namespace (include "opencode-agent.name" .) (include "opencode-agent.a2aTag" .) -}}
+{{- printf "%s/%s/%s-opencode-a2a:%s" .Values.builds.registry (include "opencode-agent.namespace" .) (include "opencode-agent.name" .) (include "opencode-agent.a2aTag" .) -}}
 {{- else -}}
 {{- required "a2a.image is required when builds.enabled is false" .Values.a2a.image -}}
 {{- end -}}
@@ -137,7 +137,7 @@ RUN sh /tmp/agent-tools/verify-tools.sh
 {{- $peers := list -}}
 {{- range .Values.a2a.peers -}}
 {{- $peer := kindIs "string" . | ternary (dict "name" .) . -}}
-{{- $ns := default $.Release.Namespace $peer.namespace -}}
+{{- $ns := default (include "opencode-agent.namespace" $) $peer.namespace -}}
 {{- $peers = append $peers (printf "%s=%s/a2a/%s/%s/" $peer.name $origin $ns $peer.name) -}}
 {{- end -}}
 {{- join "," $peers -}}
@@ -174,4 +174,35 @@ CMD ["opencode-a2a", "serve"]
 {{/* An image tag has no "+": a local version label becomes "-" */}}
 {{- define "opencode-agent.a2aTag" -}}
 {{- printf "%s-%s" (.Values.a2a.version | replace "+" "-") (include "opencode-agent.a2aHash" .) -}}
+{{- end -}}
+
+{{/* Tenant whose callers the A2A adapter admits by JWT; empty when off */}}
+{{- define "opencode-agent.a2aTenant" -}}
+{{- $t := .Values.a2a.tenantAuth -}}
+{{- if and $t.enabled (or $t.kubernetesIssuer $t.oidcIssuers) -}}
+{{- default (first (splitList "-" (include "opencode-agent.namespace" .))) $t.tenant -}}
+{{- end -}}
+{{- end -}}
+
+{{/* A2A_JWT_ISSUERS: the cluster ServiceAccount issuer and the OIDC issuers */}}
+{{- define "opencode-agent.a2aJwtIssuers" -}}
+{{- $t := .Values.a2a.tenantAuth -}}
+{{- $sa := "/var/run/secrets/kubernetes.io/serviceaccount" -}}
+{{- $issuers := list -}}
+{{- with $t.kubernetesIssuer -}}
+{{- $issuers = append $issuers (dict "issuer" . "kind" "kubernetes" "ca_file" (printf "%s/ca.crt" $sa) "token_file" (printf "%s/token" $sa)) -}}
+{{- end -}}
+{{- range $t.oidcIssuers -}}
+{{- $issuers = append $issuers (dict "issuer" . "kind" "oidc") -}}
+{{- end -}}
+{{- toJson $issuers -}}
+{{- end -}}
+
+{{/* Namespace of every object: <tenant>-<team> for an app of a team, else the release namespace */}}
+{{- define "opencode-agent.namespace" -}}
+{{- if .Values.team -}}
+{{- printf "%s-%s" (required "tenant is required with team" .Values.tenant) .Values.team -}}
+{{- else -}}
+{{- .Release.Namespace -}}
+{{- end -}}
 {{- end -}}

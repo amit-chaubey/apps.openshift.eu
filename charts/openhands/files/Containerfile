@@ -1,0 +1,69 @@
+{{- if .Values.build.toolsImage }}
+FROM {{ .Values.build.toolsImage }} AS tools
+USER 0
+# the tools image's binaries, without its own agent (opencode is built for musl); Python and
+# npm tools are reinstalled, so links into their environments stay behind
+RUN set -eu; mkdir -p /export/bin; \
+    for f in /usr/local/bin/*; do \
+      n=$(basename "$f"); \
+      case "$n" in opencode|opencode2) continue;; esac; \
+      if [ -L "$f" ]; then \
+        case "$(readlink -f "$f")" in /usr/local/go/*|/opt/sonar-scanner/*) cp -P "$f" /export/bin/;; esac; \
+        continue; \
+      fi; \
+      if head -c 4 "$f" | grep -q ELF; then cp "$f" /export/bin/; continue; fi; \
+      case "$(head -1 "$f")" in '#!/usr/bin/env bash'|'#!/usr/bin/env sh') cp "$f" /export/bin/;; esac; \
+    done
+{{- end }}
+
+FROM {{ .Values.image.repository }}:{{ .Values.image.tag }}
+USER root
+{{- if .Values.build.toolsImage }}
+COPY --from=tools /export/bin/ /usr/local/bin/
+COPY --from=tools /usr/local/go /usr/local/go
+COPY --from=tools /tools /tools
+COPY --from=tools /opt/sonar-scanner /opt/sonar-scanner
+COPY --from=tools /usr/share/ansible/collections /usr/share/ansible/collections
+{{- end }}
+COPY install-tools.sh verify-tools.sh tools.txt checks.txt mcp_oauth_redirect.py patch-mcp-icons.py patch-acp-usage.py /tmp/build/
+RUN sh /tmp/build/install-tools.sh
+# installed MCP server cards show the icon of the server's settings
+RUN python3 /tmp/build/patch-mcp-icons.py
+# Claude Code over ACP survives a gateway that sends no token usage
+RUN python3 /tmp/build/patch-acp-usage.py
+# arbitrary UID: the home and the passwd file belong to group 0.
+# The frontend listens on loopback, behind the login proxy, so it may embed the session key.
+# The page marks the first-run wizard done: model and MCP come from the agent-server settings.
+# MCP OAuth redirects go to the public route (mcp_oauth_redirect.py), path /mcp-oauth
+RUN set -eux; \
+    printf '%s\n' '#!/bin/sh' \
+      'if ! whoami >/dev/null 2>&1; then' \
+      '  echo "agent:x:$(id -u):0:agent:${HOME}:/bin/bash" >> /etc/passwd' \
+      'fi' \
+      'exec /opt/agent-canvas/entrypoint.sh "$@"' > /usr/local/bin/openhands-uid-entrypoint; \
+    chmod 0755 /usr/local/bin/openhands-uid-entrypoint; \
+    sed -i -E 's/^( *)STATIC_SERVER_BIND_HOST="(::|0\.0\.0\.0)"$/\1STATIC_SERVER_BIND_HOST="127.0.0.1"/' /opt/agent-canvas/entrypoint.sh; \
+    [ "$(grep -c '^ *STATIC_SERVER_BIND_HOST="127.0.0.1"$' /opt/agent-canvas/entrypoint.sh)" = 2 ]; \
+    sed -i 's#<head>#<head><script>try{localStorage.getItem("openhands-onboarded")||localStorage.setItem("openhands-onboarded","1")}catch(e){}</script>#' /opt/agent-canvas/frontend/index.html; \
+    grep -q 'localStorage.setItem("openhands-onboarded"' /opt/agent-canvas/frontend/index.html; \
+    cp /tmp/build/mcp_oauth_redirect.py /opt/agent-canvas/tools/; \
+    sed -i 's/^AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool"$/AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool,mcp_oauth_redirect"/' /opt/agent-canvas/entrypoint.sh; \
+    grep -q '^AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool,mcp_oauth_redirect"$' /opt/agent-canvas/entrypoint.sh; \
+    sed -i 's#^\( *\)--route "/api/automation=#\1--route "/mcp-oauth=http://127.0.0.1:${MCP_OAUTH_CALLBACK_PORT:-18765}" \\\n\1--route "/api/automation=#' /opt/agent-canvas/entrypoint.sh; \
+    n=$(grep -c -- '--route "/mcp-oauth=' /opt/agent-canvas/entrypoint.sh); \
+    [ "$n" -ge 1 ] && [ "$n" = "$(grep -c -- '--route "/api/automation=' /opt/agent-canvas/entrypoint.sh)" ]; \
+    for d in /home/openhands /projects /openhands; do \
+      [ -e "$d" ] && chgrp -R 0 "$d" && chmod -R g=u "$d"; \
+    done; \
+    chmod g=u /etc/passwd
+# Claude Code refuses its Bash tool without SHELL
+ENV HOME=/home/openhands SHELL=/bin/bash \
+    PATH=/usr/local/go/bin:/home/openhands/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \
+    NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false TERM=xterm
+USER 10001:0
+RUN sh /tmp/build/verify-tools.sh
+USER 0
+RUN rm -rf /tmp/build
+USER 10001:0
+ENTRYPOINT ["tini", "--", "/usr/local/bin/openhands-uid-entrypoint"]

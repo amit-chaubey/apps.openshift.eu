@@ -5,12 +5,15 @@ apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
   name: {{ $name }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "opencode-agent.namespace" . }}
   labels:
     app: {{ $name }}
     app.kubernetes.io/name: opencode-agent
     app.kubernetes.io/component: server
     {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+    {{- with .Values.agentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   type: BYO
   description: {{ printf "OpenCode agent of %s. %s" (include "opencode-agent.person" .) .Values.person.role | trim | quote }}
@@ -39,7 +42,7 @@ spec:
         kagenti.io/type: agent
         protocol.kagenti.io/a2a: ""
         app.kubernetes.io/name: {{ $name }}
-        app.kubernetes.io/part-of: {{ .Release.Namespace }}
+        app.kubernetes.io/part-of: {{ include "opencode-agent.namespace" . }}
       annotations:
         # Mounted files are not reloaded in place; roll the pod when they change
         checksum/config: {{ include (print $.Template.BasePath "/configmap-opencode.yaml") . | sha256sum }}
@@ -57,7 +60,7 @@ spec:
       - name: A2A_PORT
         value: "8080"
       - name: A2A_PUBLIC_URL
-        value: {{ default (printf "http://%s.%s.svc.cluster.local:8080" $name .Release.Namespace) .Values.a2a.publicUrl }}
+        value: {{ default (printf "http://%s.%s.svc.cluster.local:8080" $name (include "opencode-agent.namespace" .)) .Values.a2a.publicUrl }}
       {{- with .Values.a2a.allowedHosts }}
       - name: A2A_ALLOWED_HOSTS
         value: {{ join "," . | quote }}
@@ -71,6 +74,13 @@ spec:
           secretKeyRef:
             name: {{ $name }}-a2a-auth
             key: credentials
+      {{- with include "opencode-agent.a2aTenant" . }}
+      # bearer JWTs of the tenant: kagent forwards its caller's token
+      - name: A2A_TENANT
+        value: {{ . }}
+      - name: A2A_JWT_ISSUERS
+        value: {{ include "opencode-agent.a2aJwtIssuers" $ | quote }}
+      {{- end }}
       # Outbound a2a_call goes through the token proxy, which adds the token
       - name: A2A_CLIENT_ALLOWED_HOSTS
         value: 127.0.0.1
@@ -165,6 +175,8 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
+        # No probe: the new pod waits for the old pod's workspace lock, and kagent's
+        # Deployment rolls (no Recreate), so a probe on OpenCode would never pass
         volumeMounts:
         - name: workspace
           mountPath: /workspace
@@ -193,12 +205,16 @@ spec:
         - --upstream=http://127.0.0.1:{{ .Values.uiProxy.port }}
         # The UI streams over SSE; keep long requests open
         - --upstream-timeout={{ .Values.route.timeout }}
+        {{- $owner := include "opencode-agent.ownerEmail" . }}
+        {{- if $owner }}
         - --authenticated-emails-file=/etc/oauth-proxy/emails.txt
+        {{- end }}
         # Without an email domain the openshift provider admits every email
         - --email-domain=
-        {{- if .Values.oauth.allowedGroups }}
-        # --openshift-group is accepted and ignored; the group check is this SAR
-        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" "get") | toJson }}
+        {{- if or .Values.oauth.allowedGroups (not $owner) }}
+        # --openshift-group is accepted and ignored; the group check is this SAR.
+        # groups: verb login, granted by the login Role only; neither: get, project editors
+        - --openshift-sar={{ list (dict "namespace" (include "opencode-agent.namespace" .) "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" (ternary "login" "get" (not (empty .Values.oauth.allowedGroups)))) | toJson }}
         {{- end }}
         - --pass-basic-auth=false
         - --cookie-name=_{{ $name | replace "-" "_" }}
@@ -273,6 +289,14 @@ spec:
           value: {{ .Values.gateway.upstream | quote }}
         - name: PORT
           value: {{ .Values.tokenProxy.port | quote }}
+        {{- with .Values.tokenProxy.agentToken }}
+        {{- if .tokenUrl }}
+        - name: AGENT_TOKEN_URL
+          value: {{ .tokenUrl | quote }}
+        - name: AGENT_TOKEN_PATHS
+          value: {{ join "," .paths | quote }}
+        {{- end }}
+        {{- end }}
         # Listens on 127.0.0.1 only, so the probe runs inside the container
         readinessProbe:
           exec:
@@ -289,6 +313,11 @@ spec:
         - name: api-token
           mountPath: /var/run/secrets/api-token
           readOnly: true
+        {{- if .Values.tokenProxy.agentToken.tokenUrl }}
+        - name: agent-token
+          mountPath: /var/run/secrets/agent-token
+          readOnly: true
+        {{- end }}
         resources:
           {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
         securityContext:
@@ -326,6 +355,18 @@ spec:
               {{- end }}
               expirationSeconds: 3600
               path: token
+      {{- with .Values.tokenProxy.agentToken }}
+      {{- if .tokenUrl }}
+      # Proves the agent's identity to the OpenID Connect provider; short-lived as it asks
+      - name: agent-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              audience: {{ required "tokenProxy.agentToken.audience is required with tokenUrl" .audience }}
+              expirationSeconds: 600
+              path: token
+      {{- end }}
+      {{- end }}
       {{- if .Values.git.url }}
       - name: git-token
         secret:

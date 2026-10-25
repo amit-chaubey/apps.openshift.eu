@@ -4,7 +4,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "openwebui.name" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openwebui.namespace" . }}
   labels:
     {{- include "openwebui.labels" . | nindent 4 }}
     app.kubernetes.io/component: server

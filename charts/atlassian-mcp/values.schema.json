@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "team": {"type": "string"},
+    "tenant": {"type": "string"},
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string", "minLength": 1},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "jira": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"url": {"type": "string"}}
+    },
+    "confluence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"url": {"type": "string"}}
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["perCaller", "shared"]},
+        "gatewayHeader": {"type": "string"},
+        "existingSecret": {"type": "string"}
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {"type": ["string", "number", "boolean"]}
+    },
+    "port": {"type": "integer", "not": {"enum": [80, 443, 8080, 8443]}},
+    "path": {"type": "string"},
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "appProtocol": {"type": "string"},
+        "targetName": {"type": "string", "minLength": 1}
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "labels": {"type": "object"},
+        "annotations": {"type": "object"}
+      }
+    },
+    "podLabels": {"type": "object"},
+    "podAnnotations": {"type": "object"},
+    "resources": {"type": "object"},
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "ingressNamespaces": {"type": "array", "items": {"type": "object"}},
+        "egress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "exceptCidrs": {"type": "array", "items": {"type": "string"}},
+            "dnsNamespace": {"type": "string"},
+            "dnsPort": {"type": "integer"}
+          }
+        }
+      }
+    }
+  }
+}

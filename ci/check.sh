@@ -14,9 +14,12 @@ for c in charts/*/; do
     done
     helm dependency build "$c" >/dev/null || { echo "FAIL $n: helm dependency build"; fail=1; continue; }
   fi
-  helm lint "$c" >/dev/null || { echo "FAIL $n: helm lint"; fail=1; }
+  # values a chart needs to render at all, as in chart-testing
+  ci=""
+  [ -f "$c/ci/test-values.yaml" ] && ci="-f $c/ci/test-values.yaml"
+  helm lint "$c" --namespace test $ci >/dev/null || { echo "FAIL $n: helm lint"; fail=1; }
   for mode in kubernetes externalSecret; do
-    args="--set secrets.type=$mode"
+    args="$ci --set secrets.type=$mode"
     [ "$mode" = externalSecret ] && args="$args --set secrets.externalSecret.storeName=vault-test"
     out=$(helm template test "$c" --namespace test $args) || { echo "FAIL $n: render $mode"; fail=1; continue; }
     bad=$(echo "$out" | grep -E '^kind: (Namespace|ClusterRole|ClusterRoleBinding|ClusterPolicy|CustomResourceDefinition|Subscription|OperatorGroup|SecurityContextConstraints)$' || true)
@@ -37,6 +40,12 @@ for c in charts/*/; do
     grep -q "^$s" "$c/README.md" 2>/dev/null || { echo "FAIL $n: README lacks $s"; fail=1; }
   done
   [ -f "$c/values.schema.json" ] || { echo "FAIL $n: no values.schema.json"; fail=1; }
+  v=$(awk '/^version:/{print $2}' "$c/Chart.yaml")
+  [ -s "release-notes/$n/$v.md" ] || { echo "FAIL $n: no release-notes/$n/$v.md"; fail=1; }
+done
+# the charts carry a copy of the agent-identity proxy until they use the injected sidecar
+for f in charts/*/files/token-proxy.py; do
+  cmp -s "$f" images/agent-identity/token-proxy.py || { echo "FAIL $f differs from images/agent-identity/token-proxy.py"; fail=1; }
 done
 if command -v gitleaks >/dev/null; then
   gitleaks detect --source . --no-git --redact >/dev/null || { echo "FAIL gitleaks"; fail=1; }

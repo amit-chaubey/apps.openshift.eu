@@ -1,0 +1,45 @@
+{{- if and (eq .Values.login.provider "openshift") .Values.login.allowedGroups }}
+{{- $name := include "tenant.login" . }}
+{{- $clusterRole := .Values.login.loginClusterRole }}
+{{- if not $clusterRole }}
+# The login proxy admits a user only with this permission (SAR)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: login
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services/proxy
+  resourceNames:
+  - {{ $name }}
+  verbs:
+  - login
+---
+{{- end }}
+# Members of these OpenShift groups pass the login proxy's group check
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  # roleRef is immutable: a ClusterRole binding has its own name
+  name: {{ $name }}{{ ternary "-app" "" (not (empty $clusterRole)) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: login
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: {{ ternary "ClusterRole" "Role" (not (empty $clusterRole)) }}
+  name: {{ default $name $clusterRole }}
+subjects:
+{{- range .Values.login.allowedGroups }}
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: {{ . }}
+{{- end }}
+{{- end }}

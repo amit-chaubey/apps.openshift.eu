@@ -1,0 +1,45 @@
+yq --version
+oc version --client
+kubectl version --client
+argocd version --client
+kn version
+ccoctl --help
+hcp version
+virtctl version --client
+amtool --version
+kubectl-cnpg version
+kubectl-mariadb --help
+kubectl mdba --help
+helm version
+kustomize version
+glab version
+clusteradm version 2>&1 | grep -i version
+velero version --client-only
+restic version
+odf --help
+operator-sdk version
+kubectl-krew version
+jira version
+acli --version
+uvx --version
+go version
+terraform version
+packer version
+gh --version
+promtool --version
+gitleaks version
+rclone version
+opa version
+conftest --version
+trivy --version
+grype version
+syft version
+kube-linter version
+hadolint --version
+shellcheck --version
+kubeconform -v
+cosign version
+sonar-scanner --version
+/tools/kubernetes-mcp-server --version
+ansible-galaxy collection list kubernetes.core
+shfmt --version

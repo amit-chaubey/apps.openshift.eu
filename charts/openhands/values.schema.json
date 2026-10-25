@@ -1,0 +1,367 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "ImageStreamTag",
+                "DockerImage"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "pushSecret": {
+              "type": "string"
+            }
+          }
+        },
+        "toolsImage": {
+          "type": "string"
+        },
+        "pullSecret": {
+          "type": "string"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "command",
+              "check"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "uv",
+                  "npm",
+                  "pip"
+                ]
+              },
+              "command": {
+                "type": "string",
+                "minLength": 1
+              },
+              "args": {
+                "type": "string"
+              },
+              "check": {
+                "type": "string",
+                "minLength": 1
+              },
+              "keep": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(s|m|h)$"
+        }
+      }
+    },
+    "oauth": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": {
+          "type": "string"
+        },
+        "loginClusterRole": {
+          "type": "string"
+        },
+        "allowedGroups": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "kubernetes",
+            "externalSecret"
+          ]
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9.-]+(:[0-9]+)?$"
+        },
+        "uiSecretName": {
+          "type": "string"
+        }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "properties": {
+        "upstream": {
+          "type": "string",
+          "pattern": "^$|^https?://"
+        }
+      }
+    },
+    "mcpServers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "path"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/"
+          },
+          "timeout": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "accessMode": {
+          "type": "string",
+          "enum": [
+            "ReadWriteOnce",
+            "ReadWriteMany"
+          ]
+        }
+      }
+    },
+    "kubernetesMcpServer": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "deniedResources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "group",
+              "version",
+              "kind"
+            ],
+            "properties": {
+              "group": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "agentSecrets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "agentProfiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "acp_server"
+        ],
+        "properties": {
+          "acp_server": {
+            "type": "string"
+          },
+          "acp_model": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "mcpDiscovery": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "interval": {
+          "type": "integer",
+          "minimum": 10
+        },
+        "labelSelector": {
+          "type": "string"
+        },
+        "resources": {
+          "type": "object"
+        },
+        "clusterRole": {
+          "type": "string"
+        }
+      }
+    },
+    "mcpOAuth": {
+      "type": "object",
+      "properties": {
+        "callbackPort": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      }
+    },
+    "mcpPublish": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "resync": {
+          "type": "integer",
+          "minimum": 60
+        }
+      }
+    },
+    "a2a": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "description": {
+          "type": "string"
+        },
+        "staticTokenSecret": {
+          "type": "string"
+        },
+        "tenantAuth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "tenant": {
+              "type": "string"
+            },
+            "kubernetesIssuer": {
+              "type": "string"
+            },
+            "oidcIssuers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "resources": {
+          "type": "object"
+        },
+        "kagent": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "team": {
+      "type": "string",
+      "pattern": "^([a-z0-9]([a-z0-9-]*[a-z0-9])?)?$"
+    },
+    "tenant": {
+      "type": "string",
+      "pattern": "^([a-z0-9]([a-z0-9-]*[a-z0-9])?)?$"
+    }
+  }
+}

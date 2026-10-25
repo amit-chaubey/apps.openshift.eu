@@ -1,0 +1,215 @@
+route:
+  # empty: OpenShift assigns a host under the default application domain
+  host: ""
+  # extra labels on the Route only, for example to pick a router shard
+  labels: {}
+  # agent answers stream; the router must not cut long requests
+  timeout: 3600s
+  # used when a host is set; certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+login:
+  # openshift: OpenShift oauth-proxy, one shared kagent user (controller auth mode
+  # unsecure). oidc: upstream oauth2-proxy against an OIDC provider, a kagent user per
+  # person (set upstream.oauth2-proxy and upstream.controller.auth.mode trusted-proxy)
+  provider: openshift
+  # OpenShift groups admitted, strictly. Empty: everyone who may edit the project
+  allowedGroups: []
+  oidc:
+    # client id at the OIDC provider, written into the Secret kagent-oidc
+    clientId: ""
+    # the login client as an EDP KeycloakClient in the release namespace, with the
+    # client secret of the Secret kagent-oidc; needs the EDP Keycloak operator and a
+    # realm the namespace may use (a tenant's clientId starts with <tenant>-)
+    keycloakClient:
+      create: false
+      realmRef:
+        kind: ClusterKeycloakRealm
+        name: public
+      defaultClientScopes:
+      - basic
+      - email
+      - profile
+      - roles
+      - web-origins
+  # ClusterRole holding the verb login on services/proxy that allowedGroups are bound
+  # to. Empty: the chart's own Role, which only an installer holding that verb (a
+  # cluster admin) can create
+  loginClusterRole: ""
+  # OpenShift oauth-proxy in front of the UI; the cluster keeps this tag current
+  image: image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4
+  port: 4180
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+secrets:
+  # kubernetes: the chart keeps the OpenShift login cookie key in a Secret it generates
+  # once. externalSecret: with login.provider oidc, an ExternalSecret writes the Secret
+  # kagent-oidc (client-id, client-secret, cookie-secret) that
+  # upstream.oauth2-proxy.config.existingSecret names
+  type: kubernetes
+  # login cookie key. Empty: generated once and kept on upgrade
+  cookieSecret: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # remote keys whose property login.password holds the value
+    items:
+      oidcClientSecret: ""
+      oidcCookieSecret: ""
+
+database:
+  # CloudNativePG Cluster kagent-postgres in the release namespace; the controller reads
+  # its URL from the Secret kagent-postgres-app (upstream.database.postgres.urlFile and
+  # upstream.controller.volumes below). Needs the CloudNativePG operator. false: set
+  # upstream.database.postgres (bundled.enabled, url or urlFile) and
+  # upstream.controller.volumes and volumeMounts to []
+  cnpg:
+    enabled: true
+    instances: 1
+    storage:
+      size: 1Gi
+      # empty: the cluster's default StorageClass
+      storageClass: ""
+    # empty: the operator's default PostgreSQL image
+    imageName: ""
+    resources: {}
+    # namespaces of the CloudNativePG operator, which reads the instance status
+    operatorNamespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: openshift-operators
+
+# The upstream example agents: set upstream.<agent>.enabled per agent (Helm cannot switch
+# subcharts from here). This adds their tool server, RemoteMCPServer kagent-tool-server,
+# bound to clusterRole in the release namespace only; never cluster-wide
+examples:
+  enabled: false
+  tools:
+    image: ghcr.io/kagent-dev/kagent/tools:0.1.3
+    clusterRole: view
+    args:
+    - --read-only
+    - --tools
+    - k8s,helm,utils
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+# RemoteMCPServers of the release namespace, for the tenant's own MCP servers. Each:
+# name, description, url, protocol (STREAMABLE_HTTP or SSE), timeout, allowedNamespaces
+# (default {from: Same}; {from: Selector, selector: ...} shares it with other namespaces)
+# and headers: name, optional prefix ("Bearer "), and the value from vaultItem (a remote
+# key of secrets.externalSecret.storeName, property vaultProperty, default
+# login.password) or existingSecret {name, key}
+remoteMCPServers: []
+
+networkPolicy:
+  enabled: true
+  # namespaces whose agent pods reach the controller API (sessions, A2A).
+  # Empty: the release namespace only
+  agentNamespaceSelector: {}
+  # pods within those namespaces. The controller does not verify the token a caller
+  # sends (trusted-proxy), so these namespaces are the tenant boundary for
+  # ServiceAccounts: select the tenant's namespaces only. Empty: every pod there
+  agentPodSelector: {}
+
+# Overrides of the upstream kagent chart (alias upstream). Set rbac.namespaces to the
+# release namespace (Argo CD: parameter upstream.rbac.namespaces[0]=$ARGOCD_APP_NAMESPACE):
+# empty renders cluster-wide RBAC, which this chart refuses
+upstream:
+  fullnameOverride: kagent
+  nameOverride: kagent
+  rbac:
+    namespaces: []
+  controller:
+    # the login proxy has authenticated the browser; the controller takes no JWT
+    auth:
+      mode: unsecure
+    volumes:
+    - name: postgres-app
+      secret:
+        secretName: kagent-postgres-app
+        items:
+        - key: uri
+          path: uri
+    volumeMounts:
+    - name: postgres-app
+      mountPath: /etc/kagent/postgres
+      readOnly: true
+  ui:
+    service:
+      type: ClusterIP
+    # the login Route of this chart is the only way in
+    route:
+      enabled: false
+  database:
+    postgres:
+      # the Secret of the CloudNativePG Cluster (database.cnpg)
+      urlFile: /etc/kagent/postgres/uri
+      bundled:
+        enabled: false
+        # OpenShift assigns the UID of the project
+        podSecurityContext:
+          fsGroup: null
+          runAsUser: null
+          runAsGroup: null
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+  # login.provider oidc; OpenShift assigns the UID of the project. An Application sets
+  # enabled, extraEnv (OIDC_ISSUER_URL, OIDC_REDIRECT_URL, UPSTREAM_URL) and
+  # extraArgs.allowed-group: the tenant's realm roles, comma separated, which the
+  # client scope puts in the claim groups
+  oauth2-proxy:
+    securityContext:
+      runAsUser: null
+      runAsGroup: null
+    config:
+      existingSecret: kagent-oidc
+    extraArgs:
+      # Keycloak has no scope groups; a default client scope carries the claim
+      scope: openid profile email
+      # a bearer caller passes the same allowed-group check as a browser session
+      skip-jwt-bearer-tokens: true
+      # the login page and static assets only; upstream also skips
+      # api/agentharnesses/*/gateway (substrate, not deployed) with any suffix
+      skip-auth-regex: ^/(login$|_next/static/|_next/image|login-bg\.(jpg|png|webp)$|logo-[a-z0-9-]+\.png$|favicon\.ico$)
+  # cluster-wide parts come from the platform kagent-operator
+  kmcp:
+    enabled: false
+  kagent-tools:
+    enabled: false
+  grafana-mcp:
+    enabled: false
+  k8s-agent:
+    enabled: false
+  kgateway-agent:
+    enabled: false
+  istio-agent:
+    enabled: false
+  promql-agent:
+    enabled: false
+  observability-agent:
+    enabled: false
+  argo-rollouts-agent:
+    enabled: false
+  helm-agent:
+    enabled: false
+  cilium-policy-agent:
+    enabled: false
+  cilium-manager-agent:
+    enabled: false
+  cilium-debug-agent:
+    enabled: false

@@ -1,0 +1,101 @@
+{{- if not (or .Values.jira.url .Values.confluence.url) }}{{ fail "jira.url or confluence.url is required" }}{{ end }}
+{{- if and (eq .Values.credentials.mode "shared") (not .Values.credentials.existingSecret) }}{{ fail "credentials.existingSecret is required in shared mode" }}{{ end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ include "atlassian-mcp.namespace" . }}
+  labels:
+    {{- include "atlassian-mcp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "atlassian-mcp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "atlassian-mcp.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      # the server needs no Kubernetes API access
+      automountServiceAccountToken: false
+      containers:
+      - name: server
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+        - --transport
+        - streamable-http
+        - --stateless
+        - --host
+        - 0.0.0.0
+        - --port
+        - {{ .Values.port | quote }}
+        env:
+        - name: HOME
+          value: /tmp
+        {{- with .Values.jira.url }}
+        - name: JIRA_URL
+          value: {{ . | quote }}
+        {{- end }}
+        {{- with .Values.confluence.url }}
+        - name: CONFLUENCE_URL
+          value: {{ . | quote }}
+        {{- end }}
+        {{- if eq .Values.credentials.mode "perCaller" }}
+        # every request carries its caller's account; without one the server refuses
+        - name: ALLOW_GLOBAL_CRED_FALLBACK
+          value: "false"
+        # builds the Jira and Confluence configuration from the URLs alone
+        - name: ATLASSIAN_OAUTH_ENABLE
+          value: "true"
+        {{- else }}
+        - name: ALLOW_GLOBAL_CRED_FALLBACK
+          value: "true"
+        {{- end }}
+        {{- range $k, $v := .Values.env }}
+        - name: {{ $k }}
+          value: {{ $v | toString | quote }}
+        {{- end }}
+        {{- if eq .Values.credentials.mode "shared" }}
+        envFrom:
+        - secretRef:
+            name: {{ .Values.credentials.existingSecret }}
+        {{- end }}
+        ports:
+        - name: mcp
+          containerPort: {{ .Values.port }}
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: mcp
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: mcp
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

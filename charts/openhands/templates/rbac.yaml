@@ -1,0 +1,82 @@
+{{- $name := include "openhands.name" . }}
+# the agent acts on its own namespace only, never cluster-wide
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-edit
+  namespace: {{ include "openhands.namespace" . }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+- kind: ServiceAccount
+  name: {{ $name }}
+  namespace: {{ include "openhands.namespace" . }}
+{{- if and .Values.mcpDiscovery.enabled .Values.mcpDiscovery.clusterRole }}
+---
+# mcp-sync reads the namespace's RemoteMCPServers; the ClusterRole comes with kagent
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-mcp-discovery
+  namespace: {{ include "openhands.namespace" . }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.mcpDiscovery.clusterRole }}
+subjects:
+- kind: ServiceAccount
+  name: {{ $name }}
+  namespace: {{ include "openhands.namespace" . }}
+{{- end }}
+{{- $clusterRole := .Values.oauth.loginClusterRole }}
+{{- if not $clusterRole }}
+---
+# the login proxy admits a user only with this permission (SAR)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}-login
+  namespace: {{ include "openhands.namespace" . }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services/proxy
+  resourceNames:
+  - {{ $name }}-ui
+  verbs:
+  - login
+{{- end }}
+{{- if .Values.oauth.allowedGroups }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  # roleRef is immutable: a ClusterRole binding has its own name
+  name: {{ $name }}-{{ ternary "app-login" "login" (not (empty $clusterRole)) }}
+  namespace: {{ include "openhands.namespace" . }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: {{ ternary "ClusterRole" "Role" (not (empty $clusterRole)) }}
+  name: {{ default (printf "%s-login" $name) $clusterRole }}
+subjects:
+{{- range .Values.oauth.allowedGroups }}
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: {{ . }}
+{{- end }}
+{{- end }}

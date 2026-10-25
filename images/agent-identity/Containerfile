@@ -1,0 +1,6 @@
+# Agent identity sidecar: forwards to the gateway with the pod's ServiceAccount
+# token, and with the agent's own OpenID Connect token under AGENT_TOKEN_PATHS
+FROM registry.access.redhat.com/ubi9/python-312-minimal
+COPY token-proxy.py /app/token-proxy.py
+USER 1001
+ENTRYPOINT ["python3", "/app/token-proxy.py"]

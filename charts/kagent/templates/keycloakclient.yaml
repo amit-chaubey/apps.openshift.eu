@@ -1,0 +1,33 @@
+{{- $kc := .Values.login.oidc.keycloakClient }}
+{{- if and (eq .Values.login.provider "oidc") $kc.create }}
+{{- $host := required "route.host is required for login.oidc.keycloakClient" .Values.route.host }}
+# the login client in Keycloak (EDP Keycloak operator); its secret is the client
+# secret of the Secret the login proxy reads
+apiVersion: v1.edp.epam.com/v1
+kind: KeycloakClient
+metadata:
+  name: {{ include "tenant.login" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: login
+spec:
+  realmRef:
+    {{- toYaml $kc.realmRef | nindent 4 }}
+  clientId: {{ required "login.oidc.clientId is required" .Values.login.oidc.clientId | quote }}
+  name: {{ printf "kagent %s" $host | quote }}
+  description: {{ printf "kagent at %s (login proxy)" $host | quote }}
+  enabled: true
+  clientAuthenticatorType: client-secret
+  secret: {{ printf "$%s:client-secret" (include "tenant.oidcSecret" .) | quote }}
+  standardFlowEnabled: true
+  fullScopeAllowed: true
+  webUrl: {{ printf "https://%s" $host | quote }}
+  redirectUris:
+  - {{ printf "https://%s/oauth2/callback" $host | quote }}
+  webOrigins:
+  - {{ printf "https://%s" $host | quote }}
+  defaultClientScopes:
+  {{- toYaml $kc.defaultClientScopes | nindent 2 }}
+  reconciliationStrategy: full
+{{- end }}

@@ -108,8 +108,8 @@ check "task store off the shared volume" '"/workspace" not in env("opencode-a2a"
 check "mcp runtimes checked" 'all(("check " + t) in obj("ConfigMap", "sam-agent-opencode-build")["data"]["verify-tools.sh"] for t in ["node --version", "npm --version", "npx --version", "uv --version", "uvx --version", "terraform version", "packer version", "go version", "ansible --version", "hf version", "fastapi --version", "kubectl-mariadb --help", "kubectl mdba --help", "trivy --version", "semgrep --version", "checkov --version", "sonar-scanner --version", "renovate --version", "snyk --version", "cosign version", "opa version"])'
 check "no runtime tool bin dir" '"UV_TOOL_BIN_DIR" not in [b for b in objs("BuildConfig") if "a2a" not in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "no a2a tools without peers" 'not {"A2A_PEERS", "A2A_GATEWAY_URL", "A2A_PROXY_URL"} & set(env("opencode")) and "a2a_call" not in cfg()["instructions.md"]'
-check "pins a2a" '"pip install --no-cache-dir \"opencode-a2a @ https://github.com/hoolia/opencode-a2a/archive/refs/tags/v2.0.0%2Bhoolia.1.tar.gz\"" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
-check "a2a version without git" '"ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENCODE_A2A=2.0.0+hoolia.1" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
+check "pins a2a" '"pip install --no-cache-dir \"opencode-a2a @ https://github.com/hoolia/opencode-a2a/archive/refs/tags/v2.0.0%2Bhoolia.2.tar.gz\"" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
+check "a2a version without git" '"ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENCODE_A2A=2.0.0+hoolia.2" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "a2a tag has no plus" 'all("+" not in b["spec"]["output"]["to"]["name"] for b in objs("BuildConfig")) and "+" not in byo()["image"]'
 check "pins a2a base" '"FROM registry.access.redhat.com/ubi10/python-312-minimal" in [b for b in objs("BuildConfig") if "a2a" in b["metadata"]["name"]][0]["spec"]["source"]["dockerfile"]'
 check "oauth-proxy image" 'ctr("oauth-proxy")["image"] == "image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4"'
@@ -172,9 +172,9 @@ check "audience port" 'vol("api-token")["projected"]["sources"][0]["serviceAccou
 
 # group check: a SAR the chart grants to the allowed groups only
 OUT=$(render "${BASE[@]}" --set 'oauth.allowedGroups={team-admins,ops}')
-check "group sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test", "resource": "services/proxy", "resourceName": "sam-agent-ui", "verb": "get"}]'
+check "group sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test", "resource": "services/proxy", "resourceName": "sam-agent-ui", "verb": "login"}]'
 check "group flag unused" 'not arg("--openshift-group")'
-check "login role" 'obj("Role", "sam-agent-login")["rules"] == [{"apiGroups": [""], "resources": ["services/proxy"], "resourceNames": ["sam-agent-ui"], "verbs": ["get"]}]'
+check "login role" 'obj("Role", "sam-agent-login")["rules"] == [{"apiGroups": [""], "resources": ["services/proxy"], "resourceNames": ["sam-agent-ui"], "verbs": ["login"]}]'
 check "login binding" 'obj("RoleBinding", "sam-agent-login")["roleRef"] == {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": "sam-agent-login"} and obj("RoleBinding", "sam-agent-login")["subjects"] == [{"apiGroup": "rbac.authorization.k8s.io", "kind": "Group", "name": "team-admins"}, {"apiGroup": "rbac.authorization.k8s.io", "kind": "Group", "name": "ops"}]'
 
 # the owner is an OpenShift user name; OpenCode sees its local part as the Basic user

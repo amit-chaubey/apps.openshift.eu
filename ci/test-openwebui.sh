@@ -91,6 +91,10 @@ for s in OAUTH_CLIENT_SECRET OPENID_PROVIDER_URL oauth2-proxy runAsUser; do hasn
 OUT=$(render)
 check "no values" 'obj("Deployment")["metadata"]["name"] == "t-openwebui" and obj("ConfigMap")["data"]["emails.txt"].strip() == "" and "host" not in obj("Route")["spec"] and "WEBUI_URL" not in env("openwebui")'
 check "no values route" '"cert-manager.io/issuer-kind" not in obj("Route")["metadata"].get("annotations", {})'
+# no owner: an empty --email-domain would match no address, so every email passes and the SAR decides
+check "no owner emails" 'arg("--email-domain") == ["*"] and not arg("--authenticated-emails-file") and json.loads(arg("--openshift-sar")[0])[0]["verb"] == "get"'
+OUT=$(render --set person.name=team --set 'oauth.allowedGroups={staff}')
+check "group only emails" 'arg("--email-domain") == ["*"] and not arg("--authenticated-emails-file") and json.loads(arg("--openshift-sar")[0])[0]["verb"] == "login" and env("openwebui")["DEFAULT_USER_ROLE"] == "user"'
 
 OUT=$(render "${BASE[@]}" --set gateway.upstream=https://api.example.com)
 check upstream 'env("token-proxy")["UPSTREAM"] == "https://api.example.com" and sat()["audience"] == "api.example.com"'
@@ -100,33 +104,9 @@ OUT=$(render "${BASE[@]}" --set gateway.upstream=https://api.example.com:8443)
 check "audience port" 'sat()["audience"] == "api.example.com"'
 
 OUT=$(render "${BASE[@]}" --set 'oauth.allowedGroups={team-admins,ops}')
-check "group sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test", "resource": "services/proxy", "resourceName": "sam-openwebui", "verb": "get"}]'
-check "login role" 'obj("Role", "sam-openwebui-login")["rules"] == [{"apiGroups": [""], "resources": ["services/proxy"], "resourceNames": ["sam-openwebui"], "verbs": ["get"]}]'
+check "group sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test", "resource": "services/proxy", "resourceName": "sam-openwebui", "verb": "login"}]'
+check "login role" 'obj("Role", "sam-openwebui-login")["rules"] == [{"apiGroups": [""], "resources": ["services/proxy"], "resourceNames": ["sam-openwebui"], "verbs": ["login"]}]'
 check "login binding" '[s["name"] for s in obj("RoleBinding", "sam-openwebui-login")["subjects"]] == ["team-admins", "ops"] and obj("RoleBinding")["roleRef"]["name"] == "sam-openwebui-login"'
-
-# team: every group member passes the proxy, the group check stays
-OUT=$(render "${BASE[@]}" --set team.enabled=true --set 'oauth.allowedGroups={staff}')
-check "team emails" 'arg("--email-domain") == ["*"] and not arg("--authenticated-emails-file")'
-check "team sar" 'json.loads(arg("--openshift-sar")[0]) == [{"namespace": "test", "resource": "services/proxy", "resourceName": "sam-openwebui", "verb": "get"}] and [s["name"] for s in obj("RoleBinding", "sam-openwebui-login")["subjects"]] == ["staff"]'
-check "team role" 'env("openwebui")["DEFAULT_USER_ROLE"] == "user" and env("openwebui")["ENABLE_SIGNUP"] == "false"'
-check "member tools off" '"USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS" not in env("openwebui") and "USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS" not in env("openwebui")'
-OUT=$(render "${BASE[@]}" --set team.enabled=true --set 'oauth.allowedGroups={staff}' --set team.memberTools=true)
-check "member tools on" 'env("openwebui")["USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS"] == "true" and env("openwebui")["USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS"] == "true"'
-
-# vectors: built-in store unless a Qdrant address is given
-OUT=$(render "${BASE[@]}")
-check "builtin vectors" '"VECTOR_DB" not in env("openwebui") and "QDRANT_URI" not in env("openwebui") and env("openwebui")["RAG_EMBEDDING_BATCH_SIZE"] == "64"'
-OUT=$(render "${BASE[@]}" --set qdrant.url=http://qdrant:6333)
-check qdrant 'env("openwebui")["VECTOR_DB"] == "qdrant" and env("openwebui")["QDRANT_URI"] == "http://qdrant:6333"'
-check "qdrant no key" '"QDRANT_API_KEY" not in [e["name"] for e in ctr("openwebui")["env"]]'
-OUT=$(render "${BASE[@]}" --set qdrant.url=http://qdrant:6333 --set qdrant.apiKeySecret.name=qdrant-qdrant-api-key)
-check "qdrant key ref" 'envref("openwebui", "QDRANT_API_KEY") == {"name": "qdrant-qdrant-api-key", "key": "api-key"}'
-if helm template t "$C" --namespace test "${BASE[@]}" --set qdrant.url=qdrant:6333 >/dev/null 2>&1; then
-  echo "FAIL qdrant url without scheme accepted"; fail=1
-fi
-if helm template t "$C" --namespace test "${BASE[@]}" --set team.enabled=true >/dev/null 2>&1; then
-  echo "FAIL team without allowedGroups accepted"; fail=1
-fi
 
 OUT=$(render "${BASE[@]}" --set oauth.ownerEmail=Owner@example.org)
 check "owner override" 'obj("ConfigMap")["data"]["emails.txt"].split() == ["Owner@example.org"]'

@@ -54,7 +54,7 @@ the cluster, else a new random one. Takes value, existing (Secret data), key, le
 
 {{/* Data of the Secret of that name in the release namespace, or an empty dict */}}
 {{- define "openwebui.existing" -}}
-{{- $found := lookup "v1" "Secret" .root.Release.Namespace .name -}}
+{{- $found := lookup "v1" "Secret" (include "openwebui.namespace" .root) .name -}}
 {{- if $found -}}
 {{- toJson (default dict $found.data) -}}
 {{- else -}}
@@ -66,7 +66,7 @@ the cluster, else a new random one. Takes value, existing (Secret data), key, le
 {{- define "openwebui.toolServers" -}}
 {{- $endpoints := .Values.mcp.endpoints -}}
 {{- if not $endpoints -}}
-{{- $endpoints = list (dict "id" "team" "endpoint" .Release.Namespace) (dict "id" "public" "endpoint" "public") -}}
+{{- $endpoints = list (dict "id" "team" "endpoint" (include "openwebui.namespace" .)) (dict "id" "public" "endpoint" "public") -}}
 {{- end -}}
 {{- $connections := list -}}
 {{- range $endpoints -}}
@@ -90,4 +90,13 @@ capabilities:
   - ALL
 seccompProfile:
   type: RuntimeDefault
+{{- end -}}
+
+{{/* Namespace of every object: <tenant>-<team> for an app of a team, else the release namespace */}}
+{{- define "openwebui.namespace" -}}
+{{- if .Values.team -}}
+{{- printf "%s-%s" (required "tenant is required with team" .Values.tenant) .Values.team -}}
+{{- else -}}
+{{- .Release.Namespace -}}
+{{- end -}}
 {{- end -}}

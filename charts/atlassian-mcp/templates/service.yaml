@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ include "atlassian-mcp.namespace" . }}
+  labels:
+    {{- include "atlassian-mcp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+    {{- with .Values.service.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- with .Values.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    agentgateway.dev/mcp-path: {{ .Values.path | quote }}
+    agentgateway.dev/mcp-target-name: {{ .Values.mcp.targetName | quote }}
+    {{- if and (eq .Values.credentials.mode "perCaller") .Values.credentials.gatewayHeader }}
+    agentgateway.dev/mcp-credential-header: {{ .Values.credentials.gatewayHeader | quote }}
+    {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "atlassian-mcp.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: mcp
+    port: {{ .Values.port }}
+    targetPort: mcp
+    protocol: TCP
+    {{- with .Values.mcp.appProtocol }}
+    appProtocol: {{ . }}
+    {{- end }}

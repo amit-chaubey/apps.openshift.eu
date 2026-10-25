@@ -1,10 +1,9 @@
 """Behaviour suite for token-proxy.py, against in-process fake servers."""
-import http.client, importlib.util, json, os, socket, sys, tempfile, threading, time, unittest
+import http.client, importlib.util, json, os, socket, sys, tempfile, threading, time, unittest, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.environ.get("TOKEN_PROXY_SRC") or os.path.join(
-    HERE, os.pardir, "charts", "opencode-agent", "files", "token-proxy.py")
+SRC = os.environ.get("TOKEN_PROXY_SRC") or os.path.join(HERE, "token-proxy.py")
 
 spec = importlib.util.spec_from_file_location("token_proxy", SRC)
 tp = importlib.util.module_from_spec(spec)
@@ -205,6 +204,131 @@ class SettingsTest(unittest.TestCase):
                 tp.Settings.from_env().validate()
             self.assertEqual(tp.Settings.from_env().token_file,
                              "/var/run/secrets/api-token/token")
+        finally:
+            for key, value in saved.items():
+                os.environ.pop(key, None)
+                if value is not None:
+                    os.environ[key] = value
+
+
+class FakeTokenEndpoint:
+    """Token endpoint: records each grant form, answers with a numbered access token."""
+
+    def __init__(self, status=200):
+        self.forms = []
+        self.status = status
+        outer = self
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *args):
+                pass
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                outer.forms.append(dict(urllib.parse.parse_qsl(self.rfile.read(length).decode())))
+                payload = json.dumps({"access_token": f"kc-{len(outer.forms)}", "expires_in": 60}).encode()
+                if outer.status != 200:
+                    payload = b'{"error":"invalid_client"}'
+                self.send_response(outer.status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+        self.server = serve(Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_port}/realms/r/protocol/openid-connect/token"
+
+
+class AgentTokenTest(ProxyCase):
+    def start_token_endpoint(self, status=200):
+        self.token_endpoint = FakeTokenEndpoint(status)
+        self.assertion_file = os.path.join(os.path.dirname(self.token_file), "keycloak-token")
+        with open(self.assertion_file, "w") as handle:
+            handle.write("sa-for-the-realm\n")
+        self.settings = tp.Settings(
+            token_file=self.token_file, upstream=self.upstream.url, port=0,
+            agent_token_url=self.token_endpoint.url, agent_token_assertion_file=self.assertion_file,
+            agent_token_paths=("/mcp",))
+        self.proxy = tp.build_server(self.settings, port=0)
+        threading.Thread(target=self.proxy.serve_forever, daemon=True).start()
+        self.addCleanup(self.proxy.shutdown)
+        self.addCleanup(self.proxy.server_close)
+        self.port = self.proxy.server_port
+
+    def test_mcp_path_carries_the_agent_token(self):
+        self.start_token_endpoint()
+        _, resp = self.get("/mcp/hoolia-aib/nextcloud")
+        resp.read()
+        self.assertEqual(self.upstream.requests[0][2]["Authorization"], "Bearer kc-1")
+        form = self.token_endpoint.forms[0]
+        self.assertEqual(form["grant_type"], "client_credentials")
+        self.assertEqual(form["client_assertion_type"], "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
+        self.assertEqual(form["client_assertion"], "sa-for-the-realm")
+
+    def test_model_path_keeps_the_serviceaccount_token(self):
+        self.start_token_endpoint()
+        _, resp = self.get("/v1/models")
+        resp.read()
+        self.assertEqual(self.upstream.requests[0][2]["Authorization"], "Bearer projected-1")
+        self.assertEqual(self.token_endpoint.forms, [])
+
+    def test_agent_token_is_reused_until_it_expires(self):
+        self.start_token_endpoint()
+        for _ in range(3):
+            _, resp = self.get("/mcp/public")
+            resp.read()
+        self.assertEqual(len(self.token_endpoint.forms), 1)
+        self.assertEqual([r[2]["Authorization"] for r in self.upstream.requests], ["Bearer kc-1"] * 3)
+
+    def test_token_endpoint_refusal_returns_502_and_never_forwards(self):
+        self.start_token_endpoint(status=401)
+        with self.assertLogs(level="ERROR") as logs:
+            _, resp = self.get("/mcp/public")
+            body = resp.read().decode()
+        self.assertEqual(resp.status, 502)
+        self.assertEqual(self.upstream.requests, [])
+        self.assertNotIn("sa-for-the-realm", body + "".join(logs.output))
+
+    def test_via_the_tenant_realm_its_token_is_the_assertion(self):
+        self.tenant_endpoint = FakeTokenEndpoint()
+        self.start_token_endpoint()
+        self.proxy.shutdown()
+        self.proxy.server_close()
+        self.settings = tp.Settings(
+            token_file=self.token_file, upstream=self.upstream.url, port=0,
+            agent_token_url=self.token_endpoint.url, agent_token_assertion_file=self.assertion_file,
+            agent_token_paths=("/mcp",), agent_token_via_url=self.tenant_endpoint.url)
+        self.proxy = tp.build_server(self.settings, port=0)
+        threading.Thread(target=self.proxy.serve_forever, daemon=True).start()
+        self.addCleanup(self.proxy.server_close)
+        self.port = self.proxy.server_port
+        for _ in range(2):
+            _, resp = self.get("/mcp/grncloud-engineering/gitlab")
+            resp.read()
+        self.proxy.shutdown()
+        self.assertEqual(self.tenant_endpoint.forms[0]["client_assertion"], "sa-for-the-realm")
+        self.assertEqual(self.token_endpoint.forms[0]["client_assertion"], "kc-1")
+        self.assertEqual(len(self.tenant_endpoint.forms), 1)
+        self.assertEqual(len(self.token_endpoint.forms), 1)
+        self.assertEqual(self.upstream.requests[0][2]["Authorization"], "Bearer kc-1")
+
+    def test_without_agent_token_settings_mcp_keeps_the_serviceaccount_token(self):
+        _, resp = self.get("/mcp/public")
+        resp.read()
+        self.assertEqual(self.upstream.requests[0][2]["Authorization"], "Bearer projected-1")
+
+    def test_settings_from_env_read_the_agent_token_variables(self):
+        keys = ("UPSTREAM", "AGENT_TOKEN_URL", "AGENT_TOKEN_ASSERTION_FILE", "AGENT_TOKEN_PATHS", "AGENT_TOKEN_VIA_URL")
+        saved = {k: os.environ.pop(k, None) for k in keys}
+        try:
+            os.environ.update({"UPSTREAM": "http://x", "AGENT_TOKEN_URL": "http://k/token",
+                               "AGENT_TOKEN_PATHS": "/mcp, /a2a", "AGENT_TOKEN_VIA_URL": "http://t/token"})
+            s = tp.Settings.from_env()
+            self.assertEqual(s.agent_token_paths, ("/mcp", "/a2a"))
+            self.assertEqual(s.agent_token_assertion_file, "/var/run/secrets/agent-token/token")
+            self.assertEqual(s.agent_token_via_url, "http://t/token")
         finally:
             for key, value in saved.items():
                 os.environ.pop(key, None)

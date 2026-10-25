@@ -27,6 +27,14 @@ hsts:
 secrets:
   # kubernetes: Secrets from the values below. externalSecret: a secret store
   type: kubernetes
+  # with type kubernetes: External Secrets Operator makes nextcloud-admin,
+  # nextcloud-mariadb and nextcloud-mariadb-root and generates each empty password once
+  generator:
+    enabled: false
+    # labels and annotations of the generated Secret nextcloud-admin
+    secretTemplate:
+      labels: {}
+      annotations: {}
   adminUsername: admin
   # password of the first administrator; empty: generated
   adminPassword: ""
@@ -48,6 +56,8 @@ secrets:
   turnSecret: ""
   # key of the AI endpoint; never generated, required when ai.enabled
   aiApiKey: ""
+  # secret of the OpenID Connect client; never generated, required when oidc.enabled
+  oidcClientSecret: ""
   externalSecret:
     storeKind: ClusterSecretStore
     storeName: ""
@@ -68,13 +78,13 @@ secrets:
       recording-secret: nextcloud-talk-recording
       turn-secret: nextcloud-turn
       ai-api-key: nextcloud-ai
-
-# Outgoing mail server; empty: Nextcloud sends no mail
-smtp:
-  host: ""
+      oidc-client-secret: nextcloud-oidc-client
 
 database:
   enabled: true
+  # true for a release installed before 0.6: MariaDB cannot change its root password
+  # Secret, so the root password stays in nextcloud-credentials. helm detects it itself
+  legacyRootSecret: false
   image: docker.io/mariadb:11.4.10
   replicas: 1
   metrics:
@@ -226,6 +236,27 @@ talk:
         cpu: "2"
         memory: 2Gi
 
+# Login with an OpenID Connect provider (app user_oidc); local logins keep working.
+# Active once discoveryUri and clientId are set
+oidc:
+  enabled: true
+  # provider name in Nextcloud, shown on the login button
+  identifier: keycloak
+  # the provider's /.well-known/openid-configuration
+  discoveryUri: ""
+  # its secret is secrets.oidcClientSecret
+  clientId: ""
+  scope: openid profile email
+  # claims for the Nextcloud user id, display name and email
+  uidClaim: preferred_username
+  # claim with the user's groups; groups matching groupsRegex are created and kept in step
+  groupsClaim: groups
+  # only users with a group matching this regex may log in, for example ^(admin|acme-admins)$;
+  # a group admin in the claim makes the user a Nextcloud administrator. Empty: no restriction
+  groupsRegex: ""
+  # API and WebDAV calls with a Bearer token of the provider; the user is created on first call
+  bearer: true
+
 # Assistant on an OpenAI-compatible API; also runs the worker and Redis
 ai:
   enabled: false
@@ -354,10 +385,9 @@ nextcloud:
     host: nextcloud.example.org
     existingSecret:
       enabled: true
-      secretName: nextcloud-credentials
-      usernameKey: nextcloud-username
-      passwordKey: nextcloud-password
-      smtpHostKey: smtp-host
+      secretName: nextcloud-admin
+      usernameKey: username
+      passwordKey: password
     # the image starts as root and drops to www-data itself
     securityContext:
       runAsUser: 0
@@ -411,6 +441,9 @@ nextcloud:
         - secret:
             name: nextcloud-ai
             optional: true
+        - secret:
+            name: nextcloud-oidc
+            optional: true
     extraVolumeMounts:
     - name: setup
       mountPath: /docker-entrypoint-hooks.d/before-starting/00-chart.sh
@@ -456,9 +489,9 @@ nextcloud:
     database: nextcloud
     existingSecret:
       enabled: true
-      secretName: nextcloud-credentials
-      usernameKey: mariadb-username
-      passwordKey: mariadb-password
+      secretName: nextcloud-mariadb
+      usernameKey: username
+      passwordKey: password
   mariadb:
     enabled: false
   postgresql:

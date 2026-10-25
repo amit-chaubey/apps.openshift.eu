@@ -1,3 +1,9 @@
+# Team of the tenant the app serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the app belongs to; required with team
+tenant: ""
+
 person:
   # short lowercase name; objects are named <name>-agent. Empty: the release name
   name: ""
@@ -20,10 +26,14 @@ route:
 
 oauth:
   # OpenShift user name (an email) of the only person admitted to the UI.
-  # Empty: person.email; both empty: nobody logs in
+  # Empty: person.email; both empty: everyone who may edit the project
   ownerEmail: ""
-  # OpenShift groups the owner must be in; empty: no group check
+  # OpenShift groups admitted, strictly (with an owner: the owner must be in one)
   allowedGroups: []
+  # ClusterRole holding the verb login on services/proxy that allowedGroups are bound
+  # to. Empty: the chart's own Role, which only an installer holding that verb (a
+  # cluster admin) can create
+  loginClusterRole: ""
 
 secrets:
   # kubernetes: Secrets from the values below. externalSecret: from a secret store
@@ -75,9 +85,21 @@ a2a:
   # through the token proxy. Empty: no A2A tools
   peers: []
   # opencode-a2a release with the OpenCode 2.x API (OPENCODE_API_VERSION=v2)
-  version: 2.0.0+hoolia.1
+  version: 2.0.0+hoolia.2
   # pip requirement the adapter image installs; a source archive needs no git
-  package: opencode-a2a @ https://github.com/hoolia/opencode-a2a/archive/refs/tags/v2.0.0%2Bhoolia.1.tar.gz
+  package: opencode-a2a @ https://github.com/hoolia/opencode-a2a/archive/refs/tags/v2.0.0%2Bhoolia.2.tar.gz
+  # Callers of the agent's tenant reach it with their own bearer JWT, next to the static
+  # credentials: a ServiceAccount token from a namespace <tenant> or <tenant>-*, or an
+  # OIDC token whose groups claim holds <tenant> or <tenant>-*. kagent forwards its
+  # caller's token. Needs the adapter version above or later
+  tenantAuth:
+    enabled: true
+    # empty: the release namespace up to its first "-"
+    tenant: ""
+    # the cluster's ServiceAccount token issuer; empty: none
+    kubernetesIssuer: https://kubernetes.default.svc
+    # OIDC issuers, for example https://login.example/realms/<realm>
+    oidcIssuers: []
   # the A2A task store needs SQLite 3.35 or later (RETURNING); UBI 9 ships 3.34
   baseImage: registry.access.redhat.com/ubi10/python-312-minimal
   # prebuilt adapter image; required when builds.enabled is false
@@ -110,13 +132,14 @@ opencode:
   - opencode
   # merged over the generated opencode.json
   config: {}
-  # opencode container requests and limits
+  # opencode container requests and limits; an agent at work peaks near 10 cores
   resources:
     requests:
-      cpu: 200m
-      memory: 512Mi
+      cpu: 500m
+      memory: 2Gi
     limits:
-      memory: 4Gi
+      cpu: "8"
+      memory: 16Gi
 
 tools:
   # Go image that builds the odf CLI, which has no binary release, from source
@@ -154,7 +177,7 @@ oauthProxy:
       cpu: 10m
       memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 256Mi
 
 uiProxy:
   # loopback port oauth-proxy sends the UI to; runs on tokenProxy.image
@@ -165,28 +188,44 @@ uiProxy:
       cpu: 10m
       memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 256Mi
 
 tokenProxy:
   # image that runs the token proxy script
   image: registry.access.redhat.com/ubi9/python-312-minimal
   # loopback port OpenCode sends model and A2A calls to
   port: 8099
+  # calls under paths carry the agent's own OpenID Connect token instead of the
+  # ServiceAccount token: a client_credentials grant at tokenUrl, authenticated with a
+  # ServiceAccount token for audience (federated client authentication). Empty: off
+  agentToken:
+    tokenUrl: ""
+    # usually the realm's issuer URL
+    audience: ""
+    paths:
+    - /mcp
   # token proxy requests and limits
   resources:
     requests:
       cpu: 10m
       memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 256Mi
 
 # node labels and affinity of the agent pod; the OpenCode image is several Gi
 nodeSelector: {}
 affinity: {}
 
+# labels on the kagent Agent, for example the one a platform uses to register the
+# ServiceAccount kagent creates for it as an OpenID Connect client
+agentLabels: {}
+
 serviceAccount:
   # empty: <name>-agent, created by kagent; another name is created by the chart
   name: ""
+  # labels on a ServiceAccount the chart creates, for example the one a platform uses
+  # to register it as an OpenID Connect client
+  labels: {}
 
 storage:
   # work tree, OpenCode home and session store

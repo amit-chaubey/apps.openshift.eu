@@ -29,6 +29,7 @@ oc get route mkdocs -o jsonpath='https://{.spec.host}{"\n"}'
 - `source.webhook` (default: false): Let the Git server start a build on a push. An image trigger restarts the site after the build, so set `source.pollSchedule` to empty.
 - `secrets.webhookSecret` (default: empty): Secret part of the webhook address. Empty: generated once.
 - `route.hostname` (default: empty): Hostname of the site. Empty: OpenShift assigns one. Set it at install; a tenant cannot change the hostname of an existing Route.
+- `route.labels`, `route.annotations` (default: empty): Extra labels and annotations on the Route, for example to select it for a router shard or a platform policy.
 - `oauth.enabled` (default: false): Put the site behind a login.
 - `oauth.issuerUrl`, `oauth.clientId`, `secrets.clientSecret`: Your OIDC issuer and client. Required with `oauth.enabled`.
 - `oauth.allowedGroups` (default: empty): Only these groups get in. Empty: every user of the issuer.

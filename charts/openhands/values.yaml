@@ -1,0 +1,307 @@
+# Team of the tenant the app serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the app belongs to; required with team
+tenant: ""
+
+image:
+  # upstream all-in-one image (frontend, agent-server, automation); used as is
+  # when build.enabled is false, else the base of the build
+  repository: ghcr.io/openhands/agent-canvas
+  tag: 1.33.0
+  pullPolicy: IfNotPresent
+
+build:
+  # build the image with the toolset below in the project
+  enabled: true
+  # image whose /usr/local/bin binaries, /usr/local/go, /tools, /opt/sonar-scanner and
+  # Ansible collections are copied in, for example an opencode-agent image. Empty:
+  # only the Debian packages and the tools below
+  toolsImage: ""
+  # pull secret for toolsImage and the base image; empty: the builder's own
+  pullSecret: ""
+  # Python (uv), npm and pip tools; keep: true leaves the base image's own command
+  # in place (agent-canvas starts its automation server with its uvicorn)
+  tools:
+  - {kind: uv, command: mkdocs, args: "mkdocs==1.6.1 --with mkdocs-material", check: "mkdocs --version"}
+  - {kind: uv, command: ansible, args: "ansible-core==2.21.5", check: "ansible --version"}
+  - {kind: uv, command: hf, args: "huggingface_hub[cli]==2.2.0", check: "hf version"}
+  - {kind: uv, command: fastapi, args: "fastapi[standard]==0.159.1", check: "fastapi --version"}
+  - {kind: uv, command: uvicorn, keep: true, args: "uvicorn==0.54.0", check: "uvicorn --version"}
+  - {kind: uv, command: semgrep, args: "semgrep==1.182.0", check: "semgrep --version"}
+  - {kind: uv, command: ruff, args: "ruff==0.17.1", check: "ruff --version"}
+  - {kind: uv, command: markitdown, args: "markitdown[all]==0.1.9", check: "markitdown --version"}
+  - {kind: npm, command: "@mermaid-js/mermaid-cli@12.0.0", check: "mmdc --version"}
+  - {kind: pip, command: "python-docx==1.2.0", check: "python3 -c 'import docx'"}
+  - {kind: pip, command: "docxtpl==0.20.2", check: "python3 -c 'import docxtpl'"}
+  - {kind: pip, command: "python-pptx==1.0.2", check: "python3 -c 'import pptx'"}
+  - {kind: pip, command: "openpyxl==3.1.5", check: "python3 -c 'import openpyxl'"}
+  - {kind: pip, command: "vsdx==0.6.1", check: "python3 -c 'import vsdx'"}
+  - {kind: pip, command: "diagrams==0.25.1", check: "python3 -c 'import diagrams.k8s, diagrams.onprem'"}
+  - {kind: uv, command: checkov, args: "--python 3.12 checkov==3.3.30", check: "checkov --version"}
+  - {kind: uv, command: open-terminal, args: "open-terminal==0.14.2", check: "open-terminal --help"}
+  - {kind: uv, command: jupyter-server, args: "jupyter-server==2.21.1 --with ipykernel", check: "jupyter-server --version"}
+  - {kind: npm, command: "@bitwarden/cli@2026.10.0", check: "bw --version"}
+  - {kind: npm, command: "@higgsfield/cli@1.2.2", check: "higgsfield --version"}
+  - {kind: npm, command: "confluence-cli@2.30.4", check: "confluence --version"}
+  - {kind: npm, command: "renovate@44.176.1", check: "renovate --version"}
+  - {kind: npm, command: "snyk@1.1308.2", check: "snyk --version"}
+  - {kind: pip, command: "atlassian-python-api==5.0.5", check: "python3 -c 'import atlassian, importlib.metadata as m; print(m.version(\"atlassian-python-api\"))'"}
+  # ImageStreamTag: push to an ImageStream in the project.
+  # DockerImage: push to output.name with output.pushSecret
+  output:
+    kind: ImageStreamTag
+    name: ""
+    pushSecret: ""
+  # node labels for the build pod
+  nodeSelector: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 6Gi
+
+route:
+  # empty: OpenShift assigns a host under the default application domain
+  host: ""
+  # extra labels on the Route only, for example to pick a router shard
+  labels: {}
+  # the UI holds long-lived WebSockets; the router must not cut idle streams
+  timeout: 3600s
+  # used when a host is set; certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+oauth:
+  # OpenShift user name (an email) of the only person admitted. Empty: allowedGroups
+  ownerEmail: ""
+  # OpenShift groups admitted (with ownerEmail: the owner must be in one).
+  # Both empty: everyone who may edit the project
+  allowedGroups: []
+  # ClusterRole holding the verb login on services/proxy that allowedGroups are bound
+  # to. Empty: the chart's own Role, which only an installer holding that verb (a
+  # cluster admin) can create
+  loginClusterRole: ""
+
+secrets:
+  # kubernetes: Secrets from the values below. externalSecret: from a secret store
+  type: kubernetes
+  # agent-server API key the browser enters once. Empty: generated once
+  sessionApiKey: ""
+  # settings encryption key. Empty: generated once
+  secretKey: ""
+  # oauth-proxy cookie secret. Empty: generated once. A value that is not 16, 24 or
+  # 32 characters long is hashed to 32
+  cookieSecret: ""
+  # access token for git.host, also used by glab; glab merge requests need scope api
+  gitToken: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # one vault item per secret, value from the item's password.
+    # Empty name: <release>-<secret>
+    items:
+      sessionApiKey: ""
+      secretKey: ""
+      cookieSecret: ""
+      gitToken: ""
+
+git:
+  # Git host (no scheme) the token is sent to; empty: no token configured
+  host: ""
+  # secrets store name the UI reads to offer its git provider features (GITLAB_TOKEN,
+  # GITHUB_TOKEN, BITBUCKET_TOKEN or FORGEJO_TOKEN); empty: not written
+  uiSecretName: GITLAB_TOKEN
+  # commit identity
+  userName: ""
+  userEmail: ""
+
+gateway:
+  # model and MCP gateway the token proxy forwards to, for example https://api.example.com
+  upstream: ""
+  # audience of the agent's ServiceAccount token. Empty: the host of upstream
+  audience: ""
+
+llm:
+  # default model, in LiteLLM form, for example openai/<model> for an
+  # OpenAI-compatible gateway. Empty: chosen in the UI. Written into the
+  # settings when the pod starts after this value changed
+  model: ""
+  # further models of the gateway offered under Settings > LLM, same form as model
+  models: []
+  # true: also a profile for every model the gateway lists at /v1/models, added at
+  # each pod start; profiles that exist are left as they are
+  gatewayModels: true
+  # provider connection to gateway.upstream listed under Settings > LLM, holding
+  # llm.model and llm.models as profiles. Empty name: no connection
+  connection:
+    name: Gateway
+    # LiteLLM provider of the gateway's API
+    provider: openai
+
+# MCP servers reached through the token proxy: {name, path, timeout, enabled, icon} with
+# path on gateway.upstream, timeout in seconds (default 60), enabled (default true) and
+# icon an image URL for its card, for example {name: public, path: /mcp/public}.
+# Written like llm.model.
+# The agent-server lists all enabled servers within 30 s together: one slow server
+# leaves the agent without any MCP tools
+mcpServers: []
+
+# environment of the ACP agents the UI offers (Claude Code, Codex, Gemini CLI), written
+# into the agent-server secrets store like llm.model; name: value. Point the base URLs
+# at the token proxy (http://127.0.0.1:<tokenProxy.port>/...) to use gateway.upstream.
+# Not for real credentials: the values sit in the pod spec
+agentSecrets: {}
+
+skills:
+  # skill marketplaces the agent loads, in Claude Code or OpenHands plugin format:
+  # {name, source, ref, repoPath, autoLoad} with source github:<owner>/<repo>, a git URL
+  # or a local path, and autoLoad true (all plugins, default) or a list of plugin names.
+  # Written like llm.model; replaces the marketplaces registered in the UI
+  marketplaces: []
+
+# ACP agent profiles offered under "Switch agent profile": name: {acp_server, acp_model},
+# acp_server one of claude-code, codex, gemini-cli, ...; written like llm.model
+agentProfiles: {}
+
+# MCP servers from the namespace's kagent RemoteMCPServers, kept in step every interval:
+# a URL on gateway.upstream goes through the token proxy; one that needs headers from a
+# Secret is skipped. Entries the user added in the UI are left alone
+mcpDiscovery:
+  enabled: true
+  # seconds between two passes
+  interval: 60
+  # only RemoteMCPServers with these labels, for example key=value. Empty: all
+  labelSelector: ""
+  # ClusterRole, installed with kagent, that reads RemoteMCPServers; bound in the
+  # release namespace. Empty: no binding (the ServiceAccount's edit role may cover it)
+  clusterRole: kagent-remotemcpserver-view
+  resources:
+    requests:
+      cpu: 5m
+      memory: 32Mi
+    limits:
+      memory: 96Mi
+
+# Remote MCP servers a user adds in the UI become AgentgatewayBackends of the namespace,
+# so the platform publishes them to the whole team. OAuth and in-pod servers stay personal.
+# The ServiceAccount's edit role must cover AgentgatewayBackends
+mcpPublish:
+  enabled: true
+  # seconds between two passes that also compare the stored credentials and retry
+  # refused servers
+  resync: 600
+
+# A2A server for the agent: other agents and kagent chat with it. The instance is one agent
+# (a conversation per A2A context); every titled conversation is also a sub-agent
+# "<release>/<title>" at /agents/<slug>/
+a2a:
+  enabled: true
+  # container port of the shim inside the pod
+  port: 8090
+  # description on the agent card and in kagent
+  description: ""
+  # Secret with key token, a static bearer credential besides the tenant JWTs. Empty: none
+  staticTokenSecret: ""
+  # admit bearer JWTs of the tenant: ServiceAccount tokens from a namespace <tenant> or
+  # <tenant>-*, OIDC tokens whose groups claim holds <tenant> or <tenant>-*
+  tenantAuth:
+    enabled: true
+    # empty: the release namespace up to its first "-"
+    tenant: ""
+    # the cluster's ServiceAccount token issuer; empty: none
+    kubernetesIssuer: https://kubernetes.default.svc
+    # OIDC issuers, for example https://login.example/realms/<realm>
+    oidcIssuers: []
+  resources:
+    requests:
+      cpu: 10m
+      memory: 96Mi
+    limits:
+      memory: 256Mi
+  # register the agent in kagent (BYO Agent named like the release) when kagent is installed
+  kagent:
+    enabled: true
+    # the relay pod kagent runs in front of the shim
+    resources:
+      requests:
+        cpu: 5m
+        memory: 32Mi
+      limits:
+        memory: 96Mi
+
+# MCP servers added in the UI that log in with OAuth return to
+# https://<route.host>/mcp-oauth/callback instead of localhost, which a hosted agent's
+# browser cannot reach; needs build.enabled and route.host. One login runs at a time
+mcpOAuth:
+  # loopback port of the agent-server's callback listener; 0: upstream localhost redirect
+  callbackPort: 18765
+
+kubernetesMcpServer:
+  # local stdio MCP server "kubernetes" with the pod's ServiceAccount; needs
+  # /tools/kubernetes-mcp-server, which build.toolsImage provides
+  enabled: false
+  # kinds the server refuses to read or write
+  deniedResources:
+  - {group: "", version: v1, kind: Secret}
+
+# extra environment for the agent-canvas container (name: value)
+env: {}
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 2Gi
+  limits:
+    cpu: "4"
+    memory: 16Gi
+
+oauthProxy:
+  # OpenShift oauth-proxy in front of the UI; the cluster keeps this tag current
+  image: image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4
+  port: 4180
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 256Mi
+
+tokenProxy:
+  # image that runs the token proxy script
+  image: registry.access.redhat.com/ubi9/python-312-minimal
+  # loopback port the agent sends model and MCP calls to
+  port: 8099
+  # calls under paths carry the agent's own OpenID Connect token instead of the
+  # ServiceAccount token: a client_credentials grant at tokenUrl, authenticated with a
+  # ServiceAccount token for audience (federated client authentication). Empty: off
+  agentToken:
+    tokenUrl: ""
+    # usually the realm's issuer URL
+    audience: ""
+    paths:
+    - /mcp
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 256Mi
+
+serviceAccount:
+  # labels on the agent's ServiceAccount, for example the one a platform uses to
+  # register it as an OpenID Connect client
+  labels: {}
+
+nodeSelector: {}
+affinity: {}
+
+storage:
+  # settings, conversations and the workspace
+  size: 20Gi
+  accessMode: ReadWriteOnce
+  # empty: the default storage class
+  className: ""

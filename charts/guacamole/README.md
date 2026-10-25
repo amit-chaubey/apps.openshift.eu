@@ -21,6 +21,7 @@ oc get secret guacamole-guacamole -o jsonpath='{.data.adminPassword}' | base64 -
 Objects are named `<release>-guacamole`. The administrator is `guacadmin`; its password is set from the Secret on every install and upgrade, so a password changed in the web interface is reset.
 
 - `route.hostname` (default: empty): Hostname of Guacamole. Empty: OpenShift assigns one. Set it at install; a tenant cannot change the hostname of an existing Route.
+- `route.labels` (default: empty): Extra labels on the Route, for example to select it for a router shard or a platform policy.
 - `connections` (default: none): Connections the chart manages. Each has `name`, `protocol`, `hostname`, `port`, `parameters` (Guacamole connection parameters, values as strings), `secretParameters` (parameter name to a key of the Secret `<release>-guacamole`, for example `password: vncPassword`), `users` and `groups` (group names of the issuer, as `oidc.groupsClaim` gives them, whose members get READ on the connection). `disable-copy` and `disable-paste` are `"true"` unless `parameters` sets them, so no clipboard crosses a connection by default. The chart sets exactly these parameters and gives exactly these users READ on the connection, with no other permission. A connection removed from the list stays in the database; empty its `users` to close it.
 - `oidc.enabled` (default: false): Sign in at an OpenID Connect issuer.
 - `oidc.issuerUrl`, `oidc.clientId`: Your issuer and client. Required with `oidc.enabled`, together with `route.hostname`.

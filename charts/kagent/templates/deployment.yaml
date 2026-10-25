@@ -1,0 +1,76 @@
+{{- if eq .Values.login.provider "openshift" }}
+{{- $name := include "tenant.login" . }}
+# Login through the cluster OAuth server with the ServiceAccount as client
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: login
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tenant.loginSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tenant.loginSelectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/cookie: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ $name }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: oauth-proxy
+        image: {{ .Values.login.image }}
+        imagePullPolicy: IfNotPresent
+        args:
+        - --provider=openshift
+        - --openshift-service-account={{ $name }}
+        - --http-address=0.0.0.0:{{ .Values.login.port }}
+        - --https-address=
+        - --upstream=http://{{ .Values.upstream.fullnameOverride }}-ui:{{ dig "ui" "service" "ports" "port" 8080 .Values.upstream }}
+        - --upstream-timeout={{ .Values.route.timeout }}
+        # Without an email domain the openshift provider admits every email
+        - --email-domain=
+        # groups: verb login, granted by the login Role only; none: get, project editors
+        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" $name "verb" (ternary "login" "get" (not (empty .Values.login.allowedGroups)))) | toJson }}
+        - --pass-user-headers=true
+        - --pass-basic-auth=false
+        - --cookie-name=_{{ $name | replace "-" "_" }}
+        - --cookie-secure=true
+        - --cookie-samesite=lax
+        - --skip-provider-button=true
+        env:
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-cookie-secret
+              key: cookie-secret
+        ports:
+        - name: http
+          containerPort: {{ .Values.login.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: http
+        livenessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: http
+          initialDelaySeconds: 10
+        resources:
+          {{- toYaml .Values.login.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+{{- end }}

@@ -2,53 +2,147 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "fullnameOverride": {"type": "string"},
+    "fullnameOverride": {
+      "type": "string"
+    },
     "source": {
       "type": "object",
       "properties": {
-        "gitRepo": {"type": "string", "pattern": "^$|^https?://"},
-        "gitRef": {"type": "string", "minLength": 1},
-        "contextDir": {"type": "string"},
-        "configFile": {"type": "string", "minLength": 1},
-        "requirementsFile": {"type": "string"},
-        "strict": {"type": "boolean"},
-        "private": {"type": "boolean"},
-        "gitUsername": {"type": "string"},
-        "pollSchedule": {"type": "string"},
-        "webhook": {"type": "boolean"}
+        "gitRepo": {
+          "type": "string",
+          "pattern": "^$|^https?://"
+        },
+        "gitRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contextDir": {
+          "type": "string"
+        },
+        "configFile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requirementsFile": {
+          "type": "string"
+        },
+        "strict": {
+          "type": "boolean"
+        },
+        "private": {
+          "type": "boolean"
+        },
+        "gitUsername": {
+          "type": "string"
+        },
+        "pollSchedule": {
+          "type": "string"
+        },
+        "webhook": {
+          "type": "boolean"
+        }
       }
     },
-    "build": {"type": "object"},
-    "replicaCount": {"type": "integer", "minimum": 1},
-    "resources": {"type": "object"},
+    "build": {
+      "type": "object"
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "resources": {
+      "type": "object"
+    },
     "route": {
       "type": "object",
-      "properties": {"hostname": {"type": "string"}}
+      "properties": {
+        "hostname": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
     },
     "oauth": {
       "type": "object",
       "properties": {
-        "enabled": {"type": "boolean"},
-        "image": {"type": "string", "minLength": 1},
-        "issuerUrl": {"type": "string", "pattern": "^$|^https://"},
-        "clientId": {"type": "string"},
-        "scope": {"type": "string"},
-        "groupsClaim": {"type": "string"},
-        "allowedGroups": {"type": "array", "items": {"type": "string"}},
-        "emailDomains": {"type": "array", "items": {"type": "string"}},
-        "extraArgs": {"type": "array", "items": {"type": "string"}},
-        "resources": {"type": "object"}
+        "enabled": {
+          "type": "boolean"
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "issuerUrl": {
+          "type": "string",
+          "pattern": "^$|^https://"
+        },
+        "clientId": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "groupsClaim": {
+          "type": "string"
+        },
+        "allowedGroups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "emailDomains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resources": {
+          "type": "object"
+        }
       }
     },
     "secrets": {
       "type": "object",
       "properties": {
-        "type": {"enum": ["kubernetes", "externalSecret"]},
-        "gitPassword": {"type": "string"},
-        "clientSecret": {"type": "string"},
-        "cookieSecret": {"type": "string"},
-        "webhookSecret": {"type": "string"},
-        "externalSecret": {"type": "object"}
+        "type": {
+          "enum": [
+            "kubernetes",
+            "externalSecret"
+          ]
+        },
+        "gitPassword": {
+          "type": "string"
+        },
+        "clientSecret": {
+          "type": "string"
+        },
+        "cookieSecret": {
+          "type": "string"
+        },
+        "webhookSecret": {
+          "type": "string"
+        },
+        "externalSecret": {
+          "type": "object"
+        }
       }
     }
   }

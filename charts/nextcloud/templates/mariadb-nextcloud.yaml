@@ -16,13 +16,18 @@ spec:
   image: {{ .Values.database.image }}
   replicas: {{ .Values.database.replicas }}
   rootPasswordSecretKeyRef:
+    {{- if include "wrapper.legacyRootSecret" . }}
     name: nextcloud-credentials
     key: mariadb-root-password
+    {{- else }}
+    name: nextcloud-mariadb-root
+    key: password
+    {{- end }}
     generate: false
   username: nextcloud
   passwordSecretKeyRef:
-    name: nextcloud-credentials
-    key: mariadb-password
+    name: nextcloud-mariadb
+    key: password
     generate: false
   database: nextcloud
   port: 3306

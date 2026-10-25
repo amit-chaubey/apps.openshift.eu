@@ -1,7 +1,11 @@
 {{- $config := dict
   "$schema" "https://opencode.ai/config.json"
-  "autoupdate" false
+  "update" "disable"
   "share" "disabled"
+  "formatter" true
+  "experimental" (dict "todo" true)
+  "worktree" (dict "directory" "/workspace/.worktrees")
+  "watcher" (dict "ignore" (list "**/node_modules/**" "**/.git/**" "**/.venv/**" "**/dist/**" "**/build/**" "**/.next/**"))
   "instructions" (list "/etc/opencode-agent/instructions.md")
   "plugin" .Values.opencode.plugins
   "mcp" (dict "kubernetes" (dict
@@ -17,7 +21,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "opencode-agent.name" . }}-opencode
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "opencode-agent.namespace" . }}
   labels:
     app: {{ include "opencode-agent.name" . }}
     app.kubernetes.io/name: opencode-agent

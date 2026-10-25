@@ -1,8 +1,5 @@
 {{- $name := include "openwebui.name" . -}}
 {{- $audience := include "openwebui.audience" . -}}
-{{- if and .Values.team.enabled (not .Values.oauth.allowedGroups) }}
-{{- fail "team.enabled needs oauth.allowedGroups: without a group every cluster user logs in" }}
-{{- end }}
 {{- $env := dict
   "HOST" "127.0.0.1"
   "PORT" "8080"
@@ -13,8 +10,8 @@
   "WEBUI_AUTH_TRUSTED_NAME_HEADER" "X-Forwarded-User"
   "WEBUI_AUTH_SIGNOUT_REDIRECT_URL" "/oauth/sign_out"
   "WEBUI_SESSION_COOKIE_SECURE" "true"
-  "ENABLE_SIGNUP" "false"
-  "DEFAULT_USER_ROLE" "pending"
+  "ENABLE_SIGNUP" (ternary "false" "true" (ne (include "openwebui.ownerEmail" .) ""))
+  "DEFAULT_USER_ROLE" (ternary "pending" "user" (ne (include "openwebui.ownerEmail" .) ""))
   "ENABLE_OLLAMA_API" "false"
   "ENABLE_OPENAI_API" "true"
   "OPENAI_API_BASE_URLS" (printf "http://127.0.0.1:%v/v1" .Values.tokenProxy.port)
@@ -23,19 +20,7 @@
   "DO_NOT_TRACK" "true"
   "ANONYMIZED_TELEMETRY" "false"
   "ENABLE_VERSION_UPDATE_CHECK" "false"
-  "RAG_EMBEDDING_BATCH_SIZE" "64"
 -}}
-{{- if .Values.team.enabled }}
-{{- $_ := set $env "DEFAULT_USER_ROLE" "user" }}
-{{- end }}
-{{- if .Values.team.memberTools }}
-{{- $_ := set $env "USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS" "true" }}
-{{- $_ := set $env "USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS" "true" }}
-{{- end }}
-{{- with .Values.qdrant.url }}
-{{- $_ := set $env "VECTOR_DB" "qdrant" }}
-{{- $_ := set $env "QDRANT_URI" . }}
-{{- end }}
 {{- with .Values.route.host }}
 {{- $_ := set $env "WEBUI_URL" (printf "https://%s" .) }}
 {{- end }}
@@ -49,7 +34,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $name }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openwebui.namespace" . }}
   labels:
     {{- include "openwebui.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
@@ -148,13 +133,6 @@ spec:
             secretKeyRef:
               name: {{ $name }}-secret-key
               key: secret-key
-        {{- if and .Values.qdrant.url .Values.qdrant.apiKeySecret.name }}
-        - name: QDRANT_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.qdrant.apiKeySecret.name }}
-              key: {{ .Values.qdrant.apiKeySecret.key }}
-        {{- end }}
         {{- if .Values.mcp.enabled }}
         - name: TOOL_SERVER_CONNECTIONS
           value: {{ include "openwebui.toolServers" . | quote }}
@@ -228,17 +206,18 @@ spec:
         - --https-address=
         - --upstream=http://127.0.0.1:8080
         - --upstream-timeout={{ .Values.route.timeout }}
-        {{- if .Values.team.enabled }}
-        # Every email passes; the group check below decides who logs in
-        - --email-domain=*
-        {{- else }}
+        {{- $owner := include "openwebui.ownerEmail" . }}
+        {{- if $owner }}
         - --authenticated-emails-file=/etc/openwebui/emails.txt
-        # Without an email domain the openshift provider admits every email
+        # without an email domain only the emails file admits
         - --email-domain=
+        {{- else }}
+        - --email-domain=*
         {{- end }}
-        {{- if .Values.oauth.allowedGroups }}
-        # --openshift-group is accepted and ignored; the group check is this SAR
-        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" $name "verb" "get") | toJson }}
+        {{- if or .Values.oauth.allowedGroups (not $owner) }}
+        # --openshift-group is accepted and ignored; the group check is this SAR.
+        # groups: verb login, granted by the login Role only; neither: get, project editors
+        - --openshift-sar={{ list (dict "namespace" (include "openwebui.namespace" .) "resource" "services/proxy" "resourceName" $name "verb" (ternary "login" "get" (not (empty .Values.oauth.allowedGroups)))) | toJson }}
         {{- end }}
         # X-Forwarded-Email is set from the session and replaces any sent by the client
         - --pass-user-headers=true
@@ -291,6 +270,14 @@ spec:
           value: {{ .Values.gateway.upstream | quote }}
         - name: PORT
           value: {{ .Values.tokenProxy.port | quote }}
+        {{- with .Values.tokenProxy.agentToken }}
+        {{- if .tokenUrl }}
+        - name: AGENT_TOKEN_URL
+          value: {{ .tokenUrl | quote }}
+        - name: AGENT_TOKEN_PATHS
+          value: {{ join "," .paths | quote }}
+        {{- end }}
+        {{- end }}
         readinessProbe:
           exec:
             command:
@@ -306,6 +293,11 @@ spec:
         - name: api-token
           mountPath: /var/run/secrets/api-token
           readOnly: true
+        {{- if .Values.tokenProxy.agentToken.tokenUrl }}
+        - name: agent-token
+          mountPath: /var/run/secrets/agent-token
+          readOnly: true
+        {{- end }}
         resources:
           {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
         securityContext:
@@ -327,3 +319,15 @@ spec:
               {{- end }}
               expirationSeconds: 3600
               path: token
+      {{- with .Values.tokenProxy.agentToken }}
+      {{- if .tokenUrl }}
+      # Proves the instance's identity to the OpenID Connect provider; short-lived as it asks
+      - name: agent-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              audience: {{ required "tokenProxy.agentToken.audience is required with tokenUrl" .audience }}
+              expirationSeconds: 600
+              path: token
+      {{- end }}
+      {{- end }}

@@ -7,6 +7,9 @@ metadata:
     app.kubernetes.io/name: guacamole
     app.kubernetes.io/component: route
     {{- include "guacamole.commonLabels" $ | nindent 4 }}
+    {{- with .Values.route.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   {{- if and .Values.route.hostname .Values.route.annotations }}
   annotations:
     {{- toYaml .Values.route.annotations | nindent 4 }}

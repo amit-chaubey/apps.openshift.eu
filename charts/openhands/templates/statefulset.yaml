@@ -1,0 +1,399 @@
+{{- $name := include "openhands.name" . }}
+{{- $audience := include "openhands.audience" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "openhands.namespace" . }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1
+  serviceName: {{ $name }}-ui
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "openhands.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "openhands.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/scripts: {{ include (print $.Template.BasePath "/configmap-scripts.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ $name }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: agent-canvas
+        image: {{ include "openhands.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: HOME
+          value: /home/openhands
+        # the frontend listens on loopback only (see Containerfile) and embeds this key
+        - name: LOCAL_BACKEND_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-session-api-key
+              key: value
+        - name: OH_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-secret-key
+              key: value
+        - name: DO_NOT_TRACK
+          value: "1"
+        - name: VITE_DO_NOT_TRACK
+          value: "1"
+        - name: SEED_LLM
+          value: {{ include "openhands.seedLlm" . | quote }}
+        - name: SEED_MCP
+          value: {{ include "openhands.seedMcp" . | quote }}
+        - name: SEED_SECRETS
+          value: {{ toJson .Values.agentSecrets | quote }}
+        - name: SEED_AGENT_PROFILES
+          value: {{ toJson .Values.agentProfiles | quote }}
+        - name: SEED_SKILLS
+          value: {{ include "openhands.seedSkills" . | quote }}
+        {{- if and .Values.build.enabled .Values.route.host .Values.mcpOAuth.callbackPort }}
+        # MCP OAuth logins return to the route, not to localhost (mcp_oauth_redirect.py)
+        - name: MCP_OAUTH_REDIRECT_URL
+          value: {{ printf "https://%s/mcp-oauth/callback" .Values.route.host | quote }}
+        - name: MCP_OAUTH_CALLBACK_PORT
+          value: {{ .Values.mcpOAuth.callbackPort | quote }}
+        {{- end }}
+        - name: SEED_HASH
+          value: {{ list (include "openhands.seedLlm" .) (include "openhands.seedMcp" .) (toJson .Values.agentSecrets) (toJson .Values.agentProfiles) (include "openhands.seedSkills" .) | join "\n" | sha256sum | trunc 8 | quote }}
+        {{- if .Values.git.host }}
+        - name: GITLAB_HOST
+          value: {{ .Values.git.host | quote }}
+        - name: GITLAB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-git-token
+              key: value
+        {{- end }}
+        # git reads its configuration from GIT_CONFIG_* too; nothing is written to disk
+        {{- $git := list (dict "k" "safe.directory" "v" "*") }}
+        {{- with .Values.git.userName }}{{ $git = append $git (dict "k" "user.name" "v" .) }}{{ end }}
+        {{- with .Values.git.userEmail }}{{ $git = append $git (dict "k" "user.email" "v" .) }}{{ end }}
+        {{- with .Values.git.host }}
+        {{- $git = append $git (dict "k" (printf "credential.https://%s.helper" .) "v" "!f() { test \"$1\" = get && echo username=oauth2 && echo \"password=$GITLAB_TOKEN\"; }; f") }}
+        {{- end }}
+        - name: GIT_CONFIG_COUNT
+          value: {{ len $git | quote }}
+        {{- range $i, $c := $git }}
+        - name: GIT_CONFIG_KEY_{{ $i }}
+          value: {{ $c.k | quote }}
+        - name: GIT_CONFIG_VALUE_{{ $i }}
+          value: {{ $c.v | quote }}
+        {{- end }}
+        {{- range $k, $v := .Values.env }}
+        - name: {{ $k }}
+          value: {{ $v | quote }}
+        {{- end }}
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - python3
+              - /opt/openhands-scripts/seed-settings.py
+        # frontend and agent-server listen on 127.0.0.1, so the probes run inside the container
+        startupProbe:
+          exec:
+            command: [curl, -sf, -o, /dev/null, http://127.0.0.1:8000/alive]
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 60
+        readinessProbe:
+          exec:
+            command: [curl, -sf, -o, /dev/null, http://127.0.0.1:8000/alive]
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command: [curl, -sf, -o, /dev/null, http://127.0.0.1:8000/alive]
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 5
+        volumeMounts:
+        - name: scripts
+          mountPath: /opt/openhands-scripts
+          readOnly: true
+        - name: data
+          mountPath: /home/openhands/.openhands
+          subPath: openhands
+        - name: data
+          mountPath: /home/openhands/workspace
+          subPath: workspace
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
+      - name: oauth-proxy
+        image: {{ .Values.oauthProxy.image }}
+        imagePullPolicy: IfNotPresent
+        args:
+        - --provider=openshift
+        - --openshift-service-account={{ $name }}
+        - --http-address=0.0.0.0:{{ .Values.oauthProxy.port }}
+        - --https-address=
+        - --upstream=http://127.0.0.1:8000
+        - --upstream-timeout={{ .Values.route.timeout }}
+        {{- if .Values.oauth.ownerEmail }}
+        - --authenticated-emails-file=/etc/oauth-proxy/emails.txt
+        # without an email domain only the emails file admits
+        - --email-domain=
+        {{- else }}
+        - --email-domain=*
+        {{- end }}
+        {{- if or .Values.oauth.allowedGroups (not .Values.oauth.ownerEmail) }}
+        # groups: verb login, which only the login Role grants; else project editors
+        - --openshift-sar={{ list (dict "namespace" (include "openhands.namespace" .) "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" (include "openhands.loginVerb" .)) | toJson }}
+        {{- end }}
+        - --pass-basic-auth=false
+        - --cookie-name=_{{ $name | replace "-" "_" }}
+        - --cookie-secure=true
+        - --cookie-samesite=lax
+        - --skip-provider-button=true
+        env:
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-cookie-secret
+              key: value
+        ports:
+        - name: ui
+          containerPort: {{ .Values.oauthProxy.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: ui
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: ui
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.oauthProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
+        {{- if .Values.oauth.ownerEmail }}
+        volumeMounts:
+        - name: scripts
+          mountPath: /etc/oauth-proxy/emails.txt
+          subPath: emails.txt
+          readOnly: true
+        {{- end }}
+      {{- if .Values.gateway.upstream }}
+      - name: token-proxy
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /app/token-proxy.py
+        env:
+        - name: TOKEN_FILE
+          value: /var/run/secrets/api-token/token
+        - name: UPSTREAM
+          value: {{ .Values.gateway.upstream | quote }}
+        - name: PORT
+          value: {{ .Values.tokenProxy.port | quote }}
+        {{- with .Values.tokenProxy.agentToken }}
+        {{- if .tokenUrl }}
+        - name: AGENT_TOKEN_URL
+          value: {{ .tokenUrl | quote }}
+        - name: AGENT_TOKEN_PATHS
+          value: {{ join "," .paths | quote }}
+        {{- end }}
+        {{- end }}
+        # listens on 127.0.0.1 only, so the probe runs inside the container
+        readinessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - import urllib.request; urllib.request.urlopen("http://127.0.0.1:{{ .Values.tokenProxy.port }}/healthz", timeout=2)
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+          readOnly: true
+        - name: api-token
+          mountPath: /var/run/secrets/api-token
+          readOnly: true
+        {{- if .Values.tokenProxy.agentToken.tokenUrl }}
+        - name: agent-token
+          mountPath: /var/run/secrets/agent-token
+          readOnly: true
+        {{- end }}
+        resources:
+          {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
+      {{- if or .Values.mcpDiscovery.enabled .Values.mcpPublish.enabled (and .Values.git.host .Values.git.uiSecretName) }}
+      - name: mcp-sync
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /app/mcp-sync.py
+        env:
+        - name: LOCAL_BACKEND_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-session-api-key
+              key: value
+        - name: INTERVAL
+          value: {{ .Values.mcpDiscovery.interval | quote }}
+        - name: DISCOVERY
+          value: {{ .Values.mcpDiscovery.enabled | quote }}
+        - name: LABEL_SELECTOR
+          value: {{ .Values.mcpDiscovery.labelSelector | quote }}
+        - name: UPSTREAM
+          value: {{ .Values.gateway.upstream | quote }}
+        - name: TOKEN_PROXY_PORT
+          value: {{ .Values.tokenProxy.port | quote }}
+        - name: PUBLISH
+          value: {{ .Values.mcpPublish.enabled | quote }}
+        - name: RESYNC
+          value: {{ .Values.mcpPublish.resync | quote }}
+        - name: AGENT
+          value: {{ $name }}
+        - name: MANAGED_SERVERS
+          value: {{ keys (include "openhands.seedMcp" . | fromJson) | sortAlpha | join "," | quote }}
+        {{- if and .Values.git.host .Values.git.uiSecretName }}
+        - name: GIT_SECRET_NAME
+          value: {{ .Values.git.uiSecretName | quote }}
+        - name: GIT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-git-token
+              key: value
+        {{- end }}
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+          readOnly: true
+        resources:
+          {{- toYaml .Values.mcpDiscovery.resources | nindent 10 }}
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
+      {{- if .Values.a2a.enabled }}
+      # A2A server for other agents and kagent; the agent-server stays on loopback
+      - name: a2a
+        image: {{ include "openhands.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - python3
+        - /app/a2a-shim.py
+        ports:
+        - name: a2a
+          containerPort: {{ .Values.a2a.port }}
+        env:
+        - name: LOCAL_BACKEND_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-session-api-key
+              key: value
+        - name: A2A_PORT
+          value: {{ .Values.a2a.port | quote }}
+        - name: A2A_NAME
+          value: {{ $name }}
+        - name: A2A_DESCRIPTION
+          value: {{ default "OpenHands coding agent" .Values.a2a.description | quote }}
+        - name: A2A_PUBLIC_URL
+          value: {{ include "openhands.a2aPublicUrl" . | quote }}
+        {{- with include "openhands.a2aTenant" . }}
+        # bearer JWTs of the tenant: kagent forwards its caller's token
+        - name: A2A_TENANT
+          value: {{ . }}
+        - name: A2A_JWT_ISSUERS
+          value: {{ include "openhands.a2aJwtIssuers" $ | quote }}
+        {{- end }}
+        {{- with .Values.a2a.staticTokenSecret }}
+        - name: A2A_STATIC_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ . }}
+              key: token
+        {{- end }}
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: a2a
+          periodSeconds: 20
+        resources:
+          {{- toYaml .Values.a2a.resources | nindent 10 }}
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
+      volumes:
+      - name: scripts
+        configMap:
+          name: {{ $name }}-scripts
+      {{- if .Values.gateway.upstream }}
+      # the agent's own credential for the gateway, renewed by the kubelet
+      - name: api-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              {{- with $audience }}
+              audience: {{ . }}
+              {{- end }}
+              expirationSeconds: 3600
+              path: token
+      {{- with .Values.tokenProxy.agentToken }}
+      {{- if .tokenUrl }}
+      # proves the agent's identity to the OpenID Connect provider; short-lived as it asks
+      - name: agent-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              audience: {{ required "tokenProxy.agentToken.audience is required with tokenUrl" .audience }}
+              expirationSeconds: 600
+              path: token
+      {{- end }}
+      {{- end }}
+      {{- end }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      # volumeClaimTemplates are immutable: no version label here
+      labels:
+        {{- include "openhands.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/part-of: {{ .Release.Name | quote }}
+        app.kubernetes.io/component: storage
+    spec:
+      accessModes:
+      - {{ .Values.storage.accessMode }}
+      {{- with .Values.storage.className }}
+      storageClassName: {{ . }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.storage.size }}

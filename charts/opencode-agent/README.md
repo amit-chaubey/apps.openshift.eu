@@ -32,6 +32,8 @@ oc get route sam-agent -o jsonpath='https://{.spec.host}{"\n"}'
 
 The UI keeps the list of open projects in the browser, so it starts empty in a new browser. Choose **Add project** and pick the work tree, `~/<repository>`; **New session** works once a project is open. A new repository goes in its own directory under `~`; git trusts every directory on the volume (`safe.directory`), because the volume root is owned by root and the pod runs as an arbitrary UID.
 
+- `team` (default: empty): Team of the tenant the app serves. Every object goes into `<tenant>-<team>`, a namespace the team already has; Argo CD's destination namespace stays empty. Empty: the release namespace.
+- `tenant` (default: empty): Tenant the app belongs to; required with `team`.
 - `person.name` (default: the release name): Name prefix and Git user name.
 - `person.email` (default: empty): Git email, and the UI owner when `oauth.ownerEmail` is empty.
 - `person.role` (default: empty): One line appended to the agent instructions.
@@ -39,15 +41,20 @@ The UI keeps the list of open projects in the browser, so it starts empty in a n
 - `route.labels` (default: empty): Extra labels on the Route only.
 - `route.timeout` (default: 3600s): Router timeout; the UI streams.
 - `route.annotations` (default: cert-manager issuer): Used when `route.host` is set.
-- `oauth.ownerEmail` (default: `person.email`): OpenShift user name of the only person admitted to the UI. Both empty: nobody logs in.
-- `oauth.allowedGroups` (default: empty): OpenShift groups the owner must be in. The chart grants these groups `get` on `services/proxy` of the UI Service and the login proxy checks that permission, so a user who holds it through `admin` or `edit` in the project passes as well. Empty: no group check.
+- `oauth.ownerEmail` (default: `person.email`): OpenShift user name of the only person admitted to the UI. Empty: `oauth.allowedGroups`; both empty: everyone who may edit the project.
+- `oauth.allowedGroups` (default: empty): OpenShift groups admitted. Only their members log in: the chart grants them the verb `login` on `services/proxy` of the UI Service, which `admin` and `edit` do not hold, and the login proxy checks that permission. With an owner, the owner must also be in one of them.
+- `oauth.loginClusterRole` (default: empty): ClusterRole holding the verb `login` on `services/proxy`; `oauth.allowedGroups` are bound to it instead of to the chart's own Role. Creating a Role or binding that grants `login` needs that permission, or `bind` on the ClusterRole: an installer without it (a project admin, the project's Argo CD) needs this value.
 - `oauthProxy.image` (default: `openshift/oauth-proxy:v4.4` from the cluster registry): The login proxy. OpenShift keeps that image stream tag on the oauth-proxy of the running release.
 - `secrets.serverPassword`, `secrets.a2aToken`, `secrets.cookieSecret` (default: empty): Generated once and kept on upgrade.
 - `secrets.type` (default: kubernetes): `externalSecret` reads every secret from a secret store.
 - `gateway.upstream` (default: empty): Model and A2A gateway. Required for a working agent.
 - `gateway.audience` (default: the host of `gateway.upstream`): Audience of the agent's ServiceAccount token, mounted at `/var/run/secrets/api-token/token`.
+- `tokenProxy.agentToken.tokenUrl` (default: empty): Token endpoint of an OpenID Connect realm. Calls under `tokenProxy.agentToken.paths` (default `/mcp`) then carry the agent's own token from a `client_credentials` grant, authenticated with a ServiceAccount token for `tokenProxy.agentToken.audience` (federated client authentication, no stored secret); model and A2A calls keep the ServiceAccount token.
+- `agentLabels` (default: empty): Labels on the kagent `Agent`, for example the one a platform uses to register the ServiceAccount kagent creates for it (`serviceAccount.name` empty) as a client of a realm.
+- `serviceAccount.labels` (default: empty): Labels on a ServiceAccount the chart creates (`serviceAccount.name` set), for example the one a platform uses to register it as a client of that realm.
 - `a2a.gatewayNamespace` (default: empty): Namespace of the gateway that publishes this agent over A2A. Renders a ReferenceGrant for its HTTPRoutes and admits it in the NetworkPolicy.
 - `a2a.allowedHosts`, `a2a.publicUrl`: Inbound Host allowlist and Agent Card address of the adapter.
+- `a2a.tenantAuth` (default: on, cluster ServiceAccount issuer only): Besides the static credential, the adapter admits a bearer JWT of the agent's tenant: a ServiceAccount token from a namespace `<tenant>` or `<tenant>-*`, or an OIDC token from one of `a2a.tenantAuth.oidcIssuers` whose `groups` claim holds `<tenant>` or `<tenant>-*`. kagent forwards the token of whoever chats with the agent, so its chat UI reaches the agent this way. `a2a.tenantAuth.tenant` defaults to the release namespace up to its first `-`. Needs adapter `2.0.0+hoolia.2` or later.
 - `a2a.peers` (default: empty): Agents this agent may call, as a name or `{name, namespace}` (namespace default: the release namespace). Each is reached at `<gateway.upstream origin>/a2a/<namespace>/<name>/` through the token proxy. With peers and `gateway.upstream` set, the opencode container gets `A2A_PEERS`, `A2A_GATEWAY_URL` and `A2A_PROXY_URL`, which a model plugin can turn into tools (the `@grncloud/opencode-grncloud` plugin registers `a2a_list_agents` and `a2a_call`), and the instructions describe those two tools.
 - `git.url`, `git.branch`, `secrets.gitToken`: Repository cloned into `/workspace` on first start, never overwritten. The token goes to the host of `git.url` only.
 - `opencode.plugins`, `opencode.npmScopes`, `opencode.env`, `opencode.config`: npm plugins, their registries, extra environment and overrides of `opencode.json`.

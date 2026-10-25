@@ -5,11 +5,21 @@ on:
     - main
     paths:
     - charts/**
+    - release-notes/**
+# two releases at once would race on gh-pages
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GITLEAKS_VERSION: 8.24.2
+      GITLEAKS_SHA256: fa0500f6b7e41d28791ebc680f5dd9899cd42b58629218a5f041efa899151a8e
+      SYFT_VERSION: 1.54.1
+      SYFT_SHA256: c069905b391cc4c20a5ba65ad5c10be2a7ba074f8ea6ad203e24d14e303dad47
     steps:
     - uses: actions/checkout@v4
       with:
@@ -22,8 +32,22 @@ jobs:
     - uses: azure/setup-helm@v4
       with:
         version: v4.3.1
-    - uses: helm/chart-releaser-action@v1
-      with:
-        charts_dir: charts
+    - name: Install gitleaks, syft and PyYAML
+      run: |
+        curl -fsSL -o /tmp/gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+        echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -
+        sudo tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+        curl -fsSL -o /tmp/syft.tar.gz "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+        echo "${SYFT_SHA256}  /tmp/syft.tar.gz" | sha256sum -c -
+        sudo tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft
+        sudo apt-get install -y python3-yaml
+    # the same script as a release by hand, for every version without a release
+    - name: Release new chart versions
       env:
-        CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        for c in charts/*/; do
+          n=$(basename "$c")
+          v=$(awk '/^version:/{print $2}' "$c/Chart.yaml")
+          gh release view "$n-$v" >/dev/null 2>&1 || ci/release.sh "$n"
+        done

@@ -1,0 +1,49 @@
+curl --version
+jq --version
+bash --version
+nc -h
+python3 --version
+git --version
+ssh -V
+skopeo --version
+aws --version
+node --version
+npm --version
+npx --version
+uv --version
+make --version
+tmux -V
+psql --version
+mariadb --version
+openssl version
+dig -v
+java -version
+python3 -c 'import yaml; print("pyyaml", yaml.__version__)'
+pdftotext -v
+rg --version
+xxd -v
+vi --version
+lsof -v
+pstree -V
+ps --version
+ip -V
+ping -V
+traceroute --version
+whois --version
+echo 1+1 | bc
+dos2unix --version
+gpg --version
+iostat -V
+cpio --version
+file --version
+sh -c "test \"\$SHELL\" = /bin/bash && echo SHELL=\$SHELL"
+pandoc --version
+soffice --version
+dot -V
+plantuml -version
+rsvg-convert --version
+magick -version
+cd /tmp && python3 -c 'import docx; d=docx.Document(); d.add_heading("check",0); d.save("/tmp/c.docx")' && soffice --headless --convert-to pdf --outdir /tmp /tmp/c.docx >/dev/null && test -s /tmp/c.pdf && rm -f /tmp/c.docx /tmp/c.pdf && echo docx-to-pdf ok
+printf 'graph TD; A-->B\n' > /tmp/c.mmd && mmdc -q -i /tmp/c.mmd -o /tmp/c.svg && test -s /tmp/c.svg && rm -f /tmp/c.mmd /tmp/c.svg && echo mermaid ok
+printf '@startuml\nnwdiag {\n  network lan {\n    a;\n    b;\n  }\n}\n@enduml\n' > /tmp/c.puml && plantuml -tsvg -o /tmp /tmp/c.puml && test -s /tmp/c.svg && rm -f /tmp/c.puml /tmp/c.svg && echo nwdiag ok
+cd /tmp && python3 -c 'from diagrams import Diagram; from diagrams.k8s.compute import Pod; d=Diagram("c", filename="/tmp/c", show=False, outformat="png"); d.__enter__(); Pod("p"); d.__exit__(None, None, None)' && test -s /tmp/c.png && rm -f /tmp/c.png && echo diagrams ok

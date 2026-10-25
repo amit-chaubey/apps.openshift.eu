@@ -81,6 +81,15 @@ gitlab:
     minReplicas: 1
     maxReplicas: 1
     workerProcesses: {{ .Values.gitlab.webservice.workerProcesses }}
+    {{- with .Values.mcp.labels }}
+    serviceLabels:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.mcp.annotations }}
+    service:
+      annotations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
     ingress:
       enabled: false
     resources:
