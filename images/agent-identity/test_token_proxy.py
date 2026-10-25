@@ -3,8 +3,7 @@ import http.client, importlib.util, json, os, socket, sys, tempfile, threading, 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.environ.get("TOKEN_PROXY_SRC") or os.path.join(
-    HERE, os.pardir, "charts", "opencode-agent", "files", "token-proxy.py")
+SRC = os.environ.get("TOKEN_PROXY_SRC") or os.path.join(HERE, "token-proxy.py")
 
 spec = importlib.util.spec_from_file_location("token_proxy", SRC)
 tp = importlib.util.module_from_spec(spec)

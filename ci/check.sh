@@ -43,6 +43,10 @@ for c in charts/*/; do
   v=$(awk '/^version:/{print $2}' "$c/Chart.yaml")
   [ -s "release-notes/$n/$v.md" ] || { echo "FAIL $n: no release-notes/$n/$v.md"; fail=1; }
 done
+# the charts carry a copy of the agent-identity proxy until they use the injected sidecar
+for f in charts/*/files/token-proxy.py; do
+  cmp -s "$f" images/agent-identity/token-proxy.py || { echo "FAIL $f differs from images/agent-identity/token-proxy.py"; fail=1; }
+done
 if command -v gitleaks >/dev/null; then
   gitleaks detect --source . --no-git --redact >/dev/null || { echo "FAIL gitleaks"; fail=1; }
 else

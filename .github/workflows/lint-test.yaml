@@ -26,8 +26,8 @@ jobs:
       run: ci/test-guacamole.sh
     - name: Test opencode-agent chart
       run: ci/test-opencode-agent.sh
-    - name: Test opencode-agent token proxy
-      run: python3 -m unittest ci/test_opencode_agent_token_proxy.py
+    - name: Test agent-identity token proxy
+      run: python3 -m unittest images/agent-identity/test_token_proxy.py
     - name: Test opencode-agent UI proxy
       run: python3 -m unittest ci/test_opencode_agent_ui_proxy.py
     - name: Test openwebui chart
