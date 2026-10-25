@@ -52,6 +52,8 @@ oc extract secret/team-session-api-key --keys=value --to=-
 - `git.host`, `git.userName`, `git.userEmail` (default: empty): Git host the token is sent to, and the commit identity.
 - `gateway.upstream` (default: empty): OpenAI-compatible model and MCP gateway; the ServiceAccount token is its credential.
 - `gateway.audience` (default: the host of `gateway.upstream`): Audience of that token.
+- `tokenProxy.agentToken.tokenUrl` (default: empty): Token endpoint of an OpenID Connect realm. Calls under `tokenProxy.agentToken.paths` (default `/mcp`) then carry the agent's own token from a `client_credentials` grant, authenticated with a ServiceAccount token for `tokenProxy.agentToken.audience` (federated client authentication, no stored secret); model calls keep the ServiceAccount token.
+- `serviceAccount.labels` (default: empty): Labels on the agent's ServiceAccount, for example the one a platform uses to register it as a client of that realm.
 - `llm.model` (default: empty): Default model in LiteLLM form, for example `openai/<model>`.
 - `llm.models` (default: empty): Further models of the gateway, same form, offered as profiles under **Settings > LLM**.
 - `llm.connection.name` (default: `Gateway`): Provider connection to `gateway.upstream` listed under **Settings > LLM**; it holds `llm.model` (active) and `llm.models` as profiles. Empty: no connection.

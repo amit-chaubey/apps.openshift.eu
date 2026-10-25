@@ -265,12 +265,26 @@ tokenProxy:
   image: registry.access.redhat.com/ubi9/python-312-minimal
   # loopback port the agent sends model and MCP calls to
   port: 8099
+  # calls under paths carry the agent's own OpenID Connect token instead of the
+  # ServiceAccount token: a client_credentials grant at tokenUrl, authenticated with a
+  # ServiceAccount token for audience (federated client authentication). Empty: off
+  agentToken:
+    tokenUrl: ""
+    # usually the realm's issuer URL
+    audience: ""
+    paths:
+    - /mcp
   resources:
     requests:
       cpu: 10m
       memory: 32Mi
     limits:
       memory: 128Mi
+
+serviceAccount:
+  # labels on the agent's ServiceAccount, for example the one a platform uses to
+  # register it as an OpenID Connect client
+  labels: {}
 
 nodeSelector: {}
 affinity: {}

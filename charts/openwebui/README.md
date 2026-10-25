@@ -43,6 +43,8 @@ oc get route sam-openwebui -o jsonpath='https://{.spec.host}{"\n"}'
 - `route.labels`, `route.timeout` (default: empty, 3600s), `route.annotations` (default: cert-manager issuer, used when `route.host` is set).
 - `gateway.upstream` (default: empty): OpenAI-compatible gateway; Open WebUI calls `<upstream>/v1`. Required for models.
 - `gateway.audience` (default: the host of `gateway.upstream`): Audience of the ServiceAccount token, mounted at `/var/run/secrets/api-token/token`.
+- `tokenProxy.agentToken.tokenUrl` (default: empty): Token endpoint of an OpenID Connect realm. Calls under `tokenProxy.agentToken.paths` (default `/mcp`) then carry the instance's own token from a `client_credentials` grant, authenticated with a ServiceAccount token for `tokenProxy.agentToken.audience` (federated client authentication, no stored secret); model calls keep the ServiceAccount token.
+- `serviceAccount.labels` (default: empty): Labels on the instance's ServiceAccount, for example the one a platform uses to register it as a client of that realm.
 - `openwebui.image` (default: `ghcr.io/open-webui/open-webui:v0.12.3`), `openwebui.title` (default: empty), `openwebui.persistentConfig` (default: true).
 - `openwebui.env` (default: empty): Extra Open WebUI environment variables, name to value; they override the chart's.
 - `openwebui.resources` (default: 100m CPU and 1Gi requested, 3Gi limit).

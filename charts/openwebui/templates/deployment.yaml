@@ -270,6 +270,14 @@ spec:
           value: {{ .Values.gateway.upstream | quote }}
         - name: PORT
           value: {{ .Values.tokenProxy.port | quote }}
+        {{- with .Values.tokenProxy.agentToken }}
+        {{- if .tokenUrl }}
+        - name: AGENT_TOKEN_URL
+          value: {{ .tokenUrl | quote }}
+        - name: AGENT_TOKEN_PATHS
+          value: {{ join "," .paths | quote }}
+        {{- end }}
+        {{- end }}
         readinessProbe:
           exec:
             command:
@@ -285,6 +293,11 @@ spec:
         - name: api-token
           mountPath: /var/run/secrets/api-token
           readOnly: true
+        {{- if .Values.tokenProxy.agentToken.tokenUrl }}
+        - name: agent-token
+          mountPath: /var/run/secrets/agent-token
+          readOnly: true
+        {{- end }}
         resources:
           {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
         securityContext:
@@ -306,3 +319,15 @@ spec:
               {{- end }}
               expirationSeconds: 3600
               path: token
+      {{- with .Values.tokenProxy.agentToken }}
+      {{- if .tokenUrl }}
+      # Proves the instance's identity to the OpenID Connect provider; short-lived as it asks
+      - name: agent-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              audience: {{ required "tokenProxy.agentToken.audience is required with tokenUrl" .audience }}
+              expirationSeconds: 600
+              path: token
+      {{- end }}
+      {{- end }}
