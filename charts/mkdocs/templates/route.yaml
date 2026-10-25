@@ -7,6 +7,13 @@ metadata:
     app.kubernetes.io/name: mkdocs
     app.kubernetes.io/component: route
     {{- include "mkdocs.commonLabels" $ | nindent 4 }}
+    {{- with .Values.route.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   {{- if .Values.route.hostname }}
   host: {{ .Values.route.hostname }}

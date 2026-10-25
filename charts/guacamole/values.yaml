@@ -48,6 +48,8 @@ route:
   annotations:
     cert-manager.io/issuer-kind: ClusterIssuer
     cert-manager.io/issuer-name: letsencrypt
+  # extra labels on the Route, for example to select it for a router shard or a policy
+  labels: {}
 
 database:
   # PostgreSQL instances of the CloudNativePG cluster

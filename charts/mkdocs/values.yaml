@@ -45,6 +45,10 @@ resources:
 route:
   # empty: OpenShift assigns a host under the default application domain
   hostname: ""
+  # extra labels and annotations on the Route, for example to select it for a router
+  # shard or a policy
+  labels: {}
+  annotations: {}
 
 oauth:
   # true: only users who log in at the issuer see the site
