@@ -128,6 +128,18 @@ seccompProfile:
 {{- if $llm }}{{ toJson $llm }}{{ end -}}
 {{- end -}}
 
+{{/* skill marketplaces the seed script registers, in the agent-server's field names */}}
+{{- define "openhands.seedSkills" -}}
+{{- $out := list -}}
+{{- range .Values.skills.marketplaces -}}
+{{- $m := dict "name" .name "source" .source "auto_load" (ternary true .autoLoad (kindIs "invalid" .autoLoad)) -}}
+{{- with .ref }}{{ $_ := set $m "ref" . }}{{ end -}}
+{{- with .repoPath }}{{ $_ := set $m "repo_path" . }}{{ end -}}
+{{- $out = append $out $m -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end -}}
+
 {{/* MCP servers the seed script writes: JSON map of name to server settings */}}
 {{- define "openhands.seedMcp" -}}
 {{- $servers := dict -}}

@@ -15,14 +15,23 @@ apt-get install -y --no-install-recommends \
   awscli tmux ncurses-bin openssl bind9-dnsutils rsync tree less \
   postgresql-client mariadb-client openjdk-21-jre-headless skopeo poppler-utils \
   ripgrep xxd vim-tiny lsof psmisc procps iproute2 iputils-ping traceroute whois \
-  bc dos2unix gnupg sysstat cpio file
+  bc dos2unix gnupg sysstat cpio file \
+  pandoc libreoffice-writer-nogui libreoffice-impress-nogui libreoffice-calc-nogui \
+  libreoffice-draw-nogui graphviz plantuml librsvg2-bin imagemagick \
+  fonts-liberation fonts-dejavu-core fonts-noto-core
 rm -rf /var/lib/apt/lists/*
+# the base image's LD_LIBRARY_PATH resolves the UNO libraries outside their $ORIGIN runpath
+printf '#!/bin/sh\nLD_LIBRARY_PATH=/usr/lib/libreoffice/program${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} exec /usr/bin/soffice "$@"\n' > /usr/local/bin/soffice
+chmod 0755 /usr/local/bin/soffice
+ln -sf soffice /usr/local/bin/libreoffice
 
 [ -n "${TOOLS:-}" ] || TOOLS=$(dirname "$0")/tools.txt
 [ -f "$TOOLS" ] || exit 0
 
 export UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin \
   UV_PYTHON_INSTALL_DIR=/opt/uv-python UV_NO_CACHE=1 HOME=/tmp
+# mermaid-cli renders with the image's own Chromium
+export PUPPETEER_SKIP_DOWNLOAD=true
 uv=$(command -v uv)
 # requirements such as huggingface_hub[cli] are not file globs
 set -f
@@ -48,6 +57,15 @@ while read -r kind cmd keep args; do
       ;;
   esac
 done < "$TOOLS"
+# mmdc in a container needs Chromium without its sandbox; the wrapper passes that config
+if [ -L /usr/local/bin/mmdc ]; then
+  cli=$(readlink -f /usr/local/bin/mmdc)
+  mkdir -p /etc/mermaid
+  printf '{"executablePath":"/usr/bin/chromium","args":["--no-sandbox"]}\n' > /etc/mermaid/puppeteer.json
+  rm /usr/local/bin/mmdc
+  printf '#!/bin/sh\nexec node %s -p /etc/mermaid/puppeteer.json "$@"\n' "$cli" > /usr/local/bin/mmdc
+  chmod 0755 /usr/local/bin/mmdc
+fi
 npm cache clean --force
 chmod -R a+rX /opt/uv-tools
 [ -d /opt/uv-python ] && chmod -R a+rX /opt/uv-python

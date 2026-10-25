@@ -24,6 +24,14 @@ build:
   - {kind: uv, command: uvicorn, keep: true, args: "uvicorn==0.54.0", check: "uvicorn --version"}
   - {kind: uv, command: semgrep, args: "semgrep==1.182.0", check: "semgrep --version"}
   - {kind: uv, command: ruff, args: "ruff==0.17.1", check: "ruff --version"}
+  - {kind: uv, command: markitdown, args: "markitdown[all]==0.1.9", check: "markitdown --version"}
+  - {kind: npm, command: "@mermaid-js/mermaid-cli@12.0.0", check: "mmdc --version"}
+  - {kind: pip, command: "python-docx==1.2.0", check: "python3 -c 'import docx'"}
+  - {kind: pip, command: "docxtpl==0.20.2", check: "python3 -c 'import docxtpl'"}
+  - {kind: pip, command: "python-pptx==1.0.2", check: "python3 -c 'import pptx'"}
+  - {kind: pip, command: "openpyxl==3.1.5", check: "python3 -c 'import openpyxl'"}
+  - {kind: pip, command: "vsdx==0.6.1", check: "python3 -c 'import vsdx'"}
+  - {kind: pip, command: "diagrams==0.25.1", check: "python3 -c 'import diagrams.k8s, diagrams.onprem'"}
   - {kind: uv, command: checkov, args: "--python 3.12 checkov==3.3.30", check: "checkov --version"}
   - {kind: uv, command: open-terminal, args: "open-terminal==0.14.2", check: "open-terminal --help"}
   - {kind: uv, command: jupyter-server, args: "jupyter-server==2.21.1 --with ipykernel", check: "jupyter-server --version"}
@@ -138,6 +146,13 @@ mcpServers: []
 # at the token proxy (http://127.0.0.1:<tokenProxy.port>/...) to use gateway.upstream.
 # Not for real credentials: the values sit in the pod spec
 agentSecrets: {}
+
+skills:
+  # skill marketplaces the agent loads, in Claude Code or OpenHands plugin format:
+  # {name, source, ref, repoPath, autoLoad} with source github:<owner>/<repo>, a git URL
+  # or a local path, and autoLoad true (all plugins, default) or a list of plugin names.
+  # Written like llm.model; replaces the marketplaces registered in the UI
+  marketplaces: []
 
 # ACP agent profiles offered under "Switch agent profile": name: {acp_server, acp_model},
 # acp_server one of claude-code, codex, gemini-cli, ...; written like llm.model

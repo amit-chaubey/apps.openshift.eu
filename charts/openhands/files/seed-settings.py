@@ -75,11 +75,23 @@ def seed_connection(llm: dict, conn: dict, models: list[str]) -> bool:
     # the agent-server turns the plain llm settings into a profile "default" without a
     # connection; the connection's profiles replace it
     status, listing = request("GET", "/api/profiles")
+    active = (listing or {}).get("active_profile")
     for prof in (listing or {}).get("profiles", []):
         if (prof.get("name") == "default" and not prof.get("provider_connection_id")
-                and prof.get("base_url") == llm["base_url"]
-                and listing.get("active_profile") != "default"):
-            call("DELETE", "/api/profiles/default")
+                and prof.get("base_url") == llm["base_url"] and active and active != "default"):
+            # agent profiles that use it move to the active one, or the delete is refused
+            status, agents = request("GET", "/api/agent-profiles")
+            for agent in (agents or {}).get("profiles", []):
+                if agent.get("llm_profile_ref") != "default":
+                    continue
+                status, detail = request("GET", f"/api/agent-profiles/{agent['name']}")
+                body = (detail or {}).get("profile")
+                if not body or call("POST", f"/api/agent-profiles/{agent['name']}",
+                                    {**body, "llm_profile_ref": active}) not in (200, 201):
+                    print(f"seed: agent profile {agent['name']} not moved to {active}",
+                          file=sys.stderr)
+            if call("DELETE", "/api/profiles/default") not in (200, 204):
+                print("seed: profile default not removed", file=sys.stderr)
     return ok
 
 
@@ -118,6 +130,11 @@ def main() -> None:
                                                  "description": "set by the chart"}) not in (200, 201):
             print(f"seed: secret {name} not written", file=sys.stderr)
             ok = False
+    skills = json.loads(os.environ.get("SEED_SKILLS") or "[]")
+    if skills and call("PATCH", "/api/settings", {"agent_settings_diff": {
+            "agent_context": {"registered_marketplaces": skills}}}) != 200:
+        print("seed: skill marketplaces not written", file=sys.stderr)
+        ok = False
     # selectable ACP agent profiles; the agent-server starts each CLI with its default command
     for name, prof in json.loads(os.environ.get("SEED_AGENT_PROFILES") or "{}").items():
         body = {"name": name, "agent_kind": "acp", "acp_command": None, "acp_args": None, **prof}

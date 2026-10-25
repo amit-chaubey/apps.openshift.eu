@@ -51,6 +51,7 @@ KNOWN_ICONS = {
     "memory": SIMPLE_ICONS + "qdrant",
     "netbox": "https://raw.githubusercontent.com/netbox-community/netbox/main/netbox/project-static/img/netbox_icon.svg",
     "warden": SIMPLE_ICONS + "vaultwarden",
+    "wispr-flow": "https://cdn.prod.website-files.com/682f84b3838c89f8ff7667db/68d27d1a8a10f417b5644527_flow-wc-v2.png",
 }
 GIT_SECRET_NAME = os.environ.get("GIT_SECRET_NAME", "")
 PUBLISH = os.environ.get("PUBLISH", "false") == "true"
