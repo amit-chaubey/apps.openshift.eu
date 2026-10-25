@@ -1,0 +1,4 @@
+jira:
+  url: https://example.atlassian.net
+confluence:
+  url: https://example.atlassian.net/wiki

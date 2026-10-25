@@ -1,0 +1,22 @@
+apiVersion: v2
+name: atlassian-mcp
+description: Jira and Confluence MCP server (sooperset/mcp-atlassian) for a tenant or one of its teams, with each caller's own Atlassian account or a shared one
+type: application
+version: 0.1.0
+appVersion: "0.23.1"
+home: https://apps.openshift.eu
+icon: https://cdn.simpleicons.org/atlassian
+keywords:
+- ai
+- mcp
+- jira
+- confluence
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+- https://github.com/sooperset/mcp-atlassian
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Atlassian MCP server
+  charts.openshift.io/provider: GRN.CLOUD B.V.
