@@ -4,7 +4,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ $name }}-edit
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
@@ -15,7 +15,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: {{ $name }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
 {{- if and .Values.mcpDiscovery.enabled .Values.mcpDiscovery.clusterRole }}
 ---
 # mcp-sync reads the namespace's RemoteMCPServers; the ClusterRole comes with kagent
@@ -23,7 +23,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ $name }}-mcp-discovery
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
@@ -34,7 +34,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: {{ $name }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
 {{- end }}
 {{- $clusterRole := .Values.oauth.loginClusterRole }}
 {{- if not $clusterRole }}
@@ -44,7 +44,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $name }}-login
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
@@ -65,7 +65,7 @@ kind: RoleBinding
 metadata:
   # roleRef is immutable: a ClusterRole binding has its own name
   name: {{ $name }}-{{ ternary "app-login" "login" (not (empty $clusterRole)) }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: server

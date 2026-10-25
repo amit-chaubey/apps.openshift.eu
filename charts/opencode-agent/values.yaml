@@ -1,3 +1,9 @@
+# Team of the tenant the app serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the app belongs to; required with team
+tenant: ""
+
 person:
   # short lowercase name; objects are named <name>-agent. Empty: the release name
   name: ""

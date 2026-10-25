@@ -5,7 +5,7 @@ apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
   name: {{ $name }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "opencode-agent.namespace" . }}
   labels:
     app: {{ $name }}
     app.kubernetes.io/name: opencode-agent
@@ -42,7 +42,7 @@ spec:
         kagenti.io/type: agent
         protocol.kagenti.io/a2a: ""
         app.kubernetes.io/name: {{ $name }}
-        app.kubernetes.io/part-of: {{ .Release.Namespace }}
+        app.kubernetes.io/part-of: {{ include "opencode-agent.namespace" . }}
       annotations:
         # Mounted files are not reloaded in place; roll the pod when they change
         checksum/config: {{ include (print $.Template.BasePath "/configmap-opencode.yaml") . | sha256sum }}
@@ -60,7 +60,7 @@ spec:
       - name: A2A_PORT
         value: "8080"
       - name: A2A_PUBLIC_URL
-        value: {{ default (printf "http://%s.%s.svc.cluster.local:8080" $name .Release.Namespace) .Values.a2a.publicUrl }}
+        value: {{ default (printf "http://%s.%s.svc.cluster.local:8080" $name (include "opencode-agent.namespace" .)) .Values.a2a.publicUrl }}
       {{- with .Values.a2a.allowedHosts }}
       - name: A2A_ALLOWED_HOSTS
         value: {{ join "," . | quote }}
@@ -214,7 +214,7 @@ spec:
         {{- if or .Values.oauth.allowedGroups (not $owner) }}
         # --openshift-group is accepted and ignored; the group check is this SAR.
         # groups: verb login, granted by the login Role only; neither: get, project editors
-        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" (ternary "login" "get" (not (empty .Values.oauth.allowedGroups)))) | toJson }}
+        - --openshift-sar={{ list (dict "namespace" (include "opencode-agent.namespace" .) "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" (ternary "login" "get" (not (empty .Values.oauth.allowedGroups)))) | toJson }}
         {{- end }}
         - --pass-basic-auth=false
         - --cookie-name=_{{ $name | replace "-" "_" }}

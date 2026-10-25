@@ -34,6 +34,8 @@ oc get route team -o jsonpath='https://{.spec.host}/canvas/{"\n"}'
 oc extract secret/team-session-api-key --keys=value --to=-
 ```
 
+- `team` (default: empty): Team of the tenant the app serves. Every object goes into `<tenant>-<team>`, a namespace the team already has; Argo CD's destination namespace stays empty. Empty: the release namespace.
+- `tenant` (default: empty): Tenant the app belongs to; required with `team`.
 - `image.repository`, `image.tag` (default: `ghcr.io/openhands/agent-canvas`, `1.33.0`): Upstream image, and the base of the build.
 - `build.enabled` (default: true): Build the image with the toolset in the project.
 - `build.toolsImage` (default: empty): Image whose binaries, Go toolchain, `/tools`, `/opt/sonar-scanner` and Ansible collections are copied in. Empty: Debian packages and `build.tools` only.

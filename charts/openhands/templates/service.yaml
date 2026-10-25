@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "openhands.name" . }}-ui
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
@@ -22,7 +22,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "openhands.name" . }}-a2a
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: a2a

@@ -6,7 +6,7 @@ apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
   name: {{ $name }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: a2a
@@ -23,7 +23,7 @@ spec:
       serviceAccountName: default
       env:
       - name: UPSTREAM
-        value: http://{{ $name }}-a2a.{{ .Release.Namespace }}.svc:8080
+        value: http://{{ $name }}-a2a.{{ include "openhands.namespace" . }}.svc:8080
       volumes:
       - name: scripts
         configMap:

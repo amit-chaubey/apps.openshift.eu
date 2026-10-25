@@ -6,7 +6,7 @@ metadata:
   {{- $clusterRole := .Values.oauth.loginClusterRole }}
   # roleRef is immutable: a ClusterRole binding has its own name
   name: {{ include "opencode-agent.name" . }}-{{ ternary "app-login" "login" (not (empty $clusterRole)) }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "opencode-agent.namespace" . }}
   labels:
     app: {{ include "opencode-agent.name" $ }}
     app.kubernetes.io/name: opencode-agent

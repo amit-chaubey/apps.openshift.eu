@@ -2,7 +2,7 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: {{ include "opencode-agent.name" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "opencode-agent.namespace" . }}
   labels:
     app: {{ include "opencode-agent.name" . }}
     app.kubernetes.io/name: opencode-agent

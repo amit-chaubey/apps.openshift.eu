@@ -403,6 +403,14 @@
           }
         }
       }
+    },
+    "team": {
+      "type": "string",
+      "pattern": "^([a-z0-9]([a-z0-9-]*[a-z0-9])?)?$"
+    },
+    "tenant": {
+      "type": "string",
+      "pattern": "^([a-z0-9]([a-z0-9-]*[a-z0-9])?)?$"
     }
   }
 }

@@ -6,7 +6,7 @@ apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: {{ $name }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: build
@@ -20,7 +20,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ $name }}-build-{{ $hash }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: build
@@ -43,7 +43,7 @@ apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
   name: {{ $name }}-{{ $hash }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: build

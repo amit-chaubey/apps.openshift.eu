@@ -7,7 +7,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $name }}-login
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openwebui.namespace" . }}
   labels:
     {{- include "openwebui.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
@@ -28,7 +28,7 @@ kind: RoleBinding
 metadata:
   # roleRef is immutable: a ClusterRole binding has its own name
   name: {{ $name }}-{{ ternary "app-login" "login" (not (empty $clusterRole)) }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openwebui.namespace" . }}
   labels:
     {{- include "openwebui.labels" . | nindent 4 }}
     app.kubernetes.io/component: server

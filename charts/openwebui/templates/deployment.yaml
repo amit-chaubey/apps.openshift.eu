@@ -34,7 +34,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $name }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openwebui.namespace" . }}
   labels:
     {{- include "openwebui.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
@@ -217,7 +217,7 @@ spec:
         {{- if or .Values.oauth.allowedGroups (not $owner) }}
         # --openshift-group is accepted and ignored; the group check is this SAR.
         # groups: verb login, granted by the login Role only; neither: get, project editors
-        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" $name "verb" (ternary "login" "get" (not (empty .Values.oauth.allowedGroups)))) | toJson }}
+        - --openshift-sar={{ list (dict "namespace" (include "openwebui.namespace" .) "resource" "services/proxy" "resourceName" $name "verb" (ternary "login" "get" (not (empty .Values.oauth.allowedGroups)))) | toJson }}
         {{- end }}
         # X-Forwarded-Email is set from the session and replaces any sent by the client
         - --pass-user-headers=true

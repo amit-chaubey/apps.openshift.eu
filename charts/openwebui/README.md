@@ -6,6 +6,8 @@ Runs one personal Open WebUI chat for one person in your project. The person log
 
 One pod holds three containers:
 
+- `team` (default: empty): Team of the tenant the app serves. Every object goes into `<tenant>-<team>`, a namespace the team already has; Argo CD's destination namespace stays empty. Empty: the release namespace.
+- `tenant` (default: empty): Tenant the app belongs to; required with `team`.
 - `openwebui` listens on 127.0.0.1:8080 only, so nothing reaches it except through the login proxy;
 - `oauth-proxy` (OpenShift oauth-proxy) logs the person in through the cluster OAuth server with the instance ServiceAccount as OAuth client and passes the user's email in `X-Forwarded-Email`, which Open WebUI trusts for its own login (`WEBUI_AUTH_TRUSTED_EMAIL_HEADER`); the proxy replaces any such header a client sends;
 - `token-proxy` on 127.0.0.1:8099 adds the projected ServiceAccount token to every model call to `gateway.upstream`. Open WebUI points at `http://127.0.0.1:8099/v1` with a placeholder key.

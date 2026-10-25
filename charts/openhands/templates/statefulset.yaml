@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ $name }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
@@ -163,7 +163,7 @@ spec:
         {{- end }}
         {{- if or .Values.oauth.allowedGroups (not .Values.oauth.ownerEmail) }}
         # groups: verb login, which only the login Role grants; else project editors
-        - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" (include "openhands.loginVerb" .)) | toJson }}
+        - --openshift-sar={{ list (dict "namespace" (include "openhands.namespace" .) "resource" "services/proxy" "resourceName" (printf "%s-ui" $name) "verb" (include "openhands.loginVerb" .)) | toJson }}
         {{- end }}
         - --pass-basic-auth=false
         - --cookie-name=_{{ $name | replace "-" "_" }}

@@ -21,7 +21,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "opencode-agent.name" . }}-opencode
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "opencode-agent.namespace" . }}
   labels:
     app: {{ include "opencode-agent.name" . }}
     app.kubernetes.io/name: opencode-agent

@@ -50,7 +50,7 @@ the cluster, else a new random one. Takes value, existing (Secret data), key, le
 
 {{/* Data of the Secret of that name in the release namespace, or an empty dict */}}
 {{- define "openhands.existing" -}}
-{{- $found := lookup "v1" "Secret" .root.Release.Namespace .name -}}
+{{- $found := lookup "v1" "Secret" (include "openhands.namespace" .root) .name -}}
 {{- if $found -}}
 {{- toJson (default dict $found.data) -}}
 {{- else -}}
@@ -95,7 +95,7 @@ the cluster, else a new random one. Takes value, existing (Secret data), key, le
 {{- else if eq .Values.build.output.kind "DockerImage" -}}
 {{- printf "%s:%s" (required "build.output.name is required for DockerImage" .Values.build.output.name) (include "openhands.imageTag" .) -}}
 {{- else -}}
-{{- printf "image-registry.openshift-image-registry.svc:5000/%s/%s:%s" .Release.Namespace (include "openhands.name" .) (include "openhands.imageTag" .) -}}
+{{- printf "image-registry.openshift-image-registry.svc:5000/%s/%s:%s" (include "openhands.namespace" .) (include "openhands.name" .) (include "openhands.imageTag" .) -}}
 {{- end -}}
 {{- end -}}
 
@@ -158,9 +158,9 @@ seccompProfile:
 {{- define "openhands.a2aPublicUrl" -}}
 {{- $name := include "openhands.name" . -}}
 {{- if and .Values.a2a.kagent.enabled (.Capabilities.APIVersions.Has "kagent.dev/v1alpha2/Agent") -}}
-{{- printf "http://%s.%s.svc:8080" $name .Release.Namespace -}}
+{{- printf "http://%s.%s.svc:8080" $name (include "openhands.namespace" .) -}}
 {{- else -}}
-{{- printf "http://%s-a2a.%s.svc:8080" $name .Release.Namespace -}}
+{{- printf "http://%s-a2a.%s.svc:8080" $name (include "openhands.namespace" .) -}}
 {{- end -}}
 {{- end -}}
 
@@ -168,7 +168,7 @@ seccompProfile:
 {{- define "openhands.a2aTenant" -}}
 {{- $t := .Values.a2a.tenantAuth -}}
 {{- if and $t.enabled (or $t.kubernetesIssuer $t.oidcIssuers) -}}
-{{- default (first (splitList "-" .Release.Namespace)) $t.tenant -}}
+{{- default (first (splitList "-" (include "openhands.namespace" .))) $t.tenant -}}
 {{- end -}}
 {{- end -}}
 
@@ -184,4 +184,13 @@ seccompProfile:
 {{- $issuers = append $issuers (dict "issuer" . "kind" "oidc") -}}
 {{- end -}}
 {{- toJson $issuers -}}
+{{- end -}}
+
+{{/* Namespace of every object: <tenant>-<team> for an app of a team, else the release namespace */}}
+{{- define "openhands.namespace" -}}
+{{- if .Values.team -}}
+{{- printf "%s-%s" (required "tenant is required with team" .Values.tenant) .Values.team -}}
+{{- else -}}
+{{- .Release.Namespace -}}
+{{- end -}}
 {{- end -}}
