@@ -2,7 +2,7 @@ apiVersion: v2
 name: opencode-agent
 description: Personal OpenCode coding agent with a browser UI behind a login, reachable by other agents over A2A
 type: application
-version: 0.4.1
+version: 0.4.2
 appVersion: 2.1.1
 home: https://apps.openshift.eu
 icon: https://opencode.ai/favicon.svg

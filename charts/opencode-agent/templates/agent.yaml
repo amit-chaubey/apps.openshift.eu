@@ -11,6 +11,9 @@ metadata:
     app.kubernetes.io/name: opencode-agent
     app.kubernetes.io/component: server
     {{- include "opencode-agent.commonLabels" $ | nindent 4 }}
+    {{- with .Values.agentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   type: BYO
   description: {{ printf "OpenCode agent of %s. %s" (include "opencode-agent.person" .) .Values.person.role | trim | quote }}

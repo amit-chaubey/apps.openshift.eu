@@ -48,6 +48,7 @@ The UI keeps the list of open projects in the browser, so it starts empty in a n
 - `gateway.upstream` (default: empty): Model and A2A gateway. Required for a working agent.
 - `gateway.audience` (default: the host of `gateway.upstream`): Audience of the agent's ServiceAccount token, mounted at `/var/run/secrets/api-token/token`.
 - `tokenProxy.agentToken.tokenUrl` (default: empty): Token endpoint of an OpenID Connect realm. Calls under `tokenProxy.agentToken.paths` (default `/mcp`) then carry the agent's own token from a `client_credentials` grant, authenticated with a ServiceAccount token for `tokenProxy.agentToken.audience` (federated client authentication, no stored secret); model and A2A calls keep the ServiceAccount token.
+- `agentLabels` (default: empty): Labels on the kagent `Agent`, for example the one a platform uses to register the ServiceAccount kagent creates for it (`serviceAccount.name` empty) as a client of a realm.
 - `serviceAccount.labels` (default: empty): Labels on a ServiceAccount the chart creates (`serviceAccount.name` set), for example the one a platform uses to register it as a client of that realm.
 - `a2a.gatewayNamespace` (default: empty): Namespace of the gateway that publishes this agent over A2A. Renders a ReferenceGrant for its HTTPRoutes and admits it in the NetworkPolicy.
 - `a2a.allowedHosts`, `a2a.publicUrl`: Inbound Host allowlist and Agent Card address of the adapter.

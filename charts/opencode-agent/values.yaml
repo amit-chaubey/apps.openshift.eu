@@ -209,6 +209,10 @@ tokenProxy:
 nodeSelector: {}
 affinity: {}
 
+# labels on the kagent Agent, for example the one a platform uses to register the
+# ServiceAccount kagent creates for it as an OpenID Connect client
+agentLabels: {}
+
 serviceAccount:
   # empty: <name>-agent, created by kagent; another name is created by the chart
   name: ""
