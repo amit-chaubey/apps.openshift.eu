@@ -49,7 +49,7 @@ oc get route sam-openwebui -o jsonpath='https://{.spec.host}{"\n"}'
 - `serviceAccount.labels` (default: empty): Labels on the instance's ServiceAccount, for example the one a platform uses to register it as a client of that realm.
 - `openwebui.image` (default: `ghcr.io/open-webui/open-webui:v0.12.3`), `openwebui.title` (default: empty), `openwebui.persistentConfig` (default: true).
 - `openwebui.env` (default: empty): Extra Open WebUI environment variables, name to value; they override the chart's.
-- `openwebui.resources` (default: 100m CPU and 1Gi requested, 3Gi limit).
+- `openwebui.resources` (default: 100m CPU and 2Gi requested, 4 CPU and 16Gi limit).
 - `secrets.cookieSecret`, `secrets.secretKey` (default: empty): Login cookie key and Open WebUI session key, generated once and kept on upgrade.
 - `secrets.type` (default: kubernetes): `externalSecret` reads both from a secret store.
 - `storage.size`, `storage.accessMode`, `storage.className` (default: 10Gi, ReadWriteOnce, the default class): The data volume. It is kept when the release is removed.

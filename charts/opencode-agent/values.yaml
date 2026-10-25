@@ -132,13 +132,14 @@ opencode:
   - opencode
   # merged over the generated opencode.json
   config: {}
-  # opencode container requests and limits
+  # opencode container requests and limits; an agent at work peaks near 10 cores
   resources:
     requests:
-      cpu: 200m
-      memory: 512Mi
+      cpu: 500m
+      memory: 2Gi
     limits:
-      memory: 4Gi
+      cpu: "8"
+      memory: 16Gi
 
 tools:
   # Go image that builds the odf CLI, which has no binary release, from source
@@ -176,7 +177,7 @@ oauthProxy:
       cpu: 10m
       memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 256Mi
 
 uiProxy:
   # loopback port oauth-proxy sends the UI to; runs on tokenProxy.image
@@ -187,7 +188,7 @@ uiProxy:
       cpu: 10m
       memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 256Mi
 
 tokenProxy:
   # image that runs the token proxy script
@@ -209,7 +210,7 @@ tokenProxy:
       cpu: 10m
       memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 256Mi
 
 # node labels and affinity of the agent pod; the OpenCode image is several Gi
 nodeSelector: {}

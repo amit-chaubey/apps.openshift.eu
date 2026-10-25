@@ -71,9 +71,10 @@ openwebui:
   resources:
     requests:
       cpu: 100m
-      memory: 1Gi
+      memory: 2Gi
     limits:
-      memory: 3Gi
+      cpu: "4"
+      memory: 16Gi
 
 mcp:
   # MCP endpoints of the gateway (<upstream>/mcp/<endpoint>) as tool servers for every
@@ -115,7 +116,7 @@ oauthProxy:
       cpu: 10m
       memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 256Mi
 
 tokenProxy:
   # image that runs the token proxy script
@@ -137,7 +138,7 @@ tokenProxy:
       cpu: 10m
       memory: 32Mi
     limits:
-      memory: 128Mi
+      memory: 256Mi
 
 serviceAccount:
   # labels on the instance's ServiceAccount, for example the one a platform uses to
