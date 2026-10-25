@@ -42,6 +42,12 @@ password:
 | `ai.enabled` | `false` | Assistant and the OpenAI integration app. Also runs the worker and Redis. |
 | `ai.url` | empty | Address of the OpenAI-compatible API, ending in `/v1`. Required with `ai.enabled`. |
 | `secrets.aiApiKey` | empty | Key of that API. Required with `ai.enabled`; never generated. |
+| `oidc.enabled` | `true` | Login with an OpenID Connect provider (app `user_oidc`) once `oidc.discoveryUri` and `oidc.clientId` are set; local logins keep working. |
+| `oidc.discoveryUri` | empty | The provider's `/.well-known/openid-configuration`. |
+| `oidc.clientId` | empty | Client at the provider; its secret is `secrets.oidcClientSecret` (required, never generated). |
+| `oidc.groupsClaim` | `groups` | Claim with the user's groups; groups matching `oidc.groupsRegex` are created and kept in step. |
+| `oidc.groupsRegex` | empty | Only users with a matching group may log in, for example `^(admin\|acme-admins)$`. A group `admin` in the claim makes the user an administrator. Empty: no restriction. |
+| `oidc.bearer` | `true` | API and WebDAV calls with a Bearer token of the provider; the user is created on the first call. |
 | `ai.models.completion` | empty | Default model for text. Also `image`, `speechToText`, `textToSpeech`. Empty: the choice of the app. |
 | `ai.providers.*` | text kinds on | Kinds of task the endpoint serves: `chat`, `text`, `translation`, `imageAnalysis`, `imageGeneration`, `speechToText`, `textToSpeech`. |
 | `talk.enabled` | `false` | Nextcloud Talk with a signaling server, NATS, a TURN server and call recording. |

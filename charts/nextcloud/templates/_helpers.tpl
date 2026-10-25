@@ -202,3 +202,8 @@ metallb.io/loadBalancerIPs: {{ . | quote }}
 {{- define "wrapper.trafficPolicy" -}}
 {{- if ((.root.Values.global).publicAddress).shared -}}Cluster{{- else -}}{{ .policy }}{{- end -}}
 {{- end -}}
+
+{{/* OpenID Connect login is set up: enabled, with a provider and a client */}}
+{{- define "wrapper.oidcActive" -}}
+{{- if and .Values.oidc.enabled .Values.oidc.discoveryUri .Values.oidc.clientId }}true{{ end -}}
+{{- end -}}

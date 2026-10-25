@@ -56,6 +56,8 @@ secrets:
   turnSecret: ""
   # key of the AI endpoint; never generated, required when ai.enabled
   aiApiKey: ""
+  # secret of the OpenID Connect client; never generated, required when oidc.enabled
+  oidcClientSecret: ""
   externalSecret:
     storeKind: ClusterSecretStore
     storeName: ""
@@ -76,6 +78,7 @@ secrets:
       recording-secret: nextcloud-talk-recording
       turn-secret: nextcloud-turn
       ai-api-key: nextcloud-ai
+      oidc-client-secret: nextcloud-oidc-client
 
 database:
   enabled: true
@@ -232,6 +235,27 @@ talk:
       limits:
         cpu: "2"
         memory: 2Gi
+
+# Login with an OpenID Connect provider (app user_oidc); local logins keep working.
+# Active once discoveryUri and clientId are set
+oidc:
+  enabled: true
+  # provider name in Nextcloud, shown on the login button
+  identifier: keycloak
+  # the provider's /.well-known/openid-configuration
+  discoveryUri: ""
+  # its secret is secrets.oidcClientSecret
+  clientId: ""
+  scope: openid profile email
+  # claims for the Nextcloud user id, display name and email
+  uidClaim: preferred_username
+  # claim with the user's groups; groups matching groupsRegex are created and kept in step
+  groupsClaim: groups
+  # only users with a group matching this regex may log in, for example ^(admin|acme-admins)$;
+  # a group admin in the claim makes the user a Nextcloud administrator. Empty: no restriction
+  groupsRegex: ""
+  # API and WebDAV calls with a Bearer token of the provider; the user is created on first call
+  bearer: true
 
 # Assistant on an OpenAI-compatible API; also runs the worker and Redis
 ai:
@@ -416,6 +440,9 @@ nextcloud:
             optional: true
         - secret:
             name: nextcloud-ai
+            optional: true
+        - secret:
+            name: nextcloud-oidc
             optional: true
     extraVolumeMounts:
     - name: setup

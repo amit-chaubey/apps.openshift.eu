@@ -114,4 +114,21 @@ data:
     {{- if .Values.monitoring.enabled }}
     set_app serverinfo token "$(cat $s/metrics-token)"
     {{- end }}
+    {{- if include "wrapper.oidcActive" . }}
+    {{- $o := .Values.oidc }}
+    app user_oidc
+    set_app user_oidc allow_multiple_user_backends 1
+    run 60 "oidc provider {{ $o.identifier }}" php occ user_oidc:provider {{ $o.identifier | quote }} \
+      --clientid={{ $o.clientId | quote }} \
+      --clientsecret="$(cat $s/oidc-client-secret)" \
+      --discoveryuri={{ $o.discoveryUri | quote }} \
+      --scope={{ $o.scope | quote }} --unique-uid=0 \
+      --mapping-uid={{ $o.uidClaim | quote }} --mapping-display-name=name --mapping-email=email \
+      --mapping-groups={{ $o.groupsClaim | quote }} --group-provisioning=1 \
+      {{- with $o.groupsRegex }}
+      --group-whitelist-regex={{ printf "/%s/" . | quote }} --group-restrict-login-to-whitelist=1 \
+      {{- end }}
+      --check-bearer={{ ternary 1 0 $o.bearer }} --bearer-provisioning={{ ternary 1 0 $o.bearer }} \
+      --send-id-token-hint=1
+    {{- end }}
     exit 0
