@@ -85,7 +85,7 @@ oc extract secret/team-session-api-key --keys=value --to=-
 - `agentSecrets` (default: empty): Environment of the ACP agents (Claude Code, Codex, Gemini CLI), written into the agent-server secrets store, so the UI does not ask for it. Base URLs point at the token proxy, for example `ANTHROPIC_BASE_URL: http://127.0.0.1:8099/anthropic`. Not for real credentials: the values are in the pod spec.
 - `agentProfiles` (default: empty): `name: {acp_server, acp_model}` per ACP agent profile offered under **Switch agent profile**.
 - `env` (default: empty): Extra environment for `agent-canvas`.
-- `storage.size`, `storage.className`, `storage.accessMode` (default: `20Gi`, default class, `ReadWriteOnce`): Volume for settings, conversations and `~/workspace`.
+- `storage.size`, `storage.className`, `storage.accessMode` (default: `20Gi`, default class, `ReadWriteOnce`): Volume for settings, conversations, Claude Code sessions (`~/.claude`) and `~/workspace`.
 
 ## Delivery instructions
 

@@ -140,6 +140,10 @@ spec:
         - name: data
           mountPath: /home/openhands/workspace
           subPath: workspace
+        # Claude Code keeps its ACP sessions here; open conversations survive a restart
+        - name: data
+          mountPath: /home/openhands/.claude
+          subPath: claude
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         securityContext:
