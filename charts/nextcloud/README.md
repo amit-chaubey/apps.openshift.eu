@@ -111,6 +111,7 @@ taking every such release in order:
 |---|---|
 | 0.1.0 to 0.7.0 | 33 |
 | 0.8.0, 0.8.1 | 34 |
+| 0.9.0 | 35 |
 
 An instance that skips a release with a new major does not start: the image refuses the
 jump (`It is only possible to upgrade one major version at a time`) and leaves the data
