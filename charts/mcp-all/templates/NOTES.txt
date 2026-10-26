@@ -1,6 +1,6 @@
 {{- if or .Values.googleWorkspace.enabled .Values.microsoft365.enabled }}
 The RemoteMCPServers of the switched-on bundles are in {{ .Release.Namespace }}. Give an
-agent a bundle with mcps.bundles or single servers with mcps.servers; each user
+agent a bundle with mcp.bundles or single servers with mcp.servers; each user
 authorizes a server in the agent UI.
 {{- else }}
 No bundle is switched on: set googleWorkspace.enabled or microsoft365.enabled.

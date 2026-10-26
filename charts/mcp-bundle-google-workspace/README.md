@@ -4,7 +4,7 @@
 
 Installs Google's hosted Workspace MCP servers for the agents of your project in one release: `mcp-gmail`, `mcp-google-drive`, `mcp-google-docs`, `mcp-google-sheets` and `mcp-google-calendar`, each a kagent `RemoteMCPServer` (`gmail`, `google-drive`, `google-docs`, `google-sheets`, `google-calendar`). Nothing runs in the project: every user logs in to Google with OAuth in the agent's UI, and users grant read-only scopes unless a server's `write` is true.
 
-All servers share one OAuth client, the Secret `<release>-google-oauth-client` this chart writes. They carry the labels `mcp.openshift.eu/bundle: google-workspace`, `mcp.openshift.eu/category: productivity` and `mcp.openshift.eu/addon: "true"`, so an agent gets them only when it asks for the bundle (for an `openhands` agent, `mcps.bundles: [google-workspace]`) or for single servers by name (`mcps.servers: [gmail]`).
+All servers share one OAuth client, the Secret `<release>-google-oauth-client` this chart writes. They carry the labels `mcp.openshift.eu/bundle: google-workspace`, `mcp.openshift.eu/category: productivity` and `mcp.openshift.eu/addon: "true"`, so an agent gets them only when it asks for the bundle (for an `openhands` agent, `mcp.bundles: [google-workspace]`) or for single servers by name (`mcp.servers: [gmail]`).
 
 ## Install
 
@@ -28,6 +28,6 @@ Google offers its Workspace MCP servers to members of the Google Workspace Devel
 4. Google Auth Platform > Clients > Create client: type **Web application**, select **Use this client for an AI-powered agent**, and add one authorized redirect URI per agent, `https://<agent route host>/mcp-oauth/callback`.
 5. Put the client id and secret into `secrets.clientId` and `secrets.clientSecret`, or into a vault item for `secrets.type: externalSecret`.
 
-Then give the agent the bundle: for an `openhands` agent in this project set `mcps.bundles: [google-workspace]`. The servers appear switched off under **Settings > MCP**; each user opens one, authorizes it with their own Google account and switches it on. The agent asks Google for offline access, so a login keeps working after the first hour.
+Then give the agent the bundle: for an `openhands` agent in this project set `mcp.bundles: [google-workspace]`. The servers appear switched off under **Settings > MCP**; each user opens one, authorizes it with their own Google account and switches it on. The agent asks Google for offline access, so a login keeps working after the first hour.
 
 Prompt injection: an agent that reads mail or documents from strangers can be steered by them. Keep write scopes off unless the agent needs them, and review what it does.

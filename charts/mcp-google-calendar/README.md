@@ -6,7 +6,7 @@ Makes Google's hosted Google Calendar MCP server (`https://calendarmcp.googleapi
 
 By default users grant read-only scopes (`https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.events.freebusy https://www.googleapis.com/auth/calendar.events.readonly`); `write: true` adds `https://www.googleapis.com/auth/calendar.events`, so the agent can create, change, delete and answer events.
 
-The `RemoteMCPServer` carries the labels `mcp.openshift.eu/server: google-calendar`, `mcp.openshift.eu/bundle: google-workspace`, `mcp.openshift.eu/category: productivity` and `mcp.openshift.eu/addon: "true"`: an add-on reaches an agent only when the agent asks for its bundle or server name (for an `openhands` agent, `mcps.bundles: [google-workspace]` or `mcps.servers: [google-calendar]`). Its annotations `openhands.dev/auth: oauth2`, `openhands.dev/oauth-client` and `openhands.dev/oauth-scopes` tell the agent how to log in. The chart `mcp-bundle-google-workspace` installs this server together with the other servers of the bundle and one shared OAuth client.
+The `RemoteMCPServer` carries the labels `mcp.openshift.eu/server: google-calendar`, `mcp.openshift.eu/bundle: google-workspace`, `mcp.openshift.eu/category: productivity` and `mcp.openshift.eu/addon: "true"`: an add-on reaches an agent only when the agent asks for its bundle or server name (for an `openhands` agent, `mcp.bundles: [google-workspace]` or `mcp.servers: [google-calendar]`). Its annotations `openhands.dev/auth: oauth2`, `openhands.dev/oauth-client` and `openhands.dev/oauth-scopes` tell the agent how to log in. The chart `mcp-bundle-google-workspace` installs this server together with the other servers of the bundle and one shared OAuth client.
 
 ## Install
 
@@ -44,6 +44,6 @@ Google offers its Workspace MCP servers to members of the Google Workspace Devel
 
 The agent asks Google for offline access, so a login keeps working after the first hour.
 
-Then give the agent the server: for an `openhands` agent in this project set `mcps.servers: [google-calendar]` or `mcps.bundles: [google-workspace]`. The server appears switched off under **Settings > MCP**; each user opens it, authorizes it with their own account and switches it on. A user who removes the grant at the vendor clicks **Reauthorize**.
+Then give the agent the server: for an `openhands` agent in this project set `mcp.servers: [google-calendar]` or `mcp.bundles: [google-workspace]`. The server appears switched off under **Settings > MCP**; each user opens it, authorizes it with their own account and switches it on. A user who removes the grant at the vendor clicks **Reauthorize**.
 
 Prompt injection: an agent that reads mail or documents from strangers can be steered by them. Keep `write: false` unless the agent needs to write, and review what it does.

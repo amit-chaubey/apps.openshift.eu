@@ -4,7 +4,7 @@
 
 Every MCP bundle of the catalog as a switch, so one values file decides which bundles and single MCP servers the agents of your project get. Each bundle is a dependency with its own values: `googleWorkspace` (`mcp-bundle-google-workspace`: Gmail, Drive, Docs, Sheets, Calendar) and `microsoft365` (`mcp-bundle-microsoft-365`). Nothing is installed until a bundle is switched on.
 
-The servers keep their selection labels (`mcp.openshift.eu/server`, `/bundle`, `/category`, `/addon`), so an agent still chooses what it uses, for an `openhands` agent with `mcps.bundles` and `mcps.servers`.
+The servers keep their selection labels (`mcp.openshift.eu/server`, `/bundle`, `/category`, `/addon`), so an agent still chooses what it uses, for an `openhands` agent with `mcp.bundles` and `mcp.servers`.
 
 ## Install
 
@@ -30,4 +30,4 @@ helm install mcp grncloud/mcp-all -f mcp.yaml
 
 ## Delivery instructions
 
-Create the OAuth clients of the bundles you switch on as their charts describe (https://github.com/hoolia/apps.openshift.eu/tree/main/charts). Then give the agents what they need: for an `openhands` agent in this project set `mcps.bundles` (for example `[google-workspace]`) or `mcps.servers` (for example `[gmail]`). The servers appear switched off under **Settings > MCP**; each user opens one, authorizes it with their own account and switches it on.
+Create the OAuth clients of the bundles you switch on as their charts describe (https://github.com/hoolia/apps.openshift.eu/tree/main/charts). Then give the agents what they need: for an `openhands` agent in this project set `mcp.bundles` (for example `[google-workspace]`) or `mcp.servers` (for example `[gmail]`). The servers appear switched off under **Settings > MCP**; each user opens one, authorizes it with their own account and switches it on.

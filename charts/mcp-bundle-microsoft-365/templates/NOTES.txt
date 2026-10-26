@@ -1,4 +1,4 @@
 {{- if .Values.microsoft365.enabled }}
 The RemoteMCPServer microsoft-365 is in {{ .Release.Namespace }}. Give an agent the bundle
-with mcps.bundles: [microsoft-365]; each user authorizes it in the agent UI.
+with mcp.bundles: [microsoft-365]; each user authorizes it in the agent UI.
 {{- end }}
