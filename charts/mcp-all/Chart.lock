@@ -1,0 +1,9 @@
+dependencies:
+- name: mcp-bundle-google-workspace
+  repository: file://../mcp-bundle-google-workspace
+  version: 0.1.0
+- name: mcp-bundle-microsoft-365
+  repository: file://../mcp-bundle-microsoft-365
+  version: 0.1.0
+digest: sha256:179cf0149de8e181532f3c5758402a0b9ada0654f868e6af8ccea393a014ffcf
+generated: "2026-10-26T10:50:20.218722469Z"

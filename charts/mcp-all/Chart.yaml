@@ -1,0 +1,36 @@
+apiVersion: v2
+name: mcp-all
+description: Every MCP bundle of the catalog as a switch, so one values file picks the bundles and single MCP servers the agents of a project get
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://apps.openshift.eu
+icon: https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/docs/logo/light.svg
+keywords:
+- ai
+- mcp
+- mcp-bundle
+- oauth
+- google-workspace
+- microsoft-365
+- productivity
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: MCP catalog
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  mcp.openshift.eu/bundle: all
+dependencies:
+- name: mcp-bundle-google-workspace
+  version: 0.1.0
+  repository: file://../mcp-bundle-google-workspace
+  alias: googleWorkspace
+  condition: googleWorkspace.enabled
+- name: mcp-bundle-microsoft-365
+  version: 0.1.0
+  repository: file://../mcp-bundle-microsoft-365
+  alias: microsoft365
+  condition: microsoft365.enabled

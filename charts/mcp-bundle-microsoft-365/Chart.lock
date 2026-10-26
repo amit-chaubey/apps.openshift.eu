@@ -1,0 +1,6 @@
+dependencies:
+- name: mcp-microsoft-365
+  repository: file://../mcp-microsoft-365
+  version: 0.1.0
+digest: sha256:f7add12a4421ddd116ba21a9b8d5d57f29a6bd050c8089c2d621ce5afc9de3f1
+generated: "2026-10-26T10:50:19.015351465Z"

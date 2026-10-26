@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mcp-microsoft-365.name" . }}
+  namespace: {{ include "mcp-microsoft-365.namespace" . }}
+  labels:
+    app: {{ include "mcp-microsoft-365.name" . }}
+    app.kubernetes.io/name: mcp-microsoft-365
+    app.kubernetes.io/component: server
+    {{- include "mcp-microsoft-365.commonLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "mcp-microsoft-365.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: mcp
+    port: {{ .Values.port }}
+    targetPort: mcp
+    protocol: TCP

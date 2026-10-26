@@ -34,5 +34,7 @@ jobs:
       run: ci/test-openwebui.sh
     - name: Test SBOM image collection
       run: python3 -m unittest ci/test_sbom.py
+    - name: Test MCP Registry server.json
+      run: python3 -m unittest ci/test_server_json.py
     - name: Scan history for secrets
       run: gitleaks detect --source . --redact

@@ -4,22 +4,34 @@ set -eu
 cd "$(dirname "$0")/.."
 ls charts/*/Chart.yaml >/dev/null 2>&1 || { echo "FAIL no chart under charts/"; exit 1; }
 fail=0
+# a chart's dependencies; a local file:// dependency is built first, so its own
+# dependencies are packaged with it
+build_deps() {
+  local c=$1 d r
+  grep -q '^dependencies:' "$c/Chart.yaml" && [ ! -d "$c/charts" ] || return 0
+  for d in $(grep -E '^\s+repository: file://' "$c/Chart.yaml" | awk '{print $2}' | sed 's#^file://##'); do
+    build_deps "$c/$d" || return 1
+  done
+  # helm builds only from repositories it knows by name
+  for r in $(grep -E '^\s+repository: https://' "$c/Chart.yaml" | awk '{print $2}'); do
+    helm repo add "dep-$(echo "$r" | cksum | cut -d' ' -f1)" "$r" >/dev/null
+  done
+  helm dependency build "$c" >/dev/null
+}
 for c in charts/*/; do
   c=${c%/}
   n=$(basename "$c")
-  if grep -q '^dependencies:' "$c/Chart.yaml" && [ ! -d "$c/charts" ]; then
-    # helm builds only from repositories it knows by name
-    for r in $(grep -E '^\s+repository: https://' "$c/Chart.yaml" | awk '{print $2}'); do
-      helm repo add "dep-$(echo "$r" | cksum | cut -d' ' -f1)" "$r" >/dev/null
-    done
-    helm dependency build "$c" >/dev/null || { echo "FAIL $n: helm dependency build"; fail=1; continue; }
-  fi
+  build_deps "$c" || { echo "FAIL $n: helm dependency build"; fail=1; continue; }
   # values a chart needs to render at all, as in chart-testing
   ci=""
   [ -f "$c/ci/test-values.yaml" ] && ci="-f $c/ci/test-values.yaml"
   helm lint "$c" --namespace test $ci >/dev/null || { echo "FAIL $n: helm lint"; fail=1; }
-  for mode in kubernetes externalSecret; do
-    args="$ci --set secrets.type=$mode"
+  # a chart without secrets of its own (a bundle of other charts) has no secrets.type
+  modes=none
+  grep -q '^secrets:' "$c/values.yaml" && modes="kubernetes externalSecret"
+  for mode in $modes; do
+    args="$ci"
+    [ "$mode" = none ] || args="$args --set secrets.type=$mode"
     [ "$mode" = externalSecret ] && args="$args --set secrets.externalSecret.storeName=vault-test"
     out=$(helm template test "$c" --namespace test $args) || { echo "FAIL $n: render $mode"; fail=1; continue; }
     bad=$(echo "$out" | grep -E '^kind: (Namespace|ClusterRole|ClusterRoleBinding|ClusterPolicy|CustomResourceDefinition|Subscription|OperatorGroup|SecurityContextConstraints)$' || true)

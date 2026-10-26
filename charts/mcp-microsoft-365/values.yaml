@@ -1,0 +1,100 @@
+# Team of the tenant the server serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the server belongs to; required with team
+tenant: ""
+
+# switch of this server when a bundle chart includes it
+enabled: true
+
+# name of the server's objects and of the server in the agent UI. Empty: mcp.server
+nameOverride: ""
+
+# Softeria ms-365-mcp-server image
+image:
+  repository: ghcr.io/softeria/ms-365-mcp-server
+  tag: 0.172.0
+  pullPolicy: IfNotPresent
+
+microsoft:
+  # Entra tenant of the app registration: its id or <name>.onmicrosoft.com. common:
+  # an app registered for accounts of any organisation
+  tenantId: common
+  # work or school accounts: also Teams, SharePoint and shared mailboxes
+  orgMode: true
+  # only tools that read; false also offers sending mail, changing events and files
+  readOnly: true
+  # space-separated Microsoft Graph scopes the server may request at most; tools that
+  # need more are hidden. The default holds only delegated scopes users may consent to
+  # themselves. Empty: every scope of the enabled tools, several of which need an
+  # administrator's consent
+  allowedScopes: User.Read Mail.Read MailboxSettings.Read Calendars.Read Contacts.Read People.Read Tasks.Read Notes.Read Files.Read.All Sites.Read.All Chat.Read Team.ReadBasic.All Channel.ReadBasic.All Presence.Read
+  # redirect URIs the server accepts from agents, one per agent:
+  # https://<agent route host>/mcp-oauth/callback. Empty: any https URI (Entra still
+  # accepts only the URIs of the app registration)
+  allowedRedirectUris: []
+
+# Public address the agents and their users' browsers reach; the server's OAuth login
+# runs here. Required
+route:
+  host: ""
+  # extra labels on the Route, for example to pick a router shard
+  labels: {}
+  # certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+# container port of the server
+port: 3000
+
+mcp:
+  # prefix of the selection labels on the RemoteMCPServer
+  labelDomain: mcp.openshift.eu
+  # <labelDomain>/server: the server name an agent lists to get only this server
+  server: microsoft-365
+  # <labelDomain>/bundle: the bundle an agent lists to get all its servers
+  bundle: microsoft-365
+  # <labelDomain>/category: the kind of tool, for catalogs and filters
+  category: productivity
+  # <labelDomain>/addon: "true": an agent gets the server only when it lists its bundle or
+  # server name; false: every agent that may list RemoteMCPServers here gets it
+  addon: true
+  # description of the server in kagent and the agent UI
+  description: "Microsoft 365 of the logged-in user: mail, calendar, OneDrive, Teams and SharePoint"
+  # image URL of the server's card in the agent UI
+  icon: https://cdn.simpleicons.org/microsoft
+
+oauthClient:
+  # existing Secret with the keys client_id and client_secret of the Entra app
+  # registration. Empty: <release>-<secretSuffix>, written from secrets below
+  existingSecret: ""
+  # name suffix of the chart's own client Secret
+  secretSuffix: microsoft-oauth-client
+  # write the client Secret from secrets below
+  create: true
+
+secrets:
+  # kubernetes: the client Secret from clientId and clientSecret. externalSecret: from a
+  # secret store
+  type: kubernetes
+  # Entra app registration of the tenant: Web redirect URIs of the agents, a client
+  # secret. Empty: no Secret, and the server does not start until one exists
+  clientId: ""
+  clientSecret: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # vault item with the client id as username and the client secret as password.
+    # Empty: <release>-<secretSuffix>
+    item: ""
+
+# requests and limits of the server
+resources:
+  requests:
+    cpu: 20m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi

@@ -1,0 +1,31 @@
+apiVersion: v2
+name: mcp-google-sheets
+description: Google's hosted Google Sheets MCP server for the agents of a project; every user logs in with OAuth, read-only by default
+type: application
+version: 0.1.0
+appVersion: "v1"
+home: https://apps.openshift.eu
+icon: https://cdn.simpleicons.org/googlesheets
+keywords:
+- ai
+- mcp
+- mcp-server
+- oauth
+- google-workspace
+- productivity
+- google-sheets
+- spreadsheets
+- google
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+- https://developers.google.com/workspace/sheets/api/reference/mcp
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Google Sheets MCP server
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  mcp.openshift.eu/server: google-sheets
+  mcp.openshift.eu/bundle: google-workspace
+  mcp.openshift.eu/category: productivity
+  mcp.openshift.eu/auth: oauth2

@@ -1,0 +1,94 @@
+{{- $host := required "route.host is required: the server's OAuth login runs on it" .Values.route.host }}
+{{- $m := .Values.microsoft }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-microsoft-365.name" . }}
+  namespace: {{ include "mcp-microsoft-365.namespace" . }}
+  labels:
+    app: {{ include "mcp-microsoft-365.name" . }}
+    app.kubernetes.io/name: mcp-microsoft-365
+    app.kubernetes.io/component: server
+    {{- include "mcp-microsoft-365.commonLabels" . | nindent 4 }}
+  annotations:
+    app.openshift.io/vcs-uri: https://github.com/softeria/ms-365-mcp-server
+spec:
+  # login state (PKCE) is kept in memory
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "mcp-microsoft-365.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-microsoft-365.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      # the server needs no Kubernetes API access
+      automountServiceAccountToken: false
+      containers:
+      - name: server
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+        - --http
+        - 0.0.0.0:{{ .Values.port }}
+        - --public-url
+        - https://{{ $host }}
+        {{- if $m.orgMode }}
+        - --org-mode
+        {{- end }}
+        {{- if $m.readOnly }}
+        - --read-only
+        {{- end }}
+        env:
+        - name: HOME
+          value: /tmp
+        - name: MS365_MCP_TENANT_ID
+          value: {{ $m.tenantId | quote }}
+        - name: MS365_MCP_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "mcp-microsoft-365.clientSecret" . }}
+              key: client_id
+        - name: MS365_MCP_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "mcp-microsoft-365.clientSecret" . }}
+              key: client_secret
+        {{- with $m.allowedScopes }}
+        - name: MS365_MCP_ALLOWED_SCOPES
+          value: {{ . | quote }}
+        {{- end }}
+        {{- with $m.allowedRedirectUris }}
+        - name: MS365_MCP_ALLOWED_REDIRECT_URIS
+          value: {{ join "," . | quote }}
+        {{- end }}
+        ports:
+        - name: mcp
+          containerPort: {{ .Values.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /.well-known/oauth-protected-resource
+            port: mcp
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

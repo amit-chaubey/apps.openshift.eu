@@ -1,0 +1,65 @@
+# Team of the tenant the server serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the server belongs to; required with team
+tenant: ""
+
+# switch of this server when a bundle chart includes it
+enabled: true
+
+# name of the RemoteMCPServer, the server's name in the agent UI. Empty: mcp.server
+nameOverride: ""
+
+# address of Google's hosted Google Docs MCP server
+url: https://docsmcp.googleapis.com/mcp/v1
+
+# OAuth scopes every user grants at login: read-only
+scopes:
+- https://www.googleapis.com/auth/drive.readonly
+- https://www.googleapis.com/auth/documents.readonly
+# true: users also grant writeScopes, so the agent can edit documents
+write: false
+writeScopes:
+- https://www.googleapis.com/auth/drive.file
+- https://www.googleapis.com/auth/documents
+
+mcp:
+  # prefix of the selection labels on the RemoteMCPServer
+  labelDomain: mcp.openshift.eu
+  # <labelDomain>/server: the server name an agent lists to get only this server
+  server: google-docs
+  # <labelDomain>/bundle: the bundle an agent lists to get all its servers
+  bundle: google-workspace
+  # <labelDomain>/category: the kind of tool, for catalogs and filters
+  category: productivity
+  # <labelDomain>/addon: "true": an agent gets the server only when it lists its bundle or
+  # server name; false: every agent that may list RemoteMCPServers here gets it
+  addon: true
+  # description of the server in kagent and the agent UI
+  description: "Google Docs of the logged-in user: read documents"
+  # image URL of the server's card in the agent UI
+  icon: https://cdn.simpleicons.org/googledocs
+
+oauthClient:
+  # existing Secret with the keys client_id and client_secret of the OAuth client. Empty:
+  # <release>-<secretSuffix>
+  existingSecret: ""
+  # name suffix of the chart's own client Secret; bundle charts share one per vendor
+  secretSuffix: oauth-client
+  # write the client Secret from secrets below; bundle charts write it themselves
+  create: true
+
+secrets:
+  # kubernetes: the client Secret from clientId and clientSecret. externalSecret: from a
+  # secret store
+  type: kubernetes
+  # OAuth client of a Google Cloud project: type Web application, "Use this client for an AI-powered agent". Empty: no Secret, and agents skip the server until one exists
+  clientId: ""
+  clientSecret: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # vault item with the client id as username and the client secret as password.
+    # Empty: <release>-<secretSuffix>
+    item: ""

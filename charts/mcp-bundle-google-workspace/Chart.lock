@@ -1,0 +1,18 @@
+dependencies:
+- name: mcp-gmail
+  repository: file://../mcp-gmail
+  version: 0.1.0
+- name: mcp-google-drive
+  repository: file://../mcp-google-drive
+  version: 0.1.0
+- name: mcp-google-docs
+  repository: file://../mcp-google-docs
+  version: 0.1.0
+- name: mcp-google-sheets
+  repository: file://../mcp-google-sheets
+  version: 0.1.0
+- name: mcp-google-calendar
+  repository: file://../mcp-google-calendar
+  version: 0.1.0
+digest: sha256:62ba5dff700ee9433b28ecb23057df6288fa40984a1ee97a86575f33c9231d35
+generated: "2026-10-26T10:50:17.710211997Z"

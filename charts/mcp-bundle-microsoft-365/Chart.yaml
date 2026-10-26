@@ -1,0 +1,38 @@
+apiVersion: v2
+name: mcp-bundle-microsoft-365
+description: Microsoft 365 MCP servers for the agents of a project (today the Microsoft 365 server for mail, calendar, OneDrive, Teams and SharePoint); every user logs in with OAuth, read-only by default
+type: application
+version: 0.1.0
+appVersion: "0.172.0"
+home: https://apps.openshift.eu
+icon: https://cdn.simpleicons.org/microsoft
+keywords:
+- ai
+- mcp
+- mcp-bundle
+- oauth
+- microsoft-365
+- productivity
+- outlook
+- onedrive
+- teams
+- sharepoint
+- microsoft
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+- https://github.com/softeria/ms-365-mcp-server
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Microsoft 365 MCP bundle
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  mcp.openshift.eu/bundle: microsoft-365
+  mcp.openshift.eu/category: productivity
+  mcp.openshift.eu/auth: oauth2
+dependencies:
+- name: mcp-microsoft-365
+  version: 0.1.0
+  repository: file://../mcp-microsoft-365
+  alias: microsoft365
+  condition: microsoft365.enabled

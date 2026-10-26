@@ -1,0 +1,59 @@
+apiVersion: v2
+name: mcp-bundle-google-workspace
+description: Google Workspace MCP servers (Gmail, Drive, Docs, Sheets, Calendar) for the agents of a project with one shared OAuth client; every user logs in with OAuth, read-only by default
+type: application
+version: 0.1.0
+appVersion: "v1"
+home: https://apps.openshift.eu
+icon: https://cdn.simpleicons.org/google
+keywords:
+- ai
+- mcp
+- mcp-bundle
+- oauth
+- google-workspace
+- productivity
+- gmail
+- google-drive
+- google-docs
+- google-sheets
+- google-calendar
+- google
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+- https://developers.google.com/workspace/guides/configure-mcp-servers
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Google Workspace MCP bundle
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  mcp.openshift.eu/bundle: google-workspace
+  mcp.openshift.eu/category: productivity
+  mcp.openshift.eu/auth: oauth2
+dependencies:
+- name: mcp-gmail
+  version: 0.1.0
+  repository: file://../mcp-gmail
+  alias: gmail
+  condition: gmail.enabled
+- name: mcp-google-drive
+  version: 0.1.0
+  repository: file://../mcp-google-drive
+  alias: googleDrive
+  condition: googleDrive.enabled
+- name: mcp-google-docs
+  version: 0.1.0
+  repository: file://../mcp-google-docs
+  alias: googleDocs
+  condition: googleDocs.enabled
+- name: mcp-google-sheets
+  version: 0.1.0
+  repository: file://../mcp-google-sheets
+  alias: googleSheets
+  condition: googleSheets.enabled
+- name: mcp-google-calendar
+  version: 0.1.0
+  repository: file://../mcp-google-calendar
+  alias: googleCalendar
+  condition: googleCalendar.enabled
