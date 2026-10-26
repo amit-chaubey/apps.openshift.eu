@@ -2,7 +2,7 @@ apiVersion: v2
 name: guacamole
 description: Apache Guacamole remote desktop gateway with a PostgreSQL database, optional single sign-on, session recording to object storage and a locked-down kiosk browser desktop
 type: application
-version: 0.1.1
+version: 0.2.0
 appVersion: "1.6.0"
 home: https://apps.openshift.eu
 icon: https://guacamole.apache.org/images/logos/guac-tricolor-logo.svg

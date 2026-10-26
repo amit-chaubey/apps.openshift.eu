@@ -217,6 +217,9 @@
             "region": {
               "type": "string",
               "minLength": 1
+            },
+            "caConfigMap": {
+              "type": "string"
             }
           }
         }

@@ -132,6 +132,9 @@ recording:
     expiryDays: 180
     # region given to the S3 client
     region: us-east-1
+    # ConfigMap of the release namespace whose certificates the copy trusts besides
+    # the system ones, for an endpoint signed by the cluster; empty: system ones only
+    caConfigMap: openshift-service-ca.crt
 
 watermark:
   # true: the user name and the time are tiled faintly over every page

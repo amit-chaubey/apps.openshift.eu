@@ -86,6 +86,8 @@ data:
     {{- if $root.Values.recording.enabled }}
     {{- $_ := set $params "recording-path" "${HISTORY_PATH}/${HISTORY_UUID}" }}
     {{- $_ := set $params "create-recording-path" "true" }}
+    {{- /* a new database counts history IDs from 1 again, so HISTORY_UUID repeats */}}
+    {{- $_ := set $params "recording-name" "${GUAC_DATE}-${GUAC_TIME}" }}
     {{- end }}
     {{- range $k, $v := ($c.parameters | default dict) }}{{- $_ := set $params $k $v }}{{- end }}
     {{- $secretNames := keys ($c.secretParameters | default dict) | sortAlpha }}

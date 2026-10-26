@@ -226,6 +226,11 @@ spec:
             configMapKeyRef:
               name: {{ $obc }}
               key: BUCKET_NAME
+        {{- if $rec.s3.caConfigMap }}
+        # read next to the system certificates, which stay trusted
+        - name: SSL_CERT_DIR
+          value: /etc/rclone/ca
+        {{- end }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -236,6 +241,11 @@ spec:
           readOnly: true
         - name: tmp
           mountPath: /tmp
+        {{- if $rec.s3.caConfigMap }}
+        - name: bucket-ca
+          mountPath: /etc/rclone/ca
+          readOnly: true
+        {{- end }}
         readinessProbe:
           exec:
             command: ["test", "-d", "/var/lib/guacamole/recordings"]
@@ -258,5 +268,12 @@ spec:
       {{- if $s3 }}
       - name: tmp
         emptyDir: {}
+      {{- if $rec.s3.caConfigMap }}
+      - name: bucket-ca
+        configMap:
+          name: {{ $rec.s3.caConfigMap }}
+          # a cluster without it keeps the system certificates
+          optional: true
+      {{- end }}
       {{- end }}
       {{- end }}
