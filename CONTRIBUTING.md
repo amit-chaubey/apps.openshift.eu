@@ -20,7 +20,8 @@ It needs `helm` and Python 3 with PyYAML. `gitleaks` is used when it is installe
   host path, no host network, no capability besides `NET_BIND_SERVICE`. A container that
   needs a fixed user id sets `runAsUser` on that container only.
 - A chart holds no name of a platform, cluster, company or tenant, no domain name and no
-  storage class name. Those are values with a neutral default.
+  storage class name. Those are values with a neutral default. The one shared domain
+  is `mcp.openshift.eu`, the neutral prefix of the MCP catalog labels and annotations.
 
 ### Values
 

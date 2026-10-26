@@ -171,15 +171,25 @@ skills:
 # acp_server one of claude-code, codex, gemini-cli, ...; written like llm.model
 agentProfiles: {}
 
-# MCP servers from the namespace's kagent RemoteMCPServers, kept in step every interval:
-# a URL on gateway.upstream goes through the token proxy; one that needs headers from a
-# Secret is skipped. Entries the user added in the UI are left alone
-mcpDiscovery:
+# MCP servers from the kagent RemoteMCPServers of every Project the ServiceAccount may
+# list them in, kept in step every interval: a URL on gateway.upstream goes through the
+# token proxy; one that needs headers from a Secret is skipped. A RemoteMCPServer
+# annotated openhands.dev/auth: oauth2 is an OAuth server each user logs in to in the UI;
+# see README. Entries the user added in the UI are left alone
+mcp:
   enabled: true
   # seconds between two passes
   interval: 60
   # only RemoteMCPServers with these labels, for example key=value. Empty: all
   labelSelector: ""
+  # prefix of the selection labels <labelDomain>/addon, /bundle and /server. A
+  # RemoteMCPServer labelled <labelDomain>/addon: "true" is an add-on, used only when
+  # its bundle is in bundles or its server name (label, else object name) in servers
+  labelDomain: mcp.openshift.eu
+  # add-on bundles to use, for example [google]
+  bundles: []
+  # add-on servers to use, for example [gmail]
+  servers: []
   # ClusterRole, installed with kagent, that reads RemoteMCPServers; bound in the
   # release namespace. Empty: no binding (the ServiceAccount's edit role may cover it)
   clusterRole: kagent-remotemcpserver-view
@@ -189,6 +199,9 @@ mcpDiscovery:
       memory: 32Mi
     limits:
       memory: 96Mi
+
+# deprecated former name of mcp, still read in this version: its keys override mcp
+mcpDiscovery: {}
 
 # Remote MCP servers a user adds in the UI become AgentgatewayBackends of the namespace,
 # so the platform publishes them to the whole team. OAuth and in-pod servers stay personal.
@@ -304,7 +317,7 @@ nodeSelector: {}
 affinity: {}
 
 storage:
-  # settings, conversations and the workspace
+  # the whole home: settings, conversations, workspace, logins and caches
   size: 20Gi
   accessMode: ReadWriteOnce
   # empty: the default storage class

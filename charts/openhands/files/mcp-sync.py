@@ -11,6 +11,15 @@ entry the user added wins, and the user's enabled switch is kept. Without the ka
 CRDs it writes nothing. It also writes GIT_SECRET_NAME into the secrets store, which
 turns on the UI's git provider features. Never exits on an error.
 
+An object labelled <LABEL_DOMAIN>/addon=true is an add-on: it is written only when its
+<LABEL_DOMAIN>/bundle label is in BUNDLES or its <LABEL_DOMAIN>/server label (else its
+name) is in SERVERS. An object annotated openhands.dev/auth=oauth2 becomes an OAuth
+entry: its own URL, the pre-registered client from the Secret named by
+openhands.dev/oauth-client (keys client_id, client_secret; without it the agent
+registers itself at the server) and the scopes of openhands.dev/oauth-scopes. It is added switched off, because each user logs in to it
+in the UI first; the stored login (auth.state) is never sent, and the client is sent
+again only when it changed.
+
 With PUBLISH it also works the other way: every remote MCP server the user added in the
 UI becomes an AgentgatewayBackend of the namespace, with the headers OpenHands would send
 in a Secret it owns, so the platform publishes it to the team as a RemoteMCPServer.
@@ -73,6 +82,18 @@ FIELD_MANAGER = "openhands-mcp-publish"
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 # backend names this agent published; discovery leaves their RemoteMCPServers out
 OWN: set[str] = set()
+# add-on selection by label; an empty LABEL_DOMAIN treats every object as no add-on
+LABEL_DOMAIN = os.environ.get("LABEL_DOMAIN", "").strip("/")
+BUNDLES = set(filter(None, os.environ.get("BUNDLES", "").split(",")))
+SERVERS = set(filter(None, os.environ.get("SERVERS", "").split(",")))
+AUTH_ANNOTATION = "openhands.dev/auth"
+SCOPES_ANNOTATION = "openhands.dev/oauth-scopes"
+CLIENT_ANNOTATION = "openhands.dev/oauth-client"
+CLIENT_AUTH_ANNOTATION = "openhands.dev/oauth-client-auth-method"
+# the authentication fields an OAuth entry gets from its RemoteMCPServer
+OAUTH_FIELDS = ("type", "client_id", "client_secret", "scopes", "client_auth_method")
+# digest of the OAuth client last written per entry; empty after a start
+SENT: dict[str, str] = {}
 
 
 def log(msg: str) -> None:
@@ -312,17 +333,60 @@ def publish(namespace: str, current: dict, full: bool) -> None:
                 log(f"unpublished {name}")
 
 
-def to_server(obj: dict) -> dict | None:
+def selected(obj: dict) -> bool:
+    """False for an add-on whose bundle and server name are both not asked for."""
+    labels = obj["metadata"].get("labels") or {}
+    if not LABEL_DOMAIN or labels.get(f"{LABEL_DOMAIN}/addon") != "true":
+        return True
+    server = labels.get(f"{LABEL_DOMAIN}/server") or obj["metadata"]["name"]
+    return server in SERVERS or labels.get(f"{LABEL_DOMAIN}/bundle", "") in BUNDLES
+
+
+def oauth_client(obj: dict) -> tuple[dict | None, str]:
+    """The authentication of an OAuth entry, every field in OAUTH_FIELDS; else why not."""
+    meta = obj["metadata"]
+    annotations = meta.get("annotations") or {}
+    common = {
+        "type": "oauth",
+        "scopes": " ".join(annotations.get(SCOPES_ANNOTATION, "").split()) or None,
+        "client_auth_method": annotations.get(CLIENT_AUTH_ANNOTATION) or None,
+    }
+    name = annotations.get(CLIENT_ANNOTATION, "")
+    if not name:
+        # the agent registers itself at the server (dynamic client registration)
+        return {**common, "client_id": None, "client_secret": None}, ""
+    status, secret = kube("GET", SECRETS.format(meta["namespace"]) + "/" + name)
+    if status != 200:
+        return None, f"client Secret {name}: HTTP {status}"
+    data = secret.get("data") or {}
+    try:
+        client_id, client_secret = (base64.b64decode(data.get(k, "")).decode()
+                                    for k in ("client_id", "client_secret"))
+    except ValueError:
+        return None, f"client Secret {name} is not readable"
+    if not client_id:
+        return None, f"client Secret {name} has no client_id"
+    return {**common, "client_id": client_id, "client_secret": client_secret or None}, ""
+
+
+def to_server(obj: dict) -> tuple[dict | None, str]:
+    """The entry for a RemoteMCPServer; else None and why it is skipped."""
     spec = obj.get("spec", {})
     url = spec.get("url", "")
-    if UPSTREAM and url.startswith(UPSTREAM + "/"):
+    meta = obj["metadata"]
+    authentication = None
+    if (meta.get("annotations") or {}).get(AUTH_ANNOTATION) == "oauth2":
+        # each user logs in at the vendor; the gateway and its token are not involved
+        authentication, reason = oauth_client(obj)
+        if authentication is None:
+            return None, reason
+    elif UPSTREAM and url.startswith(UPSTREAM + "/"):
         # the token proxy adds the pod's own ServiceAccount token
         url = PROXY + url[len(UPSTREAM):]
     elif spec.get("headersFrom"):
-        return None
+        return None, "needs headers from a Secret"
     if not url:
-        return None
-    meta = obj["metadata"]
+        return None, "has no URL"
     server = {
         "url": url,
         "transport": "sse" if spec.get("protocol") == "SSE" else "streamable-http",
@@ -334,7 +398,63 @@ def to_server(obj: dict) -> dict | None:
         icon = KNOWN_ICONS.get(meta["name"])
     if icon:
         server["icon"] = icon
-    return server
+    if authentication is not None:
+        server["auth"] = {"strategy": "oauth2", "authentication": authentication}
+    return server, ""
+
+
+def digest(authentication: dict) -> str:
+    return hashlib.sha256(json.dumps(authentication, sort_keys=True).encode()).hexdigest()[:16]
+
+
+class Stored:
+    """The plaintext settings, read at most once per pass and only when needed."""
+
+    def __init__(self) -> None:
+        self.servers: dict | None = None
+
+    def authentication(self, name: str) -> dict:
+        if self.servers is None:
+            status, settings = agent("GET", "/api/settings", plaintext=True)
+            self.servers = (settings.get("agent_settings", {}).get("mcp_config", {}) or {}) if status == 200 else {}
+        auth = (self.servers.get(name) or {}).get("auth") or {}
+        return auth.get("authentication") or {}
+
+
+def client_changed(name: str, have: dict, authentication: dict, stored: Stored) -> bool:
+    """True when the entry's OAuth client differs from the RemoteMCPServer's."""
+    shown = ((have.get("auth") or {}).get("authentication") or {})
+    # the client secret is redacted in an ordinary read
+    if any(shown.get(k) != authentication[k] for k in OAUTH_FIELDS if k != "client_secret"):
+        return True
+    if name in SENT:
+        return SENT[name] != digest(authentication)
+    # after a start: compare the stored client once
+    plain = stored.authentication(name)
+    if all(plain.get(k) == authentication[k] for k in OAUTH_FIELDS):
+        SENT[name] = digest(authentication)
+        return False
+    return True
+
+
+def add(name: str, server: dict) -> None:
+    body = dict(server)
+    auth = body.get("auth")
+    if auth is not None:
+        body["auth"] = {**auth, "authentication": {k: v for k, v in auth["authentication"].items() if v is not None}}
+    # an OAuth server works only after the user logged in to it
+    body["enabled"] = auth is None
+    if agent("POST", f"/api/settings/mcp/{name}", body)[0] not in (200, 201):
+        log(f"could not add {name}")
+        return
+    if auth is not None:
+        SENT[name] = digest(auth["authentication"])
+    log(f"added {name}")
+
+
+def remove(name: str) -> bool:
+    SENT.pop(name, None)
+    return agent("DELETE", f"/api/settings/mcp/{name}")[0] in (200, 204)
 
 
 def sync(namespace: str, current: dict) -> None:
@@ -342,34 +462,51 @@ def sync(namespace: str, current: dict) -> None:
     if objects is None:
         return
     # this agent's own UI entries already reach the servers it published
-    objects = [o for o in objects if o["metadata"]["name"] not in OWN]
+    objects = [o for o in objects if o["metadata"]["name"] not in OWN and selected(o)]
     own_names = {o["metadata"]["name"] for o in objects}
     wanted = {}
-    for obj in objects + visible_servers(namespace):
+    for obj in objects + [o for o in visible_servers(namespace) if selected(o)]:
         meta = obj["metadata"]
         key = meta["name"]
         if meta["namespace"] != namespace and key in own_names | set(wanted):
             key = f"{meta['namespace']}-{meta['name']}"
-        server = to_server(obj)
+        server, reason = to_server(obj)
         if server is None:
-            log(f"skipped {meta['namespace']}/{meta['name']}: needs headers from a Secret")
+            log(f"skipped {meta['namespace']}/{meta['name']}: {reason}")
         else:
             wanted[key] = server
+    stored = Stored()
     for name, server in wanted.items():
         have = current.get(name)
         if have is None:
-            if agent("POST", f"/api/settings/mcp/{name}", {**server, "enabled": True})[0] not in (200, 201):
-                log(f"could not add {name}")
+            add(name, server)
+            continue
+        if not str(have.get("description", "")).startswith(DESCRIPTION_PREFIX):
+            # a same-named entry the user made stays as it is
+            continue
+        auth = server.get("auth")
+        if ((have.get("auth") or {}).get("strategy") == "oauth2") != (auth is not None):
+            # switched between OAuth and no login: the entry starts over
+            if remove(name):
+                add(name, server)
+            continue
+        # the user's enabled switch and the stored login (auth.state) are never sent
+        patch = {k: v for k, v in server.items() if k != "auth" and have.get(k) != v}
+        if auth is not None and client_changed(name, have, auth["authentication"], stored):
+            # merged into the stored auth; only the settings-wide diff deletes on a null
+            patch["auth"] = auth
+            body = {"agent_settings_diff": {"mcp_config": {name: patch}}}
+            if agent("PATCH", "/api/settings", body)[0] not in (200, 201):
+                log(f"could not update {name}")
             else:
-                log(f"added {name}")
-        elif str(have.get("description", "")).startswith(DESCRIPTION_PREFIX):
-            if any(have.get(k) != v for k, v in server.items()):
-                if agent("PATCH", f"/api/settings/mcp/{name}", server)[0] not in (200, 201):
-                    log(f"could not update {name}")
-        # a same-named entry the user made stays as it is
+                SENT[name] = digest(auth["authentication"])
+                log(f"updated the OAuth client of {name}")
+        elif patch:
+            if agent("PATCH", f"/api/settings/mcp/{name}", patch)[0] not in (200, 201):
+                log(f"could not update {name}")
     for name, have in current.items():
         if name not in wanted and str(have.get("description", "")).startswith(DESCRIPTION_PREFIX):
-            if agent("DELETE", f"/api/settings/mcp/{name}")[0] in (200, 204):
+            if remove(name):
                 log(f"removed {name}")
 
 

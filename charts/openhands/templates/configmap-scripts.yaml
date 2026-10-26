@@ -14,6 +14,8 @@ data:
     {{- end }}
   seed-settings.py: |
 {{ .Files.Get "files/seed-settings.py" | indent 4 }}
+  seed-home.sh: |
+{{ .Files.Get "files/seed-home.sh" | indent 4 }}
   token-proxy.py: |
 {{ .Files.Get "files/token-proxy.py" | indent 4 }}
   mcp-sync.py: |

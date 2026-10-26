@@ -27,9 +27,11 @@ for c in charts/*/; do
     if echo "$out" | grep -q 'system:openshift:scc:'; then echo "FAIL $n: SCC binding"; fail=1; fi
     lab=$(echo "$out" | python3 ci/check_labels.py "$n") || { echo "FAIL $n: labels in $mode render:"; echo "$lab" | sed 's/^/  /'; fail=1; }
   done
-  # a public upstream source archive is provenance, not platform identity
+  # a public upstream source archive is provenance, not platform identity; the neutral
+  # MCP label domain mcp.openshift.eu is shared by every chart
   id=$(grep -rniE 'grncloud|grn\.cloud|hoolia|berry|146\.19\.|openshift\.eu|panther' "$c/templates" "$c/values.yaml" |
-    grep -vE '^[^:]+:[0-9]+:\s*(package: opencode-a2a @ https://github\.com/hoolia/opencode-a2a/archive/|version: [0-9.]+\+hoolia\.[0-9]+$)' ||
+    grep -vE '^[^:]+:[0-9]+:\s*(package: opencode-a2a @ https://github\.com/hoolia/opencode-a2a/archive/|version: [0-9.]+\+hoolia\.[0-9]+$)' |
+    sed -E 's/mcp\.openshift\.eu//gI' | grep -iE 'grncloud|grn\.cloud|hoolia|berry|146\.19\.|openshift\.eu|panther' ||
     true)
   [ -z "$id" ] || { echo "FAIL $n: platform identity: $id"; fail=1; }
   for f in description icon home; do

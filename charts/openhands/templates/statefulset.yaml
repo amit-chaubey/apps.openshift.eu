@@ -37,6 +37,30 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      # the home is on the volume; files the image ships there are copied once
+      initContainers:
+      - name: seed-home
+        image: {{ include "openhands.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - sh
+        - /opt/openhands-scripts/seed-home.sh
+        volumeMounts:
+        - name: scripts
+          mountPath: /opt/openhands-scripts
+          readOnly: true
+        - name: data
+          mountPath: /mnt/home
+          subPath: home
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 64Mi
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
       containers:
       - name: agent-canvas
         image: {{ include "openhands.image" . }}
@@ -134,16 +158,16 @@ spec:
         - name: scripts
           mountPath: /opt/openhands-scripts
           readOnly: true
+        # the whole home persists: CLI logins, Claude Code sessions, MCP OAuth tokens, caches
+        - name: data
+          mountPath: /home/openhands
+          subPath: home
         - name: data
           mountPath: /home/openhands/.openhands
           subPath: openhands
         - name: data
           mountPath: /home/openhands/workspace
           subPath: workspace
-        # Claude Code keeps its ACP sessions here; open conversations survive a restart
-        - name: data
-          mountPath: /home/openhands/.claude
-          subPath: claude
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         securityContext:
@@ -254,7 +278,8 @@ spec:
         securityContext:
           {{- include "openhands.containerSecurityContext" . | nindent 10 }}
       {{- end }}
-      {{- if or .Values.mcpDiscovery.enabled .Values.mcpPublish.enabled (and .Values.git.host .Values.git.uiSecretName) }}
+      {{- $mcp := include "openhands.mcp" . | fromJson }}
+      {{- if or $mcp.enabled .Values.mcpPublish.enabled (and .Values.git.host .Values.git.uiSecretName) }}
       - name: mcp-sync
         image: {{ .Values.tokenProxy.image }}
         imagePullPolicy: IfNotPresent
@@ -268,11 +293,17 @@ spec:
               name: {{ $name }}-session-api-key
               key: value
         - name: INTERVAL
-          value: {{ .Values.mcpDiscovery.interval | quote }}
+          value: {{ int $mcp.interval | quote }}
         - name: DISCOVERY
-          value: {{ .Values.mcpDiscovery.enabled | quote }}
+          value: {{ $mcp.enabled | quote }}
         - name: LABEL_SELECTOR
-          value: {{ .Values.mcpDiscovery.labelSelector | quote }}
+          value: {{ $mcp.labelSelector | quote }}
+        - name: LABEL_DOMAIN
+          value: {{ $mcp.labelDomain | quote }}
+        - name: BUNDLES
+          value: {{ join "," ($mcp.bundles | default list) | quote }}
+        - name: SERVERS
+          value: {{ join "," ($mcp.servers | default list) | quote }}
         - name: UPSTREAM
           value: {{ .Values.gateway.upstream | quote }}
         - name: TOKEN_PROXY_PORT
@@ -299,7 +330,7 @@ spec:
           mountPath: /app
           readOnly: true
         resources:
-          {{- toYaml .Values.mcpDiscovery.resources | nindent 10 }}
+          {{- toYaml $mcp.resources | nindent 10 }}
         securityContext:
           {{- include "openhands.containerSecurityContext" . | nindent 10 }}
       {{- end }}
