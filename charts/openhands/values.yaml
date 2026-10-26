@@ -21,7 +21,8 @@ build:
   # pull secret for toolsImage and the base image; empty: the builder's own
   pullSecret: ""
   # Python (uv), npm and pip tools; keep: true leaves the base image's own command
-  # in place (agent-canvas starts its automation server with its uvicorn)
+  # in place (agent-canvas starts its automation server with its uvicorn). venv: pip
+  # in /opt/venv/<command>; tarball: args "<url> <sha256>", the member <command>
   tools:
   - {kind: uv, command: mkdocs, args: "mkdocs==1.6.1 --with mkdocs-material", check: "mkdocs --version"}
   - {kind: uv, command: ansible, args: "ansible-core==2.21.5", check: "ansible --version"}
@@ -47,6 +48,9 @@ build:
   - {kind: npm, command: "renovate@44.176.1", check: "renovate --version"}
   - {kind: npm, command: "snyk@1.1308.2", check: "snyk --version"}
   - {kind: pip, command: "atlassian-python-api==5.0.5", check: "python3 -c 'import atlassian, importlib.metadata as m; print(m.version(\"atlassian-python-api\"))'"}
+  - {kind: tarball, command: gws, args: "https://github.com/googleworkspace/cli/releases/download/v0.22.5/google-workspace-cli-x86_64-unknown-linux-musl.tar.gz 4db473dde4b1ab872e4ff35d769b0d4af1f1a6441a605e79d5cf8ada9c87e920", check: "gws --version"}
+  - {kind: npm, command: "@pnp/cli-microsoft365@11.11.0", check: "m365 version"}
+  - {kind: venv, command: az, args: "azure-cli==2.91.0", check: "az version"}
   # ImageStreamTag: push to an ImageStream in the project.
   # DockerImage: push to output.name with output.pushSecret
   output:

@@ -68,7 +68,9 @@
                 "enum": [
                   "uv",
                   "npm",
-                  "pip"
+                  "pip",
+                  "venv",
+                  "tarball"
                 ]
               },
               "command": {

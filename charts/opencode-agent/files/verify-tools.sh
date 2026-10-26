@@ -44,6 +44,9 @@ check odf --help
 check operator-sdk version
 check kubectl-krew version
 check aws --version
+check gws --version
+check m365 version
+check az version
 check mkdocs --version
 check bw --version
 check node --version
@@ -87,6 +90,8 @@ check dig -v
 check python3 -c 'import yaml; print("pyyaml", yaml.__version__)'
 check opencode --version
 check /tools/kubernetes-mcp-server --version
+# Settings the checks wrote under HOME stay out of the image
+rm -rf /tmp/.azure /tmp/.config
 # Leave passwd as the build found it; the pod adds its own entry
 grep -v "^agent:x:$(id -u):" /etc/passwd > /tmp/passwd && cat /tmp/passwd > /etc/passwd
 echo "image size: $(du -shx / 2>/dev/null | cut -f1)"

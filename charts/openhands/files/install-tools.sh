@@ -36,7 +36,8 @@ uv=$(command -v uv)
 # requirements such as huggingface_hub[cli] are not file globs
 set -f
 
-# tools.txt: "uv <command> <keep> <args...>", "npm <package@version> -", "pip <requirement> -"
+# tools.txt: "uv <command> <keep> <args...>", "npm <package@version> -", "pip <requirement> -",
+# "venv <command> - <requirement>", "tarball <command> - <url> <sha256>"
 while read -r kind cmd keep args; do
   case "$kind" in
     uv)
@@ -54,6 +55,25 @@ while read -r kind cmd keep args; do
       python3 -m pip freeze > /tmp/constraints.txt
       python3 -m pip install --no-cache-dir -c /tmp/constraints.txt "$cmd"
       rm -f /tmp/constraints.txt
+      ;;
+    venv)
+      # pip in its own environment, for a CLI whose pinned prereleases uv refuses
+      /usr/bin/python3 -m venv "/opt/venv/$cmd"
+      # shellcheck disable=SC2086
+      "/opt/venv/$cmd/bin/pip" install --no-cache-dir $args
+      ln -sf "/opt/venv/$cmd/bin/$cmd" "/usr/local/bin/$cmd"
+      chmod -R a+rX "/opt/venv/$cmd"
+      ;;
+    tarball)
+      # a release archive checked against its digest; the member named <command> is the CLI
+      # shellcheck disable=SC2086
+      set -- $args
+      curl -fsSL --retry 5 --retry-delay 3 -o /tmp/tool.tgz "$1"
+      echo "$2  /tmp/tool.tgz" | sha256sum -c -
+      mkdir -p /tmp/tool
+      tar -xzf /tmp/tool.tgz -C /tmp/tool
+      install -m 0755 "$(find /tmp/tool -type f -name "$cmd" | head -1)" "/usr/local/bin/$cmd"
+      rm -rf /tmp/tool /tmp/tool.tgz
       ;;
   esac
 done < "$TOOLS"
