@@ -74,6 +74,8 @@ Every object a chart renders from its own templates carries these labels in
 - `ci/check.sh` fails when an object lacks one of the five labels.
 - The number of an `argocd.argoproj.io/sync-wave` annotation is a quoted literal in the
   template, not a value.
+- A label or annotation that changes how a chart or an agent behaves is documented in
+  `docs/conventions/`, in the same pull request that introduces it.
 - Labels that select pods are fixed for the life of a release. A selector, the labels of a
   pod template and the labels of a volume claim template never change between two versions
   of a chart: a selector cannot be changed on upgrade, and a changed pod template restarts
