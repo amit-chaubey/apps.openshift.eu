@@ -333,6 +333,10 @@ mailu:
       enabled: false
     postgresql:
       enabled: false
+    # mail survives deleting the Application, as the files do
+    persistence:
+      annotations:
+        argocd.argoproj.io/sync-options: Delete=false,Prune=false
 
 global:
   # DKIM signing key of the mail server, made by cert-manager; the platform then
@@ -534,11 +538,15 @@ nextcloud:
     labels: &volumeLabels
       app: nextcloud
       app.kubernetes.io/part-of: nextcloud
+    # Argo CD ignores helm.sh/resource-policy: keep; deleting the Application keeps the data
+    annotations: &keepVolume
+      argocd.argoproj.io/sync-options: Delete=false,Prune=false
     accessMode: ReadWriteOnce
     size: 10Gi
     nextcloudData:
       enabled: true
       labels: *volumeLabels
+      annotations: *keepVolume
       accessMode: ReadWriteOnce
       # the space for user files
       size: 25Gi
