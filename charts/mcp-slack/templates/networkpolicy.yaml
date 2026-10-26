@@ -1,0 +1,57 @@
+{{- if and .Values.enabled .Values.networkPolicy.enabled }}
+# Callers: the own project and the listed namespaces (an MCP gateway); the server holds the
+# workspace's bot token and asks callers for no credential
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mcp-slack.name" . }}
+  namespace: {{ include "mcp-slack.namespace" . }}
+  labels:
+    app: {{ include "mcp-slack.name" . }}
+    app.kubernetes.io/name: mcp-slack
+    app.kubernetes.io/component: server
+    {{- include "mcp-slack.commonLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mcp-slack.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  {{- if .Values.networkPolicy.egress.enabled }}
+  - Egress
+  {{- end }}
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: {{ .Values.port }}
+    from:
+    - podSelector: {}
+    {{- range .Values.networkPolicy.ingressNamespaces }}
+    - namespaceSelector:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+  {{- with .Values.networkPolicy.egress }}
+  {{- if .enabled }}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ .dnsNamespace }}
+    ports:
+    - protocol: UDP
+      port: {{ .dnsPort }}
+    - protocol: TCP
+      port: {{ .dnsPort }}
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        {{- range concat .exceptCidrs .extraExceptCidrs }}
+        - {{ . }}
+        {{- end }}
+    ports:
+    - protocol: TCP
+      port: 443
+  {{- end }}
+  {{- end }}
+{{- end }}

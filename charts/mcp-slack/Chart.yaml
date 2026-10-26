@@ -1,0 +1,28 @@
+apiVersion: v2
+name: mcp-slack
+description: Slack MCP server (korotovsky slack-mcp-server) for the agents of a project; channels, threads and users of one Slack workspace as the workspace's bot, read-only by default
+type: application
+version: 0.1.0
+appVersion: "1.3.0"
+home: https://apps.openshift.eu
+icon: https://cdn.simpleicons.org/slack
+keywords:
+- ai
+- mcp
+- mcp-server
+- slack
+- collaboration
+- chat
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+- https://github.com/korotovsky/slack-mcp-server
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Slack MCP server
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/vendor: korotovsky
+  mcp.openshift.eu/server: slack
+  mcp.openshift.eu/bundle: slack
+  mcp.openshift.eu/category: collaboration

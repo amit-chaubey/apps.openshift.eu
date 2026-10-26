@@ -1,0 +1,108 @@
+# Team of the tenant the server serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the server belongs to; required with team
+tenant: ""
+
+# switch of this server when a bundle chart includes it
+enabled: true
+
+# name of the server's objects and of the server on an MCP gateway (tools <name>_*).
+# Empty: mcp.server
+nameOverride: ""
+
+# korotovsky slack-mcp-server image
+image:
+  repository: ghcr.io/korotovsky/slack-mcp-server
+  tag: v1.3.0@sha256:35cbc988d9282409e27b755957e48a6096fcf037dee72118e97177fe38b1a1b3
+  pullPolicy: IfNotPresent
+
+slack:
+  # Existing Secret with the workspace's Bot User OAuth Token (xoxb-...) under tokenKey.
+  # Empty: <release>-<secretSuffix>, written from secrets below
+  existingSecret: ""
+  tokenKey: token
+  # bot: a Bot User OAuth Token (xoxb-...), the server acts as the app's bot. user: a User
+  # OAuth Token (xoxp-...), the server acts as that person and can also search messages
+  tokenType: bot
+  # name suffix of the chart's own token Secret
+  secretSuffix: slack-bot-token
+  # tool conversations_add_message (bot scope chat:write). false: no tool posts to Slack.
+  # true: every channel the bot is in
+  addMessage: false
+  # with addMessage: only these channel IDs (C...); empty: every channel the bot is in
+  addMessageChannels: []
+  # tools reactions_add and reactions_remove (bot scope reactions:write)
+  reactions: false
+  # comma-separated tool names to register instead of the defaults; empty: the tools that
+  # only read (channels_list, channels_me, conversations_history, conversations_replies,
+  # users_search, usergroups_list; with a user token also conversations_search_messages and
+  # conversations_unreads) and those switched on above
+  enabledTools: ""
+  # users and channels cache lifetime
+  cacheTtl: 1h
+  # debug, info, warn or error
+  logLevel: info
+
+secrets:
+  # kubernetes: the token Secret from botToken. externalSecret: from a secret store
+  type: kubernetes
+  # Bot User OAuth Token of the Slack app. Empty: no Secret, and the server does not start
+  # until one exists
+  botToken: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # vault item with the token as password. Empty: <release>-<secretSuffix>
+    item: ""
+    # property of the item that holds the token
+    property: login.password
+
+# container port of the server; not 80, 443, 8080 or 8443 (open to every project)
+port: 13080
+
+mcp:
+  # Service port appProtocol an MCP gateway discovers; empty leaves it unset
+  appProtocol: agentgateway.dev/mcp
+  # prefix of the catalog labels
+  labelDomain: mcp.openshift.eu
+  # <labelDomain>/server
+  server: slack
+  # <labelDomain>/bundle
+  bundle: slack
+  # <labelDomain>/category
+  category: collaboration
+
+service:
+  # extra labels on the Service, for example the gateway's exposure label
+  labels: {}
+  annotations: {}
+
+# requests and limits of the server
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+networkPolicy:
+  enabled: true
+  # Namespaces (label selectors) that may call the server besides its own, e.g. the gateway's
+  ingressNamespaces: []
+  egress:
+    # The server reaches the public internet only (slack.com)
+    enabled: true
+    exceptCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - 169.254.0.0/16
+    - 127.0.0.0/8
+    # Your own public ranges
+    extraExceptCidrs: []
+    dnsNamespace: openshift-dns
+    dnsPort: 5353

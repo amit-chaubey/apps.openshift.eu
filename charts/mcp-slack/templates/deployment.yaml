@@ -1,0 +1,91 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-slack.name" . }}
+  namespace: {{ include "mcp-slack.namespace" . }}
+  labels:
+    app: {{ include "mcp-slack.name" . }}
+    app.kubernetes.io/name: mcp-slack
+    app.kubernetes.io/component: server
+    {{- include "mcp-slack.commonLabels" . | nindent 4 }}
+    {{- include "mcp-slack.catalogLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mcp-slack.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-slack.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+    spec:
+      # the server needs no Kubernetes API access
+      automountServiceAccountToken: false
+      containers:
+      - name: server
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+        - --transport
+        - http
+        env:
+        - name: HOME
+          value: /tmp
+        # users and channels cache
+        - name: XDG_CACHE_HOME
+          value: /tmp/cache
+        - name: SLACK_MCP_HOST
+          value: 0.0.0.0
+        - name: SLACK_MCP_PORT
+          value: {{ .Values.port | quote }}
+        - name: SLACK_MCP_CACHE_TTL
+          value: {{ .Values.slack.cacheTtl | quote }}
+        - name: SLACK_MCP_LOG_LEVEL
+          value: {{ .Values.slack.logLevel | quote }}
+        {{- with include "mcp-slack.addMessage" . }}
+        - name: SLACK_MCP_ADD_MESSAGE_TOOL
+          value: {{ . | quote }}
+        {{- end }}
+        {{- if .Values.slack.reactions }}
+        - name: SLACK_MCP_REACTION_TOOL
+          value: "true"
+        {{- end }}
+        - name: SLACK_MCP_ENABLED_TOOLS
+          value: {{ include "mcp-slack.enabledTools" . | quote }}
+        - name: {{ if eq .Values.slack.tokenType "user" }}SLACK_MCP_XOXP_TOKEN{{ else }}SLACK_MCP_XOXB_TOKEN{{ end }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "mcp-slack.tokenSecret" . }}
+              key: {{ .Values.slack.tokenKey }}
+        ports:
+        - name: mcp
+          containerPort: {{ .Values.port }}
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: mcp
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: mcp
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+{{- end }}
