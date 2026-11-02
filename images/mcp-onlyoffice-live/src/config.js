@@ -32,6 +32,9 @@ function load(env = process.env) {
     identityCacheSeconds: int('IDENTITY_CACHE_SECONDS', 60, env),
     maxTextLength: int('MAX_TEXT_LENGTH', 100000, env),
     screenshots: (env.SCREENSHOTS || 'true') === 'true',
+    scripts: (env.SCRIPTS || 'true') === 'true',
+    scriptTimeoutSeconds: int('SCRIPT_TIMEOUT_SECONDS', 60, env),
+    closeSettleMs: int('CLOSE_SETTLE_MS', 2000, env),
   };
 }
 

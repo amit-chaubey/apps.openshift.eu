@@ -25,11 +25,24 @@ agent's name, its cursor and every edit as it happens.
 | `read` | Current content, including edits other people made a moment ago |
 | `insert` | Text at the end, start, cursor, or after or before a paragraph; a cell; a new slide. `typing: true` writes word by word |
 | `replace` | First or every match; a tracked change while track changes is on |
-| `comment` | A comment under the caller's name on a text or a cell |
+| `comment` | A comment under the caller's name on a text, a cell or a slide |
+| `format_text` | Bold, italic, underline, strikeout, font, size, colour, highlight, superscript, a named style such as Heading 1, alignment, spacing, indents and shading, on found text or a whole paragraph; text documents and presentations |
+| `insert_table` | A filled table with a header row and borders; in a spreadsheet a bordered block of cells |
+| `edit_table` | Cell text and format, rows and columns added or removed, merged cells, widths, heights and borders of a table in a text document |
+| `insert_list` | A bulleted or numbered list; on a slide as a text box |
+| `insert_image` | An image from an https URL or a data URI |
+| `insert_chart` | A chart from given series, or from a cell range in a spreadsheet |
+| `write_cells` | Values and formulas into a spreadsheet |
+| `format_cells` | Font, colours, alignment, wrap, number format, borders, merge, column width and row height of a range |
+| `comments` | Every comment with author, time, quoted text, resolved state and replies |
+| `comment_reply` | A reply under the agent's name |
+| `comment_resolve` | Marks a comment resolved, or opens it again |
+| `comment_delete` | Deletes a comment and its replies |
+| `run` | A script of the ONLYOFFICE Office API in the agent's editor, for everything else: headers and footers, footnotes, content controls, shapes, conditional formatting, sheets. Value `scripts: false` removes this tool |
 | `track_changes` | Switches track changes on or off |
 | `save` | Sends pending edits to the Document Server at once |
 | `view` | A screenshot of the caller's editor window |
-| `close` | Leaves the session |
+| `close` | Sends the pending edits and leaves the session |
 | `sessions` | The caller's open sessions |
 | `file_status` | Whether the file is open in an editor or locked (Nextcloud files_lock), before any direct write |
 

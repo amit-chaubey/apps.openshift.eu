@@ -1,6 +1,6 @@
 {
   "name": "mcp-onlyoffice-live",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "MCP server that lets an agent co-edit ONLYOFFICE documents in Nextcloud live, as itself, next to people",
   "license": "Apache-2.0",
   "private": true,

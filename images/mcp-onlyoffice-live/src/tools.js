@@ -2,6 +2,7 @@
 
 const { z } = require('zod');
 const { forEditor, typingChunks } = require('./commands');
+const { registerRich } = require('./rich-tools');
 
 const pathArg = z.string().min(1).describe('Path of the file in your own Nextcloud files, for example Documents/Plan.docx');
 
@@ -24,6 +25,8 @@ function register(server, { sessions, nextcloud, config, credential }) {
     if (t.length > config.maxTextLength) throw Object.assign(new Error(`text longer than ${config.maxTextLength} characters`), { status: 413 });
     return t;
   };
+
+  registerRich(tool, { sessions, config, credential, text, limitText });
 
   tool('open', {
     title: 'Open a document live',
@@ -124,7 +127,8 @@ function register(server, { sessions, nextcloud, config, credential }) {
 
   tool('comment', {
     title: 'Comment live',
-    description: 'Adds a comment, under your name, to the first occurrence of a text (text document) or to a cell (spreadsheet, search is the cell address).',
+    description: 'Adds a comment, under your name, to the first occurrence of a text (text document), to a cell (spreadsheet, search is the cell address) '
+      + 'or to the current slide (presentation, search is what the comment is about).',
     inputSchema: {
       path: pathArg,
       search: z.string().min(1).describe('Text to comment on, or a cell address'),
@@ -140,9 +144,11 @@ function register(server, { sessions, nextcloud, config, credential }) {
       const id = await sessions.method(s, 'AddComment', [{ Text: comment, UserName: s.displayName, QuoteText: search, Time: String(Date.now()) }]);
       return text({ added: !!id, commentId: id || null, matches: found });
     }
-    const set = forEditor(s.editor);
-    if (!set.comment) throw Object.assign(new Error('comments are supported in text documents and spreadsheets'), { status: 400 });
-    return text(await sessions.command(s, set.comment, { search, comment, author: s.displayName }));
+    if (s.editor === 'slide') {
+      const id = await sessions.method(s, 'AddComment', [{ Text: comment, UserName: s.displayName, QuoteText: search, Time: String(Date.now()) }]);
+      return text({ added: !!id, commentId: id || null });
+    }
+    return text(await sessions.command(s, forEditor(s.editor).comment, { search, comment, author: s.displayName }));
   });
 
   tool('track_changes', {
@@ -184,7 +190,7 @@ function register(server, { sessions, nextcloud, config, credential }) {
 
   tool('close', {
     title: 'Leave the document',
-    description: 'Leaves the live session of a document; your edits stay in it. Nextcloud gets the file when the last participant leaves.',
+    description: 'Sends your pending edits and leaves the live session of a document. Nextcloud gets the file when the last participant leaves.',
     inputSchema: { path: pathArg },
   }, async ({ path }) => text(await sessions.close(credential, path)));
 

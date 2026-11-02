@@ -70,11 +70,12 @@ class Sessions {
       const raw = create ? await this.nextcloud.createUrl(authorization, path) : await this.nextcloud.openUrl(authorization, path);
       const url = browserUrl(raw, this.config.publicUrl);
       const browser = await this.getBrowser();
-      const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US' });
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', serviceWorkers: 'block' });
       try {
         const page = await context.newPage();
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: this.config.openTimeoutSeconds * 1000 });
         const bridge = await waitForBridge(page, this.config.openTimeoutSeconds * 1000);
+        await confine(context, page, bridge);
         let editor = '';
         try { editor = await bridge.evaluate(() => window.agentBridge.editorType()); } catch (e) { editor = ''; }
         if (!['word', 'cell', 'slide'].includes(editor)) editor = EDITOR_BY_EXT[extension(path)] || 'word';
@@ -100,30 +101,66 @@ class Sessions {
     return s;
   }
 
+  // an editor that does not answer holds the session's queue: the session is closed
+  async answer(s, call) {
+    const ms = this.config.scriptTimeoutSeconds * 1000;
+    let timer;
+    const late = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new SessionError(`the editor did not answer within ${ms / 1000} seconds; the session is closed, open the file again`, 504)), ms);
+    });
+    try {
+      const result = await Promise.race([call(), late]);
+      s.lastUsed = this.now();
+      return result;
+    } catch (err) {
+      if (err.status === 504) await this.drop(s);
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async command(s, source, scope = {}, recalculate = true) {
-    const result = await s.bridge.evaluate(([src, sc, rc]) => window.agentBridge.command(src, sc, rc), [source, scope, recalculate]);
-    s.lastUsed = this.now();
+    const result = await this.answer(s, () => s.bridge.evaluate(([src, sc, rc]) => window.agentBridge.command(src, sc, rc), [source, scope, recalculate]));
     if (result && typeof result === 'object' && result.onlyoffice_id_error_message) throw new SessionError(result.onlyoffice_id_error_message, 422);
     return result;
   }
 
-  async method(s, name, args) {
-    const result = await s.bridge.evaluate(([n, a]) => window.agentBridge.method(n, a), [name, args]);
-    s.lastUsed = this.now();
-    return result;
+  method(s, name, args) {
+    return this.answer(s, () => s.bridge.evaluate(([n, a]) => window.agentBridge.method(n, a), [name, args]));
   }
 
   // the editor frame's own API, for what no plugin method covers (save)
-  async editorEval(s, fn) {
+  async editorEval(s, fn, arg) {
     const frame = s.page.frames().find(f => f.url().includes('/web-apps/apps/') && f.url().includes('/main/index'));
     if (!frame) throw new SessionError('editor frame not found', 500);
-    return frame.evaluate(fn);
+    return frame.evaluate(fn, arg);
   }
 
   async close(authorization, rawPath) {
     const s = await this.get(authorization, rawPath);
+    await this.flush(s);
     await this.drop(s);
     return { closed: s.path };
+  }
+
+  // Edits still in the browser die with it: send them and wait until the editor holds none
+  async flush(s) {
+    const unsent = () => this.editorEval(s, () => {
+      const api = window.Asc && window.Asc.editor;
+      if (!api) return false;
+      if (typeof api.asc_Save === 'function') api.asc_Save();
+      return typeof api.isDocumentModified === 'function' ? api.isDocumentModified() : null;
+    });
+    try {
+      for (let i = 0; i < 15; i++) {
+        await s.page.waitForTimeout(1000);
+        if ((await unsent()) === false) break;
+      }
+      await s.page.waitForTimeout(this.config.closeSettleMs);
+    } catch (err) {
+      // a page that is gone has nothing left to send
+    }
   }
 
   async drop(s) {
@@ -155,6 +192,23 @@ function browserUrl(url, publicUrl) {
   const p = new URL(publicUrl);
   const base = p.pathname.replace(/\/+$/, '');
   return p.origin + base + u.pathname + u.search + u.hash;
+}
+
+// The browser talks to the origins of the open editor only: a document script runs with the
+// network of this pod otherwise
+async function confine(context, page, bridge) {
+  const allowed = new Set(['data:', 'blob:', 'about:']);
+  const origin = u => { try { return new URL(u).origin; } catch (e) { return ''; } };
+  allowed.add(origin(page.url()));
+  allowed.add(origin(bridge.url()));
+  const permitted = u => {
+    const url = new URL(u);
+    if (allowed.has(url.protocol)) return true;
+    const httpOrigin = url.origin.replace(/^ws/, 'http');
+    return allowed.has(httpOrigin);
+  };
+  await context.route(u => !permitted(u.href), route => route.abort('blockedbyclient'));
+  await context.routeWebSocket(u => !permitted(u.href), ws => ws.close());
 }
 
 async function waitForBridge(page, timeout) {

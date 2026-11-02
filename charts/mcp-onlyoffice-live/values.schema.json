@@ -122,6 +122,9 @@
       "type": "integer",
       "minimum": 0
     },
+    "scripts": {
+      "type": "boolean"
+    },
     "screenshots": {
       "type": "boolean"
     },

@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const { normalizePath, Nextcloud, tag } = require('../src/nextcloud');
 const { typingChunks } = require('../src/commands');
 const { Sessions, browserUrl } = require('../src/sessions');
+const rich = require('../src/rich');
 const { load } = require('../src/config');
 const { createApp, credentialOf } = require('../src/server');
 
@@ -102,6 +103,7 @@ function fakeBrowser(log) {
     isConnected: () => true,
     close: async () => log.push('browser-close'),
     newContext: async () => ({
+      route: async () => {}, routeWebSocket: async () => {},
       close: async () => log.push('context-close'),
       newPage: async () => {
         const bridge = { url: () => 'https://office/sdkjs-plugins/agent-bridge/index.html', evaluate: async (fn) => {
@@ -111,7 +113,7 @@ function fakeBrowser(log) {
           return { ok: true };
         } };
         return {
-          goto: async () => {}, frames: () => [bridge], waitForTimeout: async () => {}, isClosed: () => false,
+          goto: async () => {}, frames: () => [bridge], url: () => 'https://cloud/x', waitForTimeout: async () => {}, isClosed: () => false,
         };
       },
     }),
@@ -163,7 +165,9 @@ test('HTTP: health, method check and tools/list', async () => {
     });
     const body = await res.json();
     const names = body.result.tools.map(x => x.name).sort();
-    assert.deepStrictEqual(names, ['close', 'comment', 'create', 'file_status', 'insert', 'open', 'read', 'replace', 'save', 'sessions', 'track_changes', 'view']);
+    assert.deepStrictEqual(names, ['close', 'comment', 'comment_delete', 'comment_reply', 'comment_resolve', 'comments', 'create', 'edit_table',
+    'file_status', 'format_cells', 'format_text', 'insert', 'insert_chart', 'insert_image', 'insert_list',
+    'insert_table', 'open', 'read', 'replace', 'run', 'save', 'sessions', 'track_changes', 'view', 'write_cells']);
   } finally { app.close(); }
 });
 
@@ -182,4 +186,24 @@ test('every editor snippet is a function expression that parses', () => {
     }
   }
   assert.throws(() => c.forEditor('pdf'), /unsupported/);
+});
+
+test('every rich snippet and a script source parse', () => {
+  for (const type of ['word', 'cell', 'slide']) {
+    for (const [name, src] of Object.entries(rich[type])) {
+      assert.doesNotThrow(() => new Function(`return (${src});`), `${type}.${name}`);
+    }
+  }
+  assert.doesNotThrow(() => new Function(`return (${rich.scriptSource('return 1;')});`));
+  assert.throws(() => rich.richFor('slide', 'write'), e => e.status === 400);
+});
+
+test('commentView gives author, resolved state and replies', () => {
+  assert.deepStrictEqual(rich.commentView({ Id: '7', Data: {
+    UserName: 'A', Text: 'x', QuoteText: 'q', Solved: true, Time: '0',
+    Replies: [{ UserName: 'B', Text: 'y' }],
+  } }), {
+    id: '7', author: 'A', text: 'x', time: new Date(0).toISOString(), quote: 'q', resolved: true,
+    replies: [{ author: 'B', text: 'y', time: null }],
+  });
 });

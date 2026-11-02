@@ -22,6 +22,11 @@ How it works:
   that Nextcloud's `user_oidc` accepts, or Basic with the caller's app password. Nextcloud
   decides who the caller is and which files it may open.
 
+### Network of the browser
+
+The browser of a session reaches only the origins of its editor page. A script of `run`
+runs in the editor, and the editor refuses its network requests.
+
 ### Tools
 
 An MCP gateway prefixes each tool with the server name, `office-live_<tool>`.
@@ -33,11 +38,24 @@ An MCP gateway prefixes each tool with the server name, `office-live_<tool>`.
 | `read` | Current content, including what other people typed a moment ago: paragraphs, the used cells of the active sheet, the texts of every slide |
 | `insert` | Text at the end, the start, the agent's cursor, or after or before a paragraph; into a cell; as a new slide. `typing: true` writes word by word, so people watch it being typed |
 | `replace` | The first or every match; a tracked change while track changes is on |
-| `comment` | A comment under the agent's name on a text or a cell |
+| `comment` | A comment under the agent's name on a text, a cell or a slide |
+| `format_text` | Bold, italic, underline, strikeout, font, size, colour, highlight, superscript, a named style such as Heading 1, alignment, spacing, indents and shading, on found text or a whole paragraph; text documents and presentations |
+| `insert_table` | A filled table with a header row and borders; in a spreadsheet a bordered block of cells |
+| `edit_table` | Cell text and format, rows and columns added or removed, merged cells, widths, heights and borders of a table in a text document |
+| `insert_list` | A bulleted or numbered list; on a slide as a text box |
+| `insert_image` | An image from an https URL or a data URI |
+| `insert_chart` | A chart from given series, or from a cell range in a spreadsheet |
+| `write_cells` | Values and formulas into a spreadsheet |
+| `format_cells` | Font, colours, alignment, wrap, number format, borders, merge, column width and row height of a range |
+| `comments` | Every comment with author, time, quoted text, resolved state and replies |
+| `comment_reply` | A reply under the agent's name |
+| `comment_resolve` | Marks a comment resolved, or opens it again |
+| `comment_delete` | Deletes a comment and its replies |
+| `run` | A script of the ONLYOFFICE Office API in the agent's editor, for everything else: headers and footers, footnotes, content controls, shapes, conditional formatting, sheets. Value `scripts: false` removes this tool |
 | `track_changes` | Switches track changes on or off for the document |
 | `save` | Sends the agent's pending edits to the Document Server at once |
 | `view` | A screenshot of the agent's editor window, with the other participants' cursors |
-| `close` | Leaves the session; Nextcloud gets the file when the last participant leaves |
+| `close` | Sends the pending edits and leaves the session; Nextcloud gets the file when the last participant leaves |
 | `sessions` | The caller's open documents |
 | `file_status` | Whether a file is open in an editor or locked, to call before writing it any other way |
 

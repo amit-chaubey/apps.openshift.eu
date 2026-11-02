@@ -5,12 +5,22 @@
 
 const word = {
   read: `function () {
-    var d = Api.GetDocument(), out = [], n = d.GetElementsCount();
+    var d = Api.GetDocument(), out = [], n = d.GetElementsCount(), tables = 0;
     for (var i = 0; i < n; i++) {
       var e = d.GetElement(i), t = e.GetClassType ? e.GetClassType() : '';
       var text = '';
       try { text = e.GetText ? e.GetText() : (e.GetRange ? e.GetRange().GetText() : ''); } catch (x) { text = ''; }
-      out.push({ index: i, type: t, text: text });
+      var item = { index: i, type: t, text: text };
+      if (t === 'table') {
+        item.table = tables++; item.rows = [];
+        for (var r = 0; r < e.GetRowsCount(); r++) {
+          var row = e.GetRow(r), cells = [];
+          for (var c = 0; c < row.GetCellsCount(); c++) cells.push(row.GetCell(c).GetContent().GetElement(0).GetText().replace(/\\s+$/, ''));
+          item.rows.push(cells);
+        }
+        delete item.text;
+      }
+      out.push(item);
     }
     return { elements: out, trackChanges: d.IsTrackRevisions ? d.IsTrackRevisions() : null };
   }`,

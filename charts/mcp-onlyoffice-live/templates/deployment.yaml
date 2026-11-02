@@ -72,6 +72,8 @@ spec:
           value: {{ .Values.typingDelayMs | quote }}
         - name: SCREENSHOTS
           value: {{ .Values.screenshots | quote }}
+        - name: SCRIPTS
+          value: {{ .Values.scripts | quote }}
         {{- if eq .Values.credentials.mode "shared" }}
         - name: NEXTCLOUD_USER
           valueFrom:

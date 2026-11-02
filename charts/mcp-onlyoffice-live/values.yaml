@@ -52,6 +52,8 @@ sessions:
 typingDelayMs: 120
 # offer the view tool, a screenshot of the agent's editor window
 screenshots: true
+# offer the run tool, a script of the ONLYOFFICE Office API in the agent's editor
+scripts: true
 
 # container port of the server; not 80, 443, 8080 or 8443 (open to every project)
 port: 13081
