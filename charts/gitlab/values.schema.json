@@ -82,6 +82,11 @@
           "type": "string",
           "title": "Cache password",
           "description": "Leave empty to generate one"
+        },
+        "apiExporterToken": {
+          "type": "string",
+          "title": "API exporter token",
+          "description": "GitLab access token with role Reporter and scope read_api; needed when the API exporter is on"
         }
       }
     },
@@ -99,6 +104,37 @@
           "additionalProperties": {
             "type": "string"
           }
+        }
+      }
+    },
+    "apiExporter": {
+      "type": "object",
+      "title": "GitLab API exporter",
+      "description": "Merges with author and merger, branch protection, pipelines and schedules as Prometheus metrics",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Export GitLab API metrics"
+        },
+        "instance": {
+          "type": "string",
+          "title": "Instance label",
+          "description": "Leave empty to use the hostname"
+        },
+        "mergeDays": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365,
+          "title": "Days of merges"
+        },
+        "intervalSeconds": {
+          "type": "integer",
+          "minimum": 60,
+          "title": "Collection interval in seconds"
+        },
+        "podMonitor": {
+          "type": "boolean",
+          "title": "Create a PodMonitor"
         }
       }
     }

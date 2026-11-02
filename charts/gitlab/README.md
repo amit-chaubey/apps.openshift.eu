@@ -35,6 +35,8 @@ about ten minutes. Log in as `root` with:
 | `gitlab.extraValues` | empty | Values merged over the ones given to the GitLab chart. |
 | `mcp.annotations` | MCP path and target name | Annotations on the GitLab Service for MCP gateways that discover MCP servers (GitLab serves MCP at `/api/v4/mcp`). |
 | `mcp.labels` | empty | Labels on the GitLab Service, for example the one a tenant-wide MCP endpoint selects. |
+| `apiExporter.enabled` | `false` | Prometheus metrics from the GitLab API: every merge of the last `apiExporter.mergeDays` days with author and merger (`gitlab_merges`, `self_merged="false"` when someone else merged), branch protection, default branch pipelines, pipeline schedules. |
+| `secrets.apiExporterToken` | empty | Access token of the exporter: role Reporter, scope `read_api`. With `secrets.type=externalSecret` it is read from the vault item `secrets.externalSecret.apiExporterItem`. |
 
 The default requests add up to about 0.9 CPU and 4.7Gi of memory; the database
 migration at install and upgrade adds 0.25 CPU and 200Mi for a few minutes.
@@ -62,3 +64,8 @@ secrets are generated in the project by the operator and kept on every upgrade.
 - With `secrets.type=externalSecret`, create the items named in
   `secrets.externalSecret.items` in your vault collection with the value in the password
   field, and set `secrets.externalSecret.storeName` to your store.
+- The API exporter needs an access token that GitLab creates after the first start: a
+  group access token with role Reporter and scope `read_api` covers the projects of that
+  group. Put it in `secrets.apiExporterToken` or the vault item, then set
+  `apiExporter.enabled=true`. The PodMonitor needs the platform's user workload
+  monitoring.

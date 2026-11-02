@@ -95,6 +95,25 @@ route:
     cert-manager.io/issuer-kind: ClusterIssuer
     cert-manager.io/issuer-name: letsencrypt
 
+apiExporter:
+  # merges with author and merger, branch protection, pipelines and schedules from the
+  # GitLab API, as Prometheus metrics; needs an access token, see secrets.apiExporterToken
+  enabled: false
+  image: python:3.13-bookworm@sha256:073ffebb96ae4d0ed73ccad59f08c47bd84af8a79f5258130f8458ac50ad9ff4
+  # label gitlab_instance of every metric; empty: route.hostname
+  instance: ""
+  # merges of this many days are exported
+  mergeDays: 30
+  intervalSeconds: 300
+  # a PodMonitor for the Prometheus of the platform's user workload monitoring
+  podMonitor: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
 secrets:
   # kubernetes: Secret from the values below. externalSecret: from a secret store
   type: kubernetes
@@ -102,6 +121,9 @@ secrets:
   rootPassword: ""
   # password of the cache; empty: generated once and kept
   valkeyPassword: ""
+  # access token for apiExporter: a group or personal access token with role Reporter
+  # and scope read_api; GitLab creates it, so it cannot be generated here
+  apiExporterToken: ""
   externalSecret:
     storeKind: ClusterSecretStore
     storeName: ""
@@ -110,3 +132,5 @@ secrets:
     items:
       root-password: gitlab-root
       valkey-password: gitlab-valkey
+    # vault item of the apiExporter token, read only when apiExporter.enabled
+    apiExporterItem: gitlab-api-exporter
