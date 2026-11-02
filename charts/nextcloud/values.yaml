@@ -358,7 +358,7 @@ mailu:
     front:
       # a chart upgrade reloads mail-prefix.conf; equals the chart version (templates/validate.yaml)
       podAnnotations:
-        chart-version: 0.16.4
+        chart-version: 0.16.5
       extraVolumes:
       - name: dovecot-override
         configMap:
@@ -562,7 +562,7 @@ nextcloud:
   # a chart upgrade restarts Nextcloud so its start-up setup runs again; equals the chart
   # version (templates/validate.yaml refuses a render where it does not)
   podAnnotations:
-    chart-version: 0.16.4
+    chart-version: 0.16.5
   nextcloud:
     host: nextcloud.example.org
     existingSecret:

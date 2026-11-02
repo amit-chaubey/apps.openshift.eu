@@ -2,8 +2,8 @@ apiVersion: v2
 name: mcp-onlyoffice-live
 description: Live office editing MCP server for the agents of a project; an agent opens a Nextcloud document in ONLYOFFICE as itself and reads, writes, replaces, comments and tracks changes while people watch its cursor and edits in the same co-editing session
 type: application
-version: 0.1.0
-appVersion: "0.1.2"
+version: 0.2.0
+appVersion: "0.2.0"
 home: https://apps.openshift.eu
 icon: https://avatars.githubusercontent.com/ONLYOFFICE
 keywords:

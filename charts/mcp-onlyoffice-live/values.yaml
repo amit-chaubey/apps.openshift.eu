@@ -14,7 +14,7 @@ nameOverride: ""
 # server image, built from images/mcp-onlyoffice-live of the chart repository
 image:
   repository: ghcr.io/hoolia/mcp-onlyoffice-live
-  tag: 0.1.2@sha256:825024a9aa47ba43f6d8cab302c2e430c499b6ac5486c0696df1985672202080
+  tag: 0.2.0@sha256:8d6adb1694f88b71529a69927114d60393e1288c4ff45679345e24536ec25fb6
   pullPolicy: IfNotPresent
 
 nextcloud:

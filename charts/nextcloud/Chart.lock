@@ -13,6 +13,6 @@ dependencies:
   version: 0.3.1
 - name: mcp-onlyoffice-live
   repository: file://../mcp-onlyoffice-live
-  version: 0.1.0
-digest: sha256:d31810782e6d7aa68f57c4768115cf86171fa97b0649ae79de9a6da88a8c3028
-generated: "2026-11-01T20:40:09.513055146Z"
+  version: 0.2.0
+digest: sha256:60396cb2b5a2c3ff170ae7301698f67ab47135a04c05dbf5b95e045bf95a359e
+generated: "2026-11-02T19:33:25.237418187Z"
