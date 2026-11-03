@@ -32,7 +32,12 @@ about ten minutes. Log in as `root` with:
 | `secrets.type` | `kubernetes` | `externalSecret` reads the passwords from a secret store. |
 | `secrets.rootPassword` | empty | Password of `root` at the first start. Empty: generated. |
 | `secrets.valkeyPassword` | empty | Password of the cache. Empty: generated once and kept. |
-| `gitlab.extraValues` | empty | Values merged over the ones given to the GitLab chart. |
+| `gitlab.extraValues` | empty | Values merged over the ones given to the GitLab chart. An empty or false value does not replace a value of this chart. |
+| `objectStorage.create` | `true` | `false`: no bucket claim; the buckets exist and their connection is given in `gitlab.extraValues`. |
+| `objectStorage.buckets` | empty | Bucket per object type, for example `artifacts: my-artifacts`. Empty: every type in `objectStorage.bucket`. |
+| `postgres.spec` | empty | Merged over the database `Cluster` spec, for example `walStorage` or `plugins`. |
+| `route.enabled` | `true` | `false`: no Route, for an ingress given in `gitlab.extraValues`. |
+| `dataAnnotations` | empty | Annotations on `GitLab`, the database `Cluster`, the cache volume and the bucket claim. |
 | `mcp.annotations` | MCP path and target name | Annotations on the GitLab Service for MCP gateways that discover MCP servers (GitLab serves MCP at `/api/v4/mcp`). |
 | `mcp.labels` | empty | Labels on the GitLab Service, for example the one a tenant-wide MCP endpoint selects. |
 | `apiExporter.enabled` | `false` | Prometheus metrics from the GitLab API: every merge of the last `apiExporter.mergeDays` days with author and merger (`gitlab_merges`, `self_merged="false"` when someone else merged), branch protection, default branch pipelines, pipeline schedules. |
@@ -48,6 +53,12 @@ passwords. The root password is applied at the first start only. The other inter
 secrets are generated in the project by the operator and kept on every upgrade.
 
 ## Delivery instructions
+
+- To take over a GitLab that runs already, install with the same object names (release
+  `gitlab`), `objectStorage.create=false` with the existing buckets, `postgres.spec` and
+  `gitlab.extraValues` equal to the running configuration. Compare every rendered
+  object with the live one before the first sync: an applied object loses each field the
+  render leaves out.
 
 - The platform must run the GitLab operator so that it watches every project, with a
   version that supports `gitlab.chartVersion`. A new operator version needs a new value.

@@ -5,6 +5,11 @@
     "route": {
       "type": "object",
       "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Route",
+          "description": "Off when GitLab is reached by another ingress"
+        },
         "hostname": {
           "type": "string",
           "title": "Hostname",
@@ -23,6 +28,18 @@
         "storageClassName": {
           "type": "string",
           "title": "Object storage class"
+        },
+        "create": {
+          "type": "boolean",
+          "title": "Create the bucket",
+          "description": "Off when the buckets and their connection exist already"
+        },
+        "buckets": {
+          "type": "object",
+          "title": "Bucket per object type",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -136,6 +153,13 @@
           "type": "boolean",
           "title": "Create a PodMonitor"
         }
+      }
+    },
+    "dataAnnotations": {
+      "type": "object",
+      "title": "Annotations on data objects",
+      "additionalProperties": {
+        "type": "string"
       }
     }
   }

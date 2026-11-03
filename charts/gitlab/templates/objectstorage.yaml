@@ -1,3 +1,4 @@
+{{- if .Values.objectStorage.create }}
 apiVersion: objectbucket.io/v1alpha1
 kind: ObjectBucketClaim
 metadata:
@@ -7,6 +8,10 @@ metadata:
     app.kubernetes.io/name: gitlab
     app.kubernetes.io/component: storage
     {{- include "gitlab.commonLabels" $ | nindent 4 }}
+  {{- with .Values.dataAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   {{- if .Values.objectStorage.bucket }}
   bucketName: {{ .Values.objectStorage.bucket }}
@@ -158,3 +163,4 @@ spec:
           name: gitlab-object-storage
       - name: tmp
         emptyDir: {}
+{{- end }}
