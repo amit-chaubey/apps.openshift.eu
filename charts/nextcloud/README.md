@@ -83,6 +83,8 @@ password:
 | `oidc.groupsClaim` | `groups` | Claim with the user's groups; groups matching `oidc.groupsRegex` are created and kept in step. |
 | `oidc.groupsRegex` | empty | Only users with a matching group may log in, for example `^(admin\|acme-admins)$`. A group `admin` in the claim makes the user an administrator. Empty: no restriction. |
 | `oidc.bearer` | `true` | API and WebDAV calls with a Bearer token of the provider; the user is created on the first call. |
+| `sso.enabled` | `false` | Login through a client the platform makes. The Route carries `sso.routeLabels`; the platform answers with Secret `nextcloud-sso` (keys `sso-client-id`, `sso-client-secret`, `sso-discovery-uri`, `sso-groups-regex`), and within a minute Nextcloud sets up provider `oidc.identifier` from it with the claims of `oidc`. Switched off, or the Secret removed, the provider goes. |
+| `sso.routeLabels` | empty | Labels on the Route that ask the platform for the client. |
 | `mailRoute.sso.enabled` | `true` | With OpenID Connect set up and `secrets.type` `kubernetes`: Webmail logs in at the provider, without the mailbox password. The client needs the redirect URI `https://<host>/mail/login/oauth2/callback`. |
 | `ai.models.completion` | empty | Default model for text. Also `image`, `speechToText`, `textToSpeech`. Empty: the choice of the app. |
 | `ai.providers.*` | text kinds on | Kinds of task the endpoint serves: `chat`, `text`, `translation`, `imageAnalysis`, `imageGeneration`, `speechToText`, `textToSpeech`. |

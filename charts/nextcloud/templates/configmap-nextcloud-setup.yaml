@@ -167,6 +167,13 @@ data:
     {{- if .Values.monitoring.enabled }}
     set_app_secret serverinfo token metrics-token
     {{- end }}
+    {{- if not .Values.sso.enabled }}
+    # sso switched off: the provider that sso.sh set up goes
+    sso_state="$(php occ config:system:get datadirectory)/.chart-sso"
+    if [ -e "$sso_state" ]; then
+      run 30 "remove sso provider" php occ user_oidc:provider:delete {{ .Values.oidc.identifier | quote }} -f && rm -f "$sso_state"
+    fi
+    {{- end }}
     {{- if include "wrapper.oidcActive" . }}
     {{- $o := .Values.oidc }}
     app user_oidc
@@ -202,11 +209,62 @@ data:
   cron.sh: |
     #!/bin/sh
     until curl -fs -m 5 http://localhost/status.php | grep -q '"installed":true'; do sleep 10; done
+    # every minute: a changed setup.sh (new values) runs again without a restart, and with
+    # sso.enabled the provider follows the platform's Secret
+    (last=$(sha256sum < /opt/nextcloud-chart/setup.sh)
+     while :; do
+       sleep 60
+       now=$(sha256sum < /opt/nextcloud-chart/setup.sh)
+       if [ "$now" != "$last" ]; then
+         su -s /bin/sh www-data -c 'sh /opt/nextcloud-chart/setup.sh' && last=$now
+       fi
+       {{- if .Values.sso.enabled }}
+       su -s /bin/sh www-data -c 'sh /opt/nextcloud-chart/sso.sh'
+       {{- end }}
+     done) &
     {{- if include "wrapper.mailActive" . }}
     # every minute: a mailbox and a Mail account for each new user
     (while :; do su -s /bin/sh www-data -c 'sh /opt/nextcloud-chart/mail.sh'; sleep 60; done) &
     {{- end }}
     exec /cron.sh
+  {{- if .Values.sso.enabled }}
+  {{- $o := .Values.oidc }}
+  # sets up provider {{ $o.identifier }} from the platform's Secret nextcloud-sso when its
+  # content changed since the last run; nothing to do while the Secret is not there
+  sso.sh: |
+    #!/bin/sh
+    cd /var/www/html
+    s=/run/secrets/setup
+    state="$(php occ config:system:get datadirectory)/.chart-sso"
+    for k in client-id client-secret discovery-uri; do
+      [ -s "$s/sso-$k" ] && continue
+      # the platform withdrew the client: so goes the provider
+      if [ -e "$state" ] && php occ user_oidc:provider:delete {{ $o.identifier | quote }} -f >/dev/null 2>&1; then
+        rm -f "$state"; echo "sso: provider {{ $o.identifier }} removed, no Secret nextcloud-sso"
+      fi
+      exit 0
+    done
+    sum=$(cat "$s/sso-client-id" "$s/sso-client-secret" "$s/sso-discovery-uri" "$s/sso-groups-regex" 2>/dev/null | sha256sum)
+    [ "$(cat "$state" 2>/dev/null)" = "$sum" ] && exit 0
+    php occ app:install user_oidc >/dev/null 2>&1 || php occ app:enable user_oidc >/dev/null 2>&1
+    php occ config:app:set user_oidc allow_multiple_user_backends --value=1 >/dev/null 2>&1
+    set -- --clientid="$(cat "$s/sso-client-id")" --clientsecret=@SECRET@ \
+      --discoveryuri="$(cat "$s/sso-discovery-uri")" --scope={{ $o.scope | quote }} --unique-uid=0 \
+      --mapping-uid={{ $o.uidClaim | quote }} --mapping-display-name=name --mapping-email=email \
+      --mapping-groups={{ $o.groupsClaim | quote }} --group-provisioning=1 \
+      --check-bearer={{ ternary 1 0 $o.bearer }} --bearer-provisioning={{ ternary 1 0 $o.bearer }} \
+      --send-id-token-hint=1
+    regex=$(cat "$s/sso-groups-regex" 2>/dev/null)
+    if [ -n "$regex" ]; then
+      set -- "$@" --group-whitelist-regex="/$regex/" --group-restrict-login-to-whitelist=1
+    fi
+    if timeout -k 5 60 php /opt/nextcloud-chart/occ-secret.php "$s/sso-client-secret" user_oidc:provider {{ $o.identifier | quote }} "$@" >/dev/null; then
+      echo "$sum" > "$state"
+      echo "sso: provider {{ $o.identifier }} set up for client $(cat "$s/sso-client-id")"
+    else
+      echo "sso: provider {{ $o.identifier }} not set up, exit $?"
+    fi
+  {{- end }}
   {{- if include "wrapper.mailActive" . }}
   {{- $mailu := .Values.mailu.upstream }}
   {{- $name := $mailu.fullnameOverride | default "mailu" }}

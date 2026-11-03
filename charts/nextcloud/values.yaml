@@ -279,6 +279,15 @@ oidc:
   # API and WebDAV calls with a Bearer token of the provider; the user is created on first call
   bearer: true
 
+# Login through a client the platform makes: the Route carries routeLabels, the platform
+# answers with Secret nextcloud-sso in this namespace (keys sso-client-id,
+# sso-client-secret, sso-discovery-uri, sso-groups-regex), and within a minute Nextcloud
+# sets up provider oidc.identifier from it with the claims of oidc. Switched off, the
+# provider is removed. Needs a platform that watches the labels
+sso:
+  enabled: false
+  routeLabels: {}
+
 # Assistant on an OpenAI-compatible API; also runs the worker and Redis
 ai:
   enabled: false
@@ -358,7 +367,7 @@ mailu:
     front:
       # a chart upgrade reloads mail-prefix.conf; equals the chart version (templates/validate.yaml)
       podAnnotations:
-        chart-version: 0.16.5
+        chart-version: 0.17.0
       extraVolumes:
       - name: dovecot-override
         configMap:
@@ -562,7 +571,7 @@ nextcloud:
   # a chart upgrade restarts Nextcloud so its start-up setup runs again; equals the chart
   # version (templates/validate.yaml refuses a render where it does not)
   podAnnotations:
-    chart-version: 0.16.5
+    chart-version: 0.17.0
   nextcloud:
     host: nextcloud.example.org
     existingSecret:
@@ -625,6 +634,10 @@ nextcloud:
             optional: true
         - secret:
             name: nextcloud-oidc
+            optional: true
+        # the platform's client for sso.enabled
+        - secret:
+            name: nextcloud-sso
             optional: true
         # API token of the mail server, with which the Mail app setup makes mailboxes
         - secret:
