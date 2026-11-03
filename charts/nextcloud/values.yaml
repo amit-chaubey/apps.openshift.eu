@@ -281,7 +281,7 @@ oidc:
 
 # Login through a client the platform makes: the Route carries routeLabels, the platform
 # answers with Secret nextcloud-sso in this namespace (keys sso-client-id,
-# sso-client-secret, sso-discovery-uri, sso-groups-regex), and within a minute Nextcloud
+# sso-client-secret, sso-discovery-uri, sso-issuer-url, sso-groups-regex), and within a minute Nextcloud
 # sets up provider oidc.identifier from it with the claims of oidc. Switched off, the
 # provider is removed. Needs a platform that watches the labels
 sso:
@@ -367,7 +367,7 @@ mailu:
     front:
       # a chart upgrade reloads mail-prefix.conf; equals the chart version (templates/validate.yaml)
       podAnnotations:
-        chart-version: 0.17.0
+        chart-version: 0.17.1
       extraVolumes:
       - name: dovecot-override
         configMap:
@@ -415,7 +415,7 @@ mailRoute:
   # Nextcloud menu entries (app External sites): Webmail for everyone, Mail admin for group
   # admin; written only while the app has no sites, so a tenant's own entries stay
   externalSites: true
-  # Webmail without a second login, with oidc set up and secrets.type kubernetes:
+  # Webmail without a second login, with oidc or sso set up and secrets.type kubernetes:
   # https://<host>/mail/login signs the user in at the provider and opens Roundcube as the
   # mailbox of the user's email, and the menu entry Webmail opens it. The provider's client
   # needs the redirect URI https://<host>/mail/login/oauth2/callback. Without oidc Roundcube
@@ -571,7 +571,7 @@ nextcloud:
   # a chart upgrade restarts Nextcloud so its start-up setup runs again; equals the chart
   # version (templates/validate.yaml refuses a render where it does not)
   podAnnotations:
-    chart-version: 0.17.0
+    chart-version: 0.17.1
   nextcloud:
     host: nextcloud.example.org
     existingSecret:

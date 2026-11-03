@@ -46,6 +46,25 @@ spec:
         - --redirect-url=https://{{ include "wrapper.host" . }}/mail/login/oauth2/callback
         - --email-domain=*
         - --skip-provider-button=true
+        {{- if .Values.sso.enabled }}
+        # the pod waits for the platform's Secret and reads it at start
+        env:
+        - name: SSO_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: nextcloud-sso
+              key: sso-client-id
+        - name: SSO_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: nextcloud-sso
+              key: sso-client-secret
+        - name: SSO_ISSUER_URL
+          valueFrom:
+            secretKeyRef:
+              name: nextcloud-sso
+              key: sso-issuer-url
+        {{- end }}
         ports:
         - name: http
           containerPort: 8080
@@ -69,9 +88,11 @@ spec:
         - name: config
           mountPath: /etc/mail-login
           readOnly: true
+        {{- if not .Values.sso.enabled }}
         - name: oidc
           mountPath: /etc/oidc
           readOnly: true
+        {{- end }}
       volumes:
       - name: config
         secret:
@@ -81,9 +102,11 @@ spec:
             path: alpha.yaml
           - key: cookie-secret
             path: cookie-secret
+      {{- if not .Values.sso.enabled }}
       - name: oidc
         secret:
           secretName: nextcloud-oidc
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service

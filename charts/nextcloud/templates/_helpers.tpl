@@ -218,9 +218,9 @@ metallb.io/loadBalancerIPs: {{ . | quote }}
 {{- if and .Values.oidc.enabled .Values.oidc.discoveryUri .Values.oidc.clientId }}true{{ end -}}
 {{- end -}}
 
-{{/* Webmail logs in through the OpenID Connect provider: Mailu on the Nextcloud host, oidc set up */}}
+{{/* Webmail logs in through the OpenID Connect provider: Mailu on the Nextcloud host, oidc or sso set up */}}
 {{- define "wrapper.mailLoginActive" -}}
-{{- if and .Values.mailu.enabled .Values.mailRoute.enabled .Values.mailRoute.sso.enabled (eq .Values.secrets.type "kubernetes") (include "wrapper.oidcActive" .) }}true{{ end -}}
+{{- if and .Values.mailu.enabled .Values.mailRoute.enabled .Values.mailRoute.sso.enabled (eq .Values.secrets.type "kubernetes") (or .Values.sso.enabled (include "wrapper.oidcActive" .)) }}true{{ end -}}
 {{- end -}}
 
 {{/* Users get a mailbox in the Mail app: switched on, with the mail server of this chart */}}
