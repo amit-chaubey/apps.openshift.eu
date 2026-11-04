@@ -7,6 +7,10 @@ metadata:
     app.kubernetes.io/name: gitlab-valkey
     app.kubernetes.io/component: cache
     {{- include "gitlab.commonLabels" $ | nindent 4 }}
+  {{- with .Values.dataAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   accessModes:
   - ReadWriteOnce

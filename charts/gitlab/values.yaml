@@ -48,10 +48,20 @@ mcp:
 # empty: the default StorageClass of the cluster
 storageClassName: ""
 
+# annotations on the objects that hold data: GitLab, the database Cluster, the cache
+# volume and the bucket claim; for example a sync option that keeps them on uninstall
+dataAnnotations: {}
+
 objectStorage:
+  # false: no bucket claim and no conversion Job; the buckets and their connection
+  # exist already and are given in objectStorage.buckets and gitlab.extraValues
+  create: true
   # bucket for uploads, artifacts, packages and LFS; empty: generated name,
   # and GitLab is created by a second helm upgrade once the bucket exists
   bucket: ""
+  # bucket per object type (artifacts, lfs, uploads, packages, externalDiffs,
+  # terraformState, ciSecureFiles, dependencyProxy); empty: every type in bucket
+  buckets: {}
   # object StorageClass of the bucket claim; empty: none is set
   storageClassName: ""
   region: us-east-1
@@ -71,6 +81,8 @@ postgres:
     limits:
       cpu: "2"
       memory: 2Gi
+  # merged over the Cluster spec this chart renders
+  spec: {}
 
 valkey:
   image: docker.io/valkey/valkey:8.1
@@ -88,6 +100,8 @@ ssh:
   enabled: false
 
 route:
+  # false: no Route; GitLab is reached by an ingress given in gitlab.extraValues
+  enabled: true
   # hostname of GitLab; GitLab builds every link and clone address from it
   hostname: ""
   # certificate issued by cert-manager

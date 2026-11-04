@@ -1,3 +1,28 @@
+{{- define "instance.postgres" -}}
+instances: {{ .Values.postgres.instances }}
+{{- if .Values.postgres.imageName }}
+imageName: {{ .Values.postgres.imageName }}
+{{- end }}
+# a disruption budget on a single instance would block every node drain
+enablePDB: {{ gt (int .Values.postgres.instances) 1 }}
+bootstrap:
+  initdb:
+    database: gitlabhq_production
+    owner: gitlab
+    postInitApplicationSQL:
+    - CREATE EXTENSION IF NOT EXISTS pg_trgm
+    - CREATE EXTENSION IF NOT EXISTS btree_gist
+    - CREATE EXTENSION IF NOT EXISTS plpgsql
+storage:
+  size: {{ .Values.postgres.storage.size }}
+  {{- if .Values.storageClassName }}
+  storageClass: {{ .Values.storageClassName }}
+  {{- end }}
+{{- with .Values.postgres.resources }}
+resources:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -9,26 +34,10 @@ metadata:
     {{- include "gitlab.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: postgresql
   annotations:
+    {{- with .Values.dataAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
     app.openshift.io/vcs-uri: https://github.com/postgres/postgres
 spec:
-  instances: {{ .Values.postgres.instances }}
-  {{- if .Values.postgres.imageName }}
-  imageName: {{ .Values.postgres.imageName }}
-  {{- end }}
-  # a disruption budget on a single instance would block every node drain
-  enablePDB: {{ gt (int .Values.postgres.instances) 1 }}
-  bootstrap:
-    initdb:
-      database: gitlabhq_production
-      owner: gitlab
-      postInitApplicationSQL:
-      - CREATE EXTENSION IF NOT EXISTS pg_trgm
-      - CREATE EXTENSION IF NOT EXISTS btree_gist
-      - CREATE EXTENSION IF NOT EXISTS plpgsql
-  storage:
-    size: {{ .Values.postgres.storage.size }}
-    {{- if .Values.storageClassName }}
-    storageClass: {{ .Values.storageClassName }}
-    {{- end }}
-  resources:
-    {{- toYaml .Values.postgres.resources | nindent 4 }}
+  {{- $base := include "instance.postgres" . | fromYaml }}
+  {{- mustMergeOverwrite $base (deepCopy .Values.postgres.spec) | toYaml | nindent 2 }}

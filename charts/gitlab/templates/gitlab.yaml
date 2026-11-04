@@ -6,6 +6,19 @@
 {{- end -}}
 {{- $bucket -}}
 {{- end -}}
+{{- define "instance.buckets" -}}
+{{- $buckets := deepCopy .Values.objectStorage.buckets -}}
+{{- if not $buckets -}}
+{{- $bucket := include "instance.bucket" . -}}
+{{- if and (not $bucket) (not .Values.objectStorage.create) -}}
+{{- fail "objectStorage.create=false needs objectStorage.bucket or objectStorage.buckets" -}}
+{{- end -}}
+{{- range $type, $prefix := dict "artifacts" "artifacts" "lfs" "lfs" "uploads" "uploads" "packages" "packages" "externalDiffs" "external-diffs" "terraformState" "terraform-state" "ciSecureFiles" "ci-secure-files" "dependencyProxy" "dependency-proxy" -}}
+{{- $_ := set $buckets $type (printf "%s/%s" $bucket $prefix) -}}
+{{- end -}}
+{{- end -}}
+{{- toYaml $buckets -}}
+{{- end -}}
 {{- define "instance.values" -}}
 {{- $bucket := include "instance.bucket" . -}}
 {{- $host := .Values.route.hostname | default "gitlab.example.com" -}}
@@ -54,9 +67,9 @@ global:
       connection:
         secret: gitlab-object-storage
         key: connection
-    {{- range $type, $prefix := dict "artifacts" "artifacts" "lfs" "lfs" "uploads" "uploads" "packages" "packages" "externalDiffs" "external-diffs" "terraformState" "terraform-state" "ciSecureFiles" "ci-secure-files" "dependencyProxy" "dependency-proxy" }}
+    {{- range $type, $name := include "instance.buckets" . | fromYaml }}
     {{ $type }}:
-      bucket: {{ $bucket }}/{{ $prefix }}
+      bucket: {{ $name }}
     {{- end }}
   initialRootPassword:
     secret: gitlab-credentials
@@ -125,7 +138,7 @@ gitlab:
   gitlab-exporter:
     enabled: false
 {{- end }}
-{{- if include "instance.bucket" . }}
+{{- if or (not .Values.objectStorage.create) (include "instance.bucket" .) }}
 apiVersion: apps.gitlab.com/v1beta1
 kind: GitLab
 metadata:
@@ -137,6 +150,9 @@ metadata:
     {{- include "gitlab.commonLabels" $ | nindent 4 }}
     app.openshift.io/runtime: gitlab
   annotations:
+    {{- with .Values.dataAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
     app.openshift.io/vcs-uri: https://gitlab.com/gitlab-org/gitlab
     app.openshift.io/connects-to: '[{"apiVersion":"postgresql.cnpg.io/v1","kind":"Cluster","name":"gitlab-postgres"},{"apiVersion":"apps/v1","kind":"Deployment","name":"gitlab-valkey"},{"apiVersion":"objectbucket.io/v1alpha1","kind":"ObjectBucketClaim","name":"gitlab-objects"}]'
 spec:
@@ -147,6 +163,7 @@ spec:
       {{- mustMergeOverwrite $base (deepCopy .Values.gitlab.extraValues) | toYaml | nindent 6 }}
 ---
 {{- end }}
+{{- if .Values.route.enabled }}
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
@@ -174,3 +191,4 @@ spec:
     name: gitlab-webservice-default
     weight: 100
   wildcardPolicy: None
+{{- end }}

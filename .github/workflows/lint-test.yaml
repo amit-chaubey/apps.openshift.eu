@@ -36,6 +36,8 @@ jobs:
       run: python3 -m unittest ci/test_opencode_agent_ui_proxy.py
     - name: Test openwebui chart
       run: ci/test-openwebui.sh
+    - name: Test the GitLab API exporter
+      run: python3 -m unittest ci/test_gitlab_api_exporter.py
     - name: Test the website catalog
       run: python3 -m unittest ci/test_catalog.py
     - name: Test SBOM image collection
