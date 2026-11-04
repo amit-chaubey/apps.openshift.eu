@@ -52,17 +52,17 @@ spec:
         - name: SSO_CLIENT_ID
           valueFrom:
             secretKeyRef:
-              name: nextcloud-sso
+              name: public-nextcloud
               key: sso-client-id
         - name: SSO_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
-              name: nextcloud-sso
+              name: public-nextcloud
               key: sso-client-secret
         - name: SSO_ISSUER_URL
           valueFrom:
             secretKeyRef:
-              name: nextcloud-sso
+              name: public-nextcloud
               key: sso-issuer-url
         {{- end }}
         ports:

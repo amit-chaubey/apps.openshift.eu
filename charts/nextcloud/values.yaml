@@ -280,7 +280,8 @@ oidc:
   bearer: true
 
 # Login through a client the platform makes: a platform that watches a label on Deployment
-# nextcloud (nextcloud.deploymentLabels) answers with Secret nextcloud-sso in this namespace
+# nextcloud (nextcloud.deploymentLabels) answers with Secret public-nextcloud (<realm>-<Deployment>)
+# in this namespace
 # (keys sso-client-id, sso-client-secret, sso-discovery-uri, sso-issuer-url,
 # sso-groups-regex). Within a minute Nextcloud sets up provider oidc.identifier from it with
 # the claims of oidc, and webmail (mailRoute.sso) logs in with it. Switched off, or the
@@ -367,7 +368,7 @@ mailu:
     front:
       # a chart upgrade reloads mail-prefix.conf; equals the chart version (templates/validate.yaml)
       podAnnotations:
-        chart-version: 0.17.2
+        chart-version: 0.17.3
       extraVolumes:
       - name: dovecot-override
         configMap:
@@ -571,7 +572,7 @@ nextcloud:
   # a chart upgrade restarts Nextcloud so its start-up setup runs again; equals the chart
   # version (templates/validate.yaml refuses a render where it does not)
   podAnnotations:
-    chart-version: 0.17.2
+    chart-version: 0.17.3
   nextcloud:
     host: nextcloud.example.org
     existingSecret:
@@ -637,7 +638,7 @@ nextcloud:
             optional: true
         # the platform's client for sso.enabled
         - secret:
-            name: nextcloud-sso
+            name: public-nextcloud
             optional: true
         # API token of the mail server, with which the Mail app setup makes mailboxes
         - secret:

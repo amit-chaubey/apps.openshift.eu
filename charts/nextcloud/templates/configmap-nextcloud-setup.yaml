@@ -229,7 +229,7 @@ data:
     exec /cron.sh
   {{- if .Values.sso.enabled }}
   {{- $o := .Values.oidc }}
-  # sets up provider {{ $o.identifier }} from the platform's Secret nextcloud-sso when its
+  # sets up provider {{ $o.identifier }} from the platform's Secret public-nextcloud when its
   # content changed since the last run; nothing to do while the Secret is not there
   sso.sh: |
     #!/bin/sh
@@ -240,7 +240,7 @@ data:
       [ -s "$s/sso-$k" ] && continue
       # the platform withdrew the client: so goes the provider
       if [ -e "$state" ] && php occ user_oidc:provider:delete {{ $o.identifier | quote }} -f >/dev/null 2>&1; then
-        rm -f "$state"; echo "sso: provider {{ $o.identifier }} removed, no Secret nextcloud-sso"
+        rm -f "$state"; echo "sso: provider {{ $o.identifier }} removed, no Secret public-nextcloud"
       fi
       exit 0
     done
