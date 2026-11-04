@@ -32,3 +32,23 @@ data:
       {group = {{ .group | quote }}, version = {{ .version | quote }}, kind = {{ .kind | quote }}},
     {{- end }}
     ]
+  # the pod's ServiceAccount without env: conversations may drop the server's env
+  kubeconfig: |
+    apiVersion: v1
+    kind: Config
+    clusters:
+    - name: in-cluster
+      cluster:
+        server: https://kubernetes.default.svc
+        certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    users:
+    - name: serviceaccount
+      user:
+        tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    contexts:
+    - name: in-cluster
+      context:
+        cluster: in-cluster
+        user: serviceaccount
+        namespace: {{ .Release.Namespace }}
+    current-context: in-cluster

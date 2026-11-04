@@ -28,6 +28,7 @@ import json
 import re
 import logging
 import os
+import socket
 import sys
 import threading
 import time
@@ -303,10 +304,15 @@ class Handler(BaseHTTPRequestHandler):
             if upstream.query and "?" not in path:
                 target_path += "?" + upstream.query
             conn.request(self.command, target_path, body=body or None, headers=headers)
+            sock = conn.sock
             resp = conn.getresponse()
+            if resp.getheader("Content-Type", "").startswith("text/event-stream"):
+                # an MCP or model stream may stay silent for long: keepalive, no read timeout
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                sock.settimeout(None)
             self._relay(resp)
         except (OSError, ValueError, http.client.HTTPException) as err:
-            logging.error("upstream request failed: %s", type(err).__name__)
+            logging.error("upstream request failed: %s %s %s", type(err).__name__, self.command, self.path.split("?", 1)[0])
             if not self.wfile.closed and not getattr(self, "_started", False):
                 self._error(502, "upstream unreachable")
             self.close_connection = True

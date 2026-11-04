@@ -48,6 +48,11 @@ class FakeUpstream:
                 if self.path == "/stream":
                     self._stream()
                     return
+                if self.path == "/idle-stream":
+                    self._idle_stream()
+                    return
+                if self.path.startswith("/slow"):
+                    time.sleep(1.5)
                 if self.path == "/short":
                     self.send_response(200)
                     self.send_header("Content-Length", "100")
@@ -78,6 +83,17 @@ class FakeUpstream:
                         # chunk 2 is only sent once the client has read chunk 1
                         outer.first_chunk_read.wait(timeout=10)
                 self.wfile.write(b"0\r\n\r\n")
+
+            def _idle_stream(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                self.wfile.flush()
+                # silent for longer than the proxy's upstream timeout
+                time.sleep(1.5)
+                data = b"data: late\n\n"
+                self.wfile.write(b"%x\r\n%s\r\n0\r\n\r\n" % (len(data), data))
 
         self.server = serve(Handler)
         self.url = f"http://127.0.0.1:{self.server.server_port}"
@@ -175,6 +191,26 @@ class ForwardTest(ProxyCase):
         self.assertIn(b"data: 1", resp.read1(1024))
         self.upstream.first_chunk_read.set()
         self.assertIn(b"data: 3", resp.read())
+
+    def test_idle_event_stream_outlives_the_upstream_timeout(self):
+        self.patch_timeout(0.5)
+        _, resp = self.get("/idle-stream")
+        self.assertEqual(resp.status, 200)
+        self.assertIn(b"data: late", resp.read())
+
+    def test_slow_plain_response_still_times_out(self):
+        self.patch_timeout(0.5)
+        with self.assertLogs(level="ERROR") as logs:
+            _, resp = self.get("/slow?key=hidden")
+            resp.read()
+        self.assertEqual(resp.status, 502)
+        self.assertIn("GET /slow", "".join(logs.output))
+        self.assertNotIn("hidden", "".join(logs.output))
+
+    def patch_timeout(self, seconds):
+        saved = tp.UPSTREAM_TIMEOUT
+        tp.UPSTREAM_TIMEOUT = seconds
+        self.addCleanup(setattr, tp, "UPSTREAM_TIMEOUT", saved)
 
     def test_short_upstream_body_does_not_hang_client(self):
         started = time.monotonic()

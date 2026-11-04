@@ -181,7 +181,7 @@ seccompProfile:
 {{- $_ := set $servers .name $s -}}
 {{- end -}}
 {{- if .Values.kubernetesMcpServer.enabled -}}
-{{- $_ := set $servers "kubernetes" (dict "command" "/tools/kubernetes-mcp-server" "args" (list "--config" "/opt/openhands-scripts/kubernetes-mcp-server.toml" "--disable-multi-cluster") "transport" "stdio" "timeout" 60 "icon" "https://cdn.simpleicons.org/kubernetes" "passEnv" (list "KUBERNETES_SERVICE_HOST" "KUBERNETES_SERVICE_PORT")) -}}
+{{- $_ := set $servers "kubernetes" (dict "command" "/tools/kubernetes-mcp-server" "args" (list "--config" "/opt/openhands-scripts/kubernetes-mcp-server.toml" "--kubeconfig" "/opt/openhands-scripts/kubeconfig" "--disable-multi-cluster") "transport" "stdio" "timeout" 60 "icon" "https://cdn.simpleicons.org/kubernetes") -}}
 {{- end -}}
 {{- toJson $servers -}}
 {{- end -}}
