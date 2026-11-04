@@ -38,7 +38,7 @@ upstream:
   deploymentAnnotations:
     app.openshift.io/vcs-uri: https://github.com/maximhq/bifrost
   image:
-    tag: v1.5.8
+    tag: v1.5.16
   resources:
     requests:
       cpu: 100m
