@@ -38,7 +38,7 @@ spec:
         - --https-address=
         - --upstream=http://{{ .Values.upstream.fullnameOverride }}-ui:{{ dig "ui" "service" "ports" "port" 8080 .Values.upstream }}
         - --upstream-timeout={{ .Values.route.timeout }}
-        # Empty admits no account named by an email address; the SAR below decides who enters
+        # Every account passes here; the SAR below decides who enters
         - --email-domain=*
         # groups: verb login, granted by the login Role only; none: get, project editors
         - --openshift-sar={{ list (dict "namespace" .Release.Namespace "resource" "services/proxy" "resourceName" $name "verb" (ternary "login" "get" (not (empty .Values.login.allowedGroups)))) | toJson }}
