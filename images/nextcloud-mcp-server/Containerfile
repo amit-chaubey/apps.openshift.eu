@@ -1,0 +1,7 @@
+# upstream nextcloud-mcp-server with the bearer passthrough patch (patch/patch.py)
+FROM ghcr.io/cbcoutinho/nextcloud-mcp-server:0.201.2@sha256:fd5fcd9d485b1e7cadc28e8201eec5eb2a0fe600991a7cadd1b07a7c23abc149
+USER 0
+COPY patch/ /tmp/patch/
+RUN set -e; site=$(python3 -c 'import nextcloud_mcp_server, os; print(os.path.dirname(os.path.dirname(nextcloud_mcp_server.__file__)))'); \
+    python3 /tmp/patch/patch.py "$site"; python3 -m compileall -q "$site/nextcloud_mcp_server"; rm -rf /tmp/patch
+USER appuser

@@ -8,12 +8,24 @@ image:
   # upstream all-in-one image (frontend, agent-server, automation); used as is
   # when build.enabled is false, else the base of the build
   repository: ghcr.io/openhands/agent-canvas
-  tag: 1.33.0
+  # upstream release; the built image is tagged <tag>-<chart version>[-<build.revision>]
+  tag: 1.34.0
+  # digest of that release's image index, pulled instead of the tag; empty: the tag
+  digest: sha256:638c5e3ce76df74344bb18bd85f44af395337ade8e71f04532099fb380febadf
   pullPolicy: IfNotPresent
 
 build:
   # build the image with the toolset below in the project
   enabled: true
+  # raise it in a release that changes toolsImage or tools, so the build runs again
+  # under a new tag; empty: the tag is <image.tag>-<chart version>
+  revision: ""
+  wait:
+    # Argo CD Sync hook: the StatefulSet moves to a new tag only after its build is
+    # Complete, and the pod keeps the previous image until then
+    enabled: true
+    # how long the hook waits for the build before the sync fails
+    timeoutSeconds: 3600
   # image whose /usr/local/bin binaries, /usr/local/go, /tools, /opt/sonar-scanner and
   # Ansible collections are copied in, for example an opencode-agent image. Empty:
   # only the Debian packages and the tools below
@@ -21,7 +33,8 @@ build:
   # pull secret for toolsImage and the base image; empty: the builder's own
   pullSecret: ""
   # Python (uv), npm and pip tools; keep: true leaves the base image's own command
-  # in place (agent-canvas starts its automation server with its uvicorn)
+  # in place (agent-canvas starts its automation server with its uvicorn). venv: pip
+  # in /opt/venv/<command>; tarball: args "<url> <sha256>", the member <command>
   tools:
   - {kind: uv, command: mkdocs, args: "mkdocs==1.6.1 --with mkdocs-material", check: "mkdocs --version"}
   - {kind: uv, command: ansible, args: "ansible-core==2.21.5", check: "ansible --version"}
@@ -47,6 +60,9 @@ build:
   - {kind: npm, command: "renovate@44.176.1", check: "renovate --version"}
   - {kind: npm, command: "snyk@1.1308.2", check: "snyk --version"}
   - {kind: pip, command: "atlassian-python-api==5.0.5", check: "python3 -c 'import atlassian, importlib.metadata as m; print(m.version(\"atlassian-python-api\"))'"}
+  - {kind: tarball, command: gws, args: "https://github.com/googleworkspace/cli/releases/download/v0.22.5/google-workspace-cli-x86_64-unknown-linux-musl.tar.gz 4db473dde4b1ab872e4ff35d769b0d4af1f1a6441a605e79d5cf8ada9c87e920", check: "gws --version"}
+  - {kind: npm, command: "@pnp/cli-microsoft365@11.11.0", check: "m365 version"}
+  - {kind: venv, command: az, args: "azure-cli==2.91.0", check: "az version"}
   # ImageStreamTag: push to an ImageStream in the project.
   # DockerImage: push to output.name with output.pushSecret
   output:
@@ -112,9 +128,25 @@ secrets:
 git:
   # Git host (no scheme) the token is sent to; empty: no token configured
   host: ""
-  # secrets store name the UI reads to offer its git provider features (GITLAB_TOKEN,
-  # GITHUB_TOKEN, BITBUCKET_TOKEN or FORGEJO_TOKEN); empty: not written
+  # secrets store name the git token is also written under, where the UI's pull request and
+  # issue lists look for it (GITLAB_TOKEN, GITHUB_TOKEN, BITBUCKET_TOKEN or FORGEJO_TOKEN);
+  # empty: not written
   uiSecretName: GITLAB_TOKEN
+  # further git hosts whose token is in the agent-server secrets store (Settings > Secrets
+  # or agentSecrets): git sends it for https clone, fetch and push. Each entry has type
+  # github or gitlab, host (default github.com or gitlab.com) and secretName (names
+  # separated by spaces, env:<VAR> for an environment variable). Default for github: the
+  # environment variables GITHUB_TOKEN, GH_TOKEN, GITHUB_PERSONAL_ACCESS_TOKEN, then the
+  # stored GITHUB_TOKEN or GITHUB_PERSONAL_ACCESS_TOKEN; for gitlab: the stored GITLAB_TOKEN.
+  # github.com is always configured, also without an entry
+  providers: []
+  # - type: gitlab
+  #   host: git.example.com
+  # directory under the home that the new-conversation picker lists repositories of; empty:
+  # not registered
+  repositoriesDir: repositories
+  # https URLs of repositories cloned into repositoriesDir at start when not there yet
+  repositories: []
   # commit identity
   userName: ""
   userEmail: ""
@@ -135,12 +167,39 @@ llm:
   # true: also a profile for every model the gateway lists at /v1/models, added at
   # each pod start; profiles that exist are left as they are
   gatewayModels: true
+  # with model empty: the first gateway model whose name (after the last "/") is in
+  # this list becomes the default, so the most capable model the gateway serves wins
+  preferredModels:
+  - claude-opus-5-5
+  - claude-fable-5-1
+  - claude-opus-5
+  - claude-sonnet-5
+  - claude-sonnet-4-6
   # provider connection to gateway.upstream listed under Settings > LLM, holding
   # llm.model and llm.models as profiles. Empty name: no connection
   connection:
     name: Gateway
     # LiteLLM provider of the gateway's API
     provider: openai
+  # OpenHands LLM settings for every profile on the connection, in the agent-server's
+  # field names (for example max_input_tokens, which also limits the condenser). Written
+  # into new profiles, and into existing ones once per value: a UI edit stays until then
+  profileDefaults:
+    stream: true
+    enable_encrypted_reasoning: false
+    inline_image_urls: true
+
+# History condenser of the OpenHands agent: old events are summarized by the agent's
+# own model. Written into the settings and every OpenHands agent profile when the pod
+# starts after these values changed; an edit in the UI stays until then. ACP agents
+# (Claude Code, Codex) compact their own history and are not affected
+condenser:
+  # summarize old events; false keeps the whole history
+  enabled: true
+  # events in the history before it is condensed to about half; at least 20
+  maxSize: 120
+  # first events (system prompt, first task) that are never summarized
+  keepFirst: 4
 
 # MCP servers reached through the token proxy: {name, path, timeout, enabled, icon} with
 # path on gateway.upstream, timeout in seconds (default 60), enabled (default true) and
@@ -167,15 +226,39 @@ skills:
 # acp_server one of claude-code, codex, gemini-cli, ...; written like llm.model
 agentProfiles: {}
 
-# MCP servers from the namespace's kagent RemoteMCPServers, kept in step every interval:
-# a URL on gateway.upstream goes through the token proxy; one that needs headers from a
-# Secret is skipped. Entries the user added in the UI are left alone
-mcpDiscovery:
+# MCP servers from the kagent RemoteMCPServers of every Project the ServiceAccount may
+# list them in, kept in step every interval: a URL on gateway.upstream goes through the
+# token proxy; one that needs headers from a Secret is skipped. A RemoteMCPServer
+# annotated openhands.dev/auth: oauth2 is an OAuth server each user logs in to in the UI;
+# see README. Entries the user added in the UI are left alone
+mcp:
   enabled: true
   # seconds between two passes
   interval: 60
   # only RemoteMCPServers with these labels, for example key=value. Empty: all
   labelSelector: ""
+  # prefix of the selection labels <labelDomain>/addon, /bundle and /server. A
+  # RemoteMCPServer labelled <labelDomain>/addon: "true" is an add-on, used only when
+  # its bundle is in bundles or its server name (label, else object name) in servers
+  labelDomain: mcp.openshift.eu
+  # add-on bundles to use, for example [google]
+  bundles: []
+  # add-on servers to use, by name, for example [gmail]. An entry may also be
+  # {name, url, auth}: url adds a server that has no RemoteMCPServer; auth sends the
+  # agent's own credential for it from vaultSecrets (see README)
+  servers: []
+  # - name: atlassian
+  #   auth:
+  #     # vaultSecrets entry with the credential
+  #     secretRef: jira
+  #     # request header; not Authorization on a gateway URL, which carries the agent token
+  #     header: X-Atlassian-Authorization
+  #     # basic: Basic base64(<userKey>:<tokenKey>); bearer: Bearer <tokenKey>; raw: <tokenKey>
+  #     format: basic
+  #     userKey: JIRA_USERNAME
+  #     tokenKey: JIRA_API_TOKEN
+  #     # only the RemoteMCPServer of this namespace gets it; empty: the entry of that name
+  #     namespace: ""
   # ClusterRole, installed with kagent, that reads RemoteMCPServers; bound in the
   # release namespace. Empty: no binding (the ServiceAccount's edit role may cover it)
   clusterRole: kagent-remotemcpserver-view
@@ -185,6 +268,29 @@ mcpDiscovery:
       memory: 32Mi
     limits:
       memory: 96Mi
+
+# deprecated former name of mcp, still read in this version: its keys override mcp
+mcpDiscovery: {}
+
+# Secrets read from vault items of a secret store, one ExternalSecret and Secret
+# <release>-<name> per entry, mounted read-only as files under
+# /var/run/vault-secrets/<name>/<key>, never as environment. Mounted into mcp-sync when
+# an mcp.servers auth names it, and into agent-canvas with agent: true
+vaultSecrets: []
+# - name: jira
+#   # vault item; empty: <release>-<name>
+#   item: atlassian-mcp-team
+#   # empty: secrets.externalSecret.storeKind, storeName and refreshInterval
+#   storeKind: ""
+#   storeName: ""
+#   refreshInterval: ""
+#   # file (key of the Secret) to property of the item: login.username,
+#   # login.password, notes or a custom field name
+#   data:
+#     JIRA_USERNAME: login.username
+#     JIRA_API_TOKEN: login.password
+#   # also mount it into the agent container, for the agent's own tools
+#   agent: false
 
 # Remote MCP servers a user adds in the UI become AgentgatewayBackends of the namespace,
 # so the platform publishes them to the whole team. OAuth and in-pod servers stay personal.
@@ -300,7 +406,7 @@ nodeSelector: {}
 affinity: {}
 
 storage:
-  # settings, conversations and the workspace
+  # the whole home: settings, conversations, workspace, logins and caches
   size: 20Gi
   accessMode: ReadWriteOnce
   # empty: the default storage class

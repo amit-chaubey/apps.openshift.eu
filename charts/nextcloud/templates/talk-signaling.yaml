@@ -270,29 +270,5 @@ spec:
   selector:
     {{- include "wrapper.labels" "nextcloud-signaling" | nindent 4 }}
 ---
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: nextcloud-signaling
-  labels:
-    app: nextcloud-signaling
-    app.kubernetes.io/name: nextcloud-signaling
-    app.kubernetes.io/instance: nextcloud-signaling
-    app.kubernetes.io/component: route
-    app.kubernetes.io/part-of: nextcloud-talk
-    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
-  annotations:
-    {{- include "wrapper.routeAnnotations" (dict "root" .) | nindent 4 }}
-spec:
-  host: {{ include "wrapper.signalingHost" . }}
-  port:
-    targetPort: http
-  tls:
-    termination: edge
-    insecureEdgeTerminationPolicy: Redirect
-  to:
-    kind: Service
-    name: nextcloud-signaling
-    weight: 100
-  wildcardPolicy: None
+{{ include "wrapper.pathRoute" (dict "root" . "name" "talk-signaling" "partOf" "nextcloud-talk" "path" "/talk/signaling" "service" "nextcloud-signaling" "port" "http") }}
 {{- end }}

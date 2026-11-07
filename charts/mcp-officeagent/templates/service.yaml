@@ -1,0 +1,32 @@
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mcp-officeagent.name" . }}
+  namespace: {{ include "mcp-officeagent.namespace" . }}
+  labels:
+    {{- include "mcp-officeagent.labels" . | nindent 4 }}
+    {{- include "mcp-officeagent.catalogLabels" . | nindent 4 }}
+    {{- with .Values.service.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- with .Values.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    # the server answers MCP on the root path
+    agentgateway.dev/mcp-path: /
+    agentgateway.dev/mcp-target-name: {{ include "mcp-officeagent.name" . | quote }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "mcp-officeagent.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: mcp
+    port: {{ .Values.port }}
+    targetPort: mcp
+    protocol: TCP
+    {{- with .Values.mcp.appProtocol }}
+    appProtocol: {{ . }}
+    {{- end }}
+{{- end }}

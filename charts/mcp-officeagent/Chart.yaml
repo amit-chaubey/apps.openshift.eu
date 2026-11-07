@@ -1,0 +1,37 @@
+apiVersion: v2
+name: mcp-officeagent
+description: Office documents MCP server (ilia-sokolov OfficeAgent.NET) for the agents of a project; creates, reads and edits Word, PowerPoint and Excel files with tables, images, shapes, charts, comments and tracked changes, headless
+type: application
+version: 0.3.1
+appVersion: "1.2.0"
+home: https://apps.openshift.eu
+icon: https://raw.githubusercontent.com/ilia-sokolov/OfficeAgent.NET/v1.2.0/icon.png
+keywords:
+- ai
+- mcp
+- mcp-server
+- officeagent
+- documents
+- docx
+- pptx
+- xlsx
+- word
+- powerpoint
+- excel
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+- https://github.com/ilia-sokolov/OfficeAgent.NET
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Office documents MCP server
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/vendor: ilia-sokolov
+  mcp.openshift.eu/server: officeagent
+  mcp.openshift.eu/bundle: officeagent
+  mcp.openshift.eu/category: documents
+dependencies:
+- name: mcp-auth
+  version: 0.1.0
+  repository: file://../mcp-auth

@@ -25,6 +25,10 @@ spec:
       labels:
         app.kubernetes.io/name: onlyoffice
         app.kubernetes.io/instance: onlyoffice
+      {{- if .Values.onlyoffice.agentBridge.enabled }}
+      annotations:
+        checksum/agent-bridge: {{ (.Files.Glob "files/onlyoffice-agent-bridge/*").AsConfig | sha256sum }}
+      {{- end }}
     spec:
       terminationGracePeriodSeconds: 10
       automountServiceAccountToken: false
@@ -72,6 +76,16 @@ spec:
         securityContext:
           runAsUser: 0
           allowPrivilegeEscalation: false
+        {{- if .Values.onlyoffice.agentBridge.enabled }}
+        volumeMounts:
+        - name: agent-bridge
+          mountPath: /var/www/onlyoffice/documentserver/sdkjs-plugins/agent-bridge
+          readOnly: true
+      volumes:
+      - name: agent-bridge
+        configMap:
+          name: onlyoffice-agent-bridge
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -95,31 +109,5 @@ spec:
     app.kubernetes.io/name: onlyoffice
     app.kubernetes.io/instance: onlyoffice
 ---
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: onlyoffice
-  labels:
-    app: onlyoffice
-    app.kubernetes.io/name: onlyoffice
-    app.kubernetes.io/instance: onlyoffice
-    app.kubernetes.io/component: route
-    app.kubernetes.io/part-of: nextcloud-office
-    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
-  {{- with include "wrapper.routeAnnotations" (dict "root" .) | fromYaml }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-spec:
-  host: {{ include "wrapper.onlyofficeHost" . }}
-  port:
-    targetPort: http
-  tls:
-    termination: edge
-    insecureEdgeTerminationPolicy: Redirect
-  to:
-    kind: Service
-    name: onlyoffice
-    weight: 100
-  wildcardPolicy: None
+{{ include "wrapper.pathRoute" (dict "root" . "name" "office" "partOf" "nextcloud-office" "path" "/office" "service" "onlyoffice" "port" "http" "headers" (dict "X-Forwarded-Prefix" "/office")) }}
 {{- end }}

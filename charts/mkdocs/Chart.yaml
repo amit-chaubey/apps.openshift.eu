@@ -19,3 +19,5 @@ maintainers:
 annotations:
   charts.openshift.io/name: MkDocs
   charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/category: documentation
+  apps.openshift.eu/vendor: MkDocs

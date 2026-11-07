@@ -1,0 +1,13 @@
+{{- if and .Values.auth.enabled .Values.auth.issuerUrl }}
+# Protected resource metadata (RFC 9728) of the token check: the issuer of the tokens it takes
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-auth
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mcp-playwright.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+data:
+  {{- include "mcp-auth.metadataData" (dict "root" . "name" .Release.Name "namespace" .Release.Namespace "port" .Values.port "path" "/mcp") | nindent 2 }}
+{{- end }}

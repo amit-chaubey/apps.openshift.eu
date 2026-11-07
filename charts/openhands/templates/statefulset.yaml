@@ -8,6 +8,8 @@ metadata:
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
+  annotations:
+    app.openshift.io/custom-icon: https://avatars.githubusercontent.com/All-Hands-AI
 spec:
   replicas: 1
   serviceName: {{ $name }}-ui
@@ -37,6 +39,30 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      # the home is on the volume; files the image ships there are copied once
+      initContainers:
+      - name: seed-home
+        image: {{ include "openhands.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - sh
+        - /opt/openhands-scripts/seed-home.sh
+        volumeMounts:
+        - name: scripts
+          mountPath: /opt/openhands-scripts
+          readOnly: true
+        - name: data
+          mountPath: /mnt/home
+          subPath: home
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 64Mi
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
       containers:
       - name: agent-canvas
         image: {{ include "openhands.image" . }}
@@ -69,6 +95,8 @@ spec:
           value: {{ toJson .Values.agentProfiles | quote }}
         - name: SEED_SKILLS
           value: {{ include "openhands.seedSkills" . | quote }}
+        - name: SEED_CONDENSER
+          value: {{ include "openhands.seedCondenser" . | quote }}
         {{- if and .Values.build.enabled .Values.route.host .Values.mcpOAuth.callbackPort }}
         # MCP OAuth logins return to the route, not to localhost (mcp_oauth_redirect.py)
         - name: MCP_OAUTH_REDIRECT_URL
@@ -91,8 +119,22 @@ spec:
         {{- $git := list (dict "k" "safe.directory" "v" "*") }}
         {{- with .Values.git.userName }}{{ $git = append $git (dict "k" "user.name" "v" .) }}{{ end }}
         {{- with .Values.git.userEmail }}{{ $git = append $git (dict "k" "user.email" "v" .) }}{{ end }}
+        {{- /* github.com always: a GitHub token in the environment or the secrets store works */}}
+        {{- $providers := .Values.git.providers }}
+        {{- $hosts := list }}
+        {{- range $providers }}{{ $hosts = append $hosts (.host | default (ternary "github.com" "gitlab.com" (eq .type "github"))) }}{{ end }}
+        {{- if not (has "github.com" $hosts) }}{{ $providers = append $providers (dict "type" "github") }}{{ end }}
+        {{- /* before the git.host token, so a token in the environment or secrets store wins */}}
+        {{- range $providers }}
+        {{- $github := eq .type "github" }}
+        {{- $host := .host | default (ternary "github.com" "gitlab.com" $github) }}
+        {{- /* the GitHub card of the MCP library saves its token as GITHUB_PERSONAL_ACCESS_TOKEN;
+               GITLAB_TOKEN in the environment is the git.host token, so gitlab reads the store only */}}
+        {{- $names := .secretName | default (ternary "env:GITHUB_TOKEN env:GH_TOKEN env:GITHUB_PERSONAL_ACCESS_TOKEN GITHUB_TOKEN GITHUB_PERSONAL_ACCESS_TOKEN" "GITLAB_TOKEN" $github) }}
+        {{- $git = append $git (dict "k" (printf "credential.https://%s.helper" $host) "v" (printf "!python3 /opt/openhands-scripts/git-credential.py %s %s" (ternary "x-access-token" "oauth2" $github) $names)) }}
+        {{- end }}
         {{- with .Values.git.host }}
-        {{- $git = append $git (dict "k" (printf "credential.https://%s.helper" .) "v" "!f() { test \"$1\" = get && echo username=oauth2 && echo \"password=$GITLAB_TOKEN\"; }; f") }}
+        {{- $git = append $git (dict "k" (printf "credential.https://%s.helper" .) "v" (printf "!python3 /opt/openhands-scripts/git-credential.py %s env:GITLAB_TOKEN" (ternary "x-access-token" "oauth2" (eq . "github.com")))) }}
         {{- end }}
         - name: GIT_CONFIG_COUNT
           value: {{ len $git | quote }}
@@ -101,6 +143,13 @@ spec:
           value: {{ $c.k | quote }}
         - name: GIT_CONFIG_VALUE_{{ $i }}
           value: {{ $c.v | quote }}
+        {{- end }}
+        {{- with .Values.git.repositoriesDir }}
+        # the new-conversation picker lists the repositories in this directory
+        - name: GIT_REPOSITORIES_DIR
+          value: {{ printf "/home/openhands/%s" . | quote }}
+        - name: GIT_REPOSITORIES
+          value: {{ toJson $.Values.git.repositories | quote }}
         {{- end }}
         {{- range $k, $v := .Values.env }}
         - name: {{ $k }}
@@ -134,12 +183,23 @@ spec:
         - name: scripts
           mountPath: /opt/openhands-scripts
           readOnly: true
+        # the whole home persists: CLI logins, Claude Code sessions, MCP OAuth tokens, caches
+        - name: data
+          mountPath: /home/openhands
+          subPath: home
         - name: data
           mountPath: /home/openhands/.openhands
           subPath: openhands
         - name: data
           mountPath: /home/openhands/workspace
           subPath: workspace
+        {{- range .Values.vaultSecrets }}
+        {{- if .agent }}
+        - name: vault-{{ .name }}
+          mountPath: /var/run/vault-secrets/{{ .name }}
+          readOnly: true
+        {{- end }}
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         securityContext:
@@ -222,6 +282,9 @@ spec:
           value: {{ .tokenUrl | quote }}
         - name: AGENT_TOKEN_PATHS
           value: {{ join "," .paths | quote }}
+        # MCP servers of the agent's issuer, written by mcp-sync: /_target/<id>
+        - name: TARGETS_FILE
+          value: /var/run/mcp-targets/targets.json
         {{- end }}
         {{- end }}
         # listens on 127.0.0.1 only, so the probe runs inside the container
@@ -244,13 +307,17 @@ spec:
         - name: agent-token
           mountPath: /var/run/secrets/agent-token
           readOnly: true
+        - name: mcp-targets
+          mountPath: /var/run/mcp-targets
+          readOnly: true
         {{- end }}
         resources:
           {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
         securityContext:
           {{- include "openhands.containerSecurityContext" . | nindent 10 }}
       {{- end }}
-      {{- if or .Values.mcpDiscovery.enabled .Values.mcpPublish.enabled (and .Values.git.host .Values.git.uiSecretName) }}
+      {{- $mcp := include "openhands.mcp" . | fromJson }}
+      {{- if or $mcp.enabled .Values.mcpPublish.enabled (and .Values.git.host .Values.git.uiSecretName) }}
       - name: mcp-sync
         image: {{ .Values.tokenProxy.image }}
         imagePullPolicy: IfNotPresent
@@ -264,15 +331,31 @@ spec:
               name: {{ $name }}-session-api-key
               key: value
         - name: INTERVAL
-          value: {{ .Values.mcpDiscovery.interval | quote }}
+          value: {{ int $mcp.interval | quote }}
         - name: DISCOVERY
-          value: {{ .Values.mcpDiscovery.enabled | quote }}
+          value: {{ $mcp.enabled | quote }}
         - name: LABEL_SELECTOR
-          value: {{ .Values.mcpDiscovery.labelSelector | quote }}
+          value: {{ $mcp.labelSelector | quote }}
+        - name: LABEL_DOMAIN
+          value: {{ $mcp.labelDomain | quote }}
+        - name: BUNDLES
+          value: {{ join "," ($mcp.bundles | default list) | quote }}
+        - name: SERVERS
+          value: {{ join "," (include "openhands.mcpServerNames" . | fromJsonArray) | quote }}
+        # mcp.servers with a url or an auth; credentials are read from the mounted files
+        - name: SERVER_SETTINGS
+          value: {{ include "openhands.mcpServerSettings" . | quote }}
         - name: UPSTREAM
           value: {{ .Values.gateway.upstream | quote }}
         - name: TOKEN_PROXY_PORT
           value: {{ .Values.tokenProxy.port | quote }}
+        {{- if and .Values.gateway.upstream .Values.tokenProxy.agentToken.tokenUrl }}
+        # servers that take tokens of this issuer get the agent token via the token proxy
+        - name: AGENT_TOKEN_URL
+          value: {{ .Values.tokenProxy.agentToken.tokenUrl | quote }}
+        - name: TARGETS_FILE
+          value: /var/run/mcp-targets/targets.json
+        {{- end }}
         - name: PUBLISH
           value: {{ .Values.mcpPublish.enabled | quote }}
         - name: RESYNC
@@ -294,8 +377,17 @@ spec:
         - name: scripts
           mountPath: /app
           readOnly: true
+        {{- if and .Values.gateway.upstream .Values.tokenProxy.agentToken.tokenUrl }}
+        - name: mcp-targets
+          mountPath: /var/run/mcp-targets
+        {{- end }}
+        {{- range include "openhands.mcpAuthSecrets" . | fromJsonArray }}
+        - name: vault-{{ . }}
+          mountPath: /var/run/vault-secrets/{{ . }}
+          readOnly: true
+        {{- end }}
         resources:
-          {{- toYaml .Values.mcpDiscovery.resources | nindent 10 }}
+          {{- toYaml $mcp.resources | nindent 10 }}
         securityContext:
           {{- include "openhands.containerSecurityContext" . | nindent 10 }}
       {{- end }}
@@ -356,6 +448,18 @@ spec:
       - name: scripts
         configMap:
           name: {{ $name }}-scripts
+      {{- $auth := include "openhands.mcpAuthSecrets" . | fromJsonArray }}
+      {{- range .Values.vaultSecrets }}
+      {{- if or .agent (has .name $auth) }}
+      # files readable by the pod's user through its fsGroup only
+      - name: vault-{{ .name }}
+        secret:
+          secretName: {{ $name }}-{{ .name }}
+          defaultMode: 0440
+          # the pod starts before the secret store answers; mcp-sync waits for the files
+          optional: true
+      {{- end }}
+      {{- end }}
       {{- if .Values.gateway.upstream }}
       # the agent's own credential for the gateway, renewed by the kubelet
       - name: api-token
@@ -377,6 +481,11 @@ spec:
               audience: {{ required "tokenProxy.agentToken.audience is required with tokenUrl" .audience }}
               expirationSeconds: 600
               path: token
+      # where mcp-sync tells the token proxy which MCP servers get the agent token
+      - name: mcp-targets
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Mi
       {{- end }}
       {{- end }}
       {{- end }}

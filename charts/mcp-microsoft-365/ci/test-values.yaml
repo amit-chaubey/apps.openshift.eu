@@ -1,0 +1,5 @@
+route:
+  host: m365.apps.example.com
+secrets:
+  clientId: test-client
+  clientSecret: test-secret

@@ -1,0 +1,120 @@
+{{- if .Values.enabled }}
+{{- if and (eq .Values.credentials.mode "shared") (not .Values.credentials.existingSecret) }}
+{{- fail "credentials.existingSecret is required with credentials.mode shared" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-onlyoffice-live.name" . }}
+  namespace: {{ include "mcp-onlyoffice-live.namespace" . }}
+  labels:
+    app: {{ include "mcp-onlyoffice-live.name" . }}
+    app.kubernetes.io/name: mcp-onlyoffice-live
+    app.kubernetes.io/component: server
+    {{- include "mcp-onlyoffice-live.commonLabels" . | nindent 4 }}
+    {{- include "mcp-onlyoffice-live.catalogLabels" . | nindent 4 }}
+    app.openshift.io/runtime: nodejs
+spec:
+  # live sessions are browser contexts in the memory of one process
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "mcp-onlyoffice-live.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-onlyoffice-live.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+    spec:
+      # the server needs no Kubernetes API access
+      automountServiceAccountToken: false
+      {{- with .Values.runAsUser }}
+      securityContext:
+        runAsUser: {{ . }}
+        fsGroup: {{ . }}
+      {{- end }}
+      containers:
+      - name: server
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: HOME
+          value: /tmp
+        - name: PORT
+          value: {{ .Values.port | quote }}
+        - name: NEXTCLOUD_URL
+          value: {{ .Values.nextcloud.url | quote }}
+        {{- with .Values.nextcloud.publicUrlFrom }}
+        - name: NEXTCLOUD_PUBLIC_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ required "nextcloud.publicUrlFrom.name" .name }}
+              key: {{ required "nextcloud.publicUrlFrom.key" .key }}
+        {{- else }}
+        {{- with .Values.nextcloud.publicUrl }}
+        - name: NEXTCLOUD_PUBLIC_URL
+          value: {{ . | quote }}
+        {{- end }}
+        {{- end }}
+        - name: EDITOR_ID
+          value: {{ .Values.nextcloud.editorId | quote }}
+        - name: MAX_SESSIONS
+          value: {{ .Values.sessions.max | quote }}
+        - name: MAX_SESSIONS_PER_USER
+          value: {{ .Values.sessions.maxPerUser | quote }}
+        - name: IDLE_TIMEOUT_SECONDS
+          value: {{ .Values.sessions.idleTimeoutSeconds | quote }}
+        - name: OPEN_TIMEOUT_SECONDS
+          value: {{ .Values.sessions.openTimeoutSeconds | quote }}
+        - name: TYPING_DELAY_MS
+          value: {{ .Values.typingDelayMs | quote }}
+        - name: SCREENSHOTS
+          value: {{ .Values.screenshots | quote }}
+        - name: SCRIPTS
+          value: {{ .Values.scripts | quote }}
+        {{- if eq .Values.credentials.mode "shared" }}
+        - name: NEXTCLOUD_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.credentials.existingSecret }}
+              key: user
+        - name: NEXTCLOUD_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.credentials.existingSecret }}
+              key: password
+        {{- end }}
+        ports:
+        - name: mcp
+          containerPort: {{ .Values.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: mcp
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: mcp
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+{{- end }}

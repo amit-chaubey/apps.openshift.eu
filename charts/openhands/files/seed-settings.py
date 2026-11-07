@@ -5,20 +5,29 @@ Runs as the postStart hook once per change of those values (SEED_HASH); a later
 edit in the UI is kept until the values change again. SEED_LLM is a JSON llm
 diff, SEED_MCP a JSON map of server name to MCP server settings, where passEnv
 names pod environment variables to hand to a stdio server. With gatewayModels,
-profiles for new gateway models are added on every start. Always exits 0
-so a failed seed never kills the container.
+profiles for new gateway models are added on every start; without a model, the
+first gateway model named in preferredModels becomes the default. SEED_CONDENSER
+is written into the settings and every OpenHands agent profile once per change
+of its own value. On every start GIT_REPOSITORIES_DIR becomes a workspace parent, whose
+repositories the new-conversation picker lists, and each URL in GIT_REPOSITORIES that is
+not there yet is cloned into it. Always exits 0 so a failed seed never kills the container.
 """
+import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 API = "http://127.0.0.1:18000"
-MARKER = os.path.join(os.environ.get("HOME", "/tmp"), ".openhands", "agent-canvas",
-                      ".seeded-" + os.environ.get("SEED_HASH", "none"))
+STATE = os.path.join(os.environ.get("HOME", "/tmp"), ".openhands", "agent-canvas")
+# llm.profileDefaults, filled from SEED_LLM in main
+DEFAULTS: dict = {}
+MARKER = os.path.join(STATE, ".seeded-" + os.environ.get("SEED_HASH", "none"))
 
 
 def request(method: str, path: str, body: dict | None = None) -> tuple[int, object]:
@@ -67,7 +76,7 @@ def seed_connection(llm: dict, conn: dict, models: list[str]) -> bool:
         # profile names are path segments; the model keeps its gateway prefix
         names[model] = model.rsplit("/", 1)[-1]
         if call("POST", f"/api/profiles/{names[model]}",
-                {"llm": {"model": model, "provider_connection_id": conn_id},
+                {"llm": {**DEFAULTS, "model": model, "provider_connection_id": conn_id},
                  "include_secrets": False}) not in (200, 201):
             print(f"seed: profile {names[model]} not written", file=sys.stderr)
             ok = False
@@ -110,6 +119,110 @@ def gateway_models(llm: dict, conn: dict) -> list[str]:
     return [f"{conn['provider']}/{m['id']}" for m in listing.get("data", []) if m.get("id")]
 
 
+def preferred_model(llm: dict, conn: dict, preferred: list[str]) -> str | None:
+    """The first model of preferred, by name after the last "/", that the gateway lists."""
+    listed = {m.rsplit("/", 1)[-1]: m for m in gateway_models(llm, conn)}
+    return next((listed[name] for name in preferred if name in listed), None)
+
+
+def seed_profile_defaults(conn: dict | None) -> None:
+    """llm.profileDefaults into every profile on the connection, once per value."""
+    if not DEFAULTS or not conn:
+        return
+    raw = json.dumps(DEFAULTS, sort_keys=True)
+    marker = os.path.join(STATE, ".seeded-profile-defaults-" + hashlib.sha256(raw.encode()).hexdigest()[:8])
+    if os.path.exists(marker):
+        return
+    status, conns = request("GET", "/api/llm/provider-connections")
+    found = [c for c in conns or [] if c.get("display_name") == conn["display_name"]]
+    status, listing = request("GET", "/api/profiles")
+    if not found or status != 200:
+        print("seed: profile defaults not written", file=sys.stderr)
+        return
+    ok = True
+    for prof in (listing or {}).get("profiles", []):
+        if prof.get("provider_connection_id") != found[0]["id"]:
+            continue
+        status, detail = request("GET", f"/api/profiles/{prof['name']}")
+        config = (detail or {}).get("config")
+        if status != 200 or not config:
+            ok = False
+            continue
+        if all(config.get(k) == v for k, v in DEFAULTS.items()):
+            continue
+        body = {"llm": {**config, **DEFAULTS, "provider_connection_id": found[0]["id"]},
+                "include_secrets": False}
+        if call("POST", f"/api/profiles/{prof['name']}", body) not in (200, 201):
+            print(f"seed: defaults of profile {prof['name']} not written", file=sys.stderr)
+            ok = False
+    if ok:
+        os.makedirs(STATE, exist_ok=True)
+        open(marker, "w").close()
+
+
+def seed_condenser() -> None:
+    """Condenser settings, once per value: the settings and each OpenHands agent profile."""
+    raw = os.environ.get("SEED_CONDENSER") or ""
+    if not raw:
+        return
+    marker = os.path.join(STATE, ".seeded-condenser-" + hashlib.sha256(raw.encode()).hexdigest()[:8])
+    if os.path.exists(marker):
+        return
+    condenser = json.loads(raw)
+    ok = call("PATCH", "/api/settings", {"agent_settings_diff": {"condenser": condenser}}) == 200
+    status, agents = request("GET", "/api/agent-profiles")
+    ok = ok and status == 200
+    for agent in (agents or {}).get("profiles", []):
+        if agent.get("agent_kind") != "openhands":
+            continue
+        status, detail = request("GET", f"/api/agent-profiles/{agent['name']}")
+        body = (detail or {}).get("profile")
+        if not body or call("POST", f"/api/agent-profiles/{agent['name']}",
+                            {**body, "condenser": condenser}) not in (200, 201):
+            print(f"seed: condenser of agent profile {agent['name']} not written", file=sys.stderr)
+            ok = False
+    if ok:
+        os.makedirs(STATE, exist_ok=True)
+        open(marker, "w").close()
+    else:
+        print("seed: condenser not written", file=sys.stderr)
+
+
+def seed_repositories() -> None:
+    """Workspace parent of the picker, and the repositories cloned into it once."""
+    parent = os.environ.get("GIT_REPOSITORIES_DIR") or ""
+    if not parent:
+        return
+    os.makedirs(parent, exist_ok=True)
+    if call("POST", "/api/workspaces/parents", {"parents": [
+            {"id": parent, "name": os.path.basename(parent), "path": parent}]}) != 200:
+        print("seed: workspace parent not written", file=sys.stderr)
+    for url in json.loads(os.environ.get("GIT_REPOSITORIES") or "[]"):
+        name = url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
+        dest = os.path.join(parent, name)
+        if not name or os.path.exists(dest):
+            continue
+        if urllib.parse.urlsplit(url).password:
+            print(f"seed: repository {name} skipped, its URL holds a password", file=sys.stderr)
+            continue
+        # a clone in progress stays hidden from the picker until it is complete
+        tmp = os.path.join(parent, f".{name}.clone")
+        subprocess.run(["rm", "-rf", tmp], check=False)
+        try:
+            # git asks the credential helpers of git.host and git.providers for the token
+            done = subprocess.run(
+                ["git", "clone", "--quiet", "--filter=blob:none", "--", url, tmp],
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"}, timeout=900,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            done = False
+        if done:
+            os.rename(tmp, dest)
+        else:
+            subprocess.run(["rm", "-rf", tmp], check=False)
+            print(f"seed: repository {name} not cloned", file=sys.stderr)
+
+
 def add_gateway_profiles(llm: dict, conn: dict) -> None:
     """Profiles for gateway models that have none yet; existing profiles stay as edited."""
     status, conns = request("GET", "/api/llm/provider-connections")
@@ -130,7 +243,7 @@ def add_gateway_profiles(llm: dict, conn: dict) -> None:
         if name in taken:
             continue
         if call("POST", f"/api/profiles/{name}",
-                {"llm": {"model": model, "provider_connection_id": found[0]["id"]},
+                {"llm": {**DEFAULTS, "model": model, "provider_connection_id": found[0]["id"]},
                  "include_secrets": False}) in (200, 201):
             taken.add(name)
         else:
@@ -148,17 +261,28 @@ def main() -> None:
     conn = llm.pop("connection", None)
     models = llm.pop("models", [])
     every = llm.pop("gatewayModels", False)
+    preferred = llm.pop("preferredModels", [])
+    DEFAULTS.update(llm.pop("profileDefaults", None) or {})
+    seed_repositories()
+    seed_condenser()
     if os.path.exists(MARKER):
         if every and conn and llm.get("base_url"):
             add_gateway_profiles(llm, conn)
+        seed_profile_defaults(conn)
         return
     ok = True
+    if preferred and not llm.get("model") and conn and llm.get("base_url"):
+        llm["model"] = preferred_model(llm, conn, preferred)
+        if not llm["model"]:
+            llm.pop("model")
+            print("seed: the gateway lists none of preferredModels", file=sys.stderr)
     if llm and call("PATCH", "/api/settings", {"agent_settings_diff": {"llm": llm}}) != 200:
         ok = False
     if conn and llm.get("base_url") and not seed_connection(llm, conn, models):
         ok = False
     if every and conn and llm.get("base_url"):
         add_gateway_profiles(llm, conn)
+    seed_profile_defaults(conn)
     for name, server in json.loads(os.environ.get("SEED_MCP") or "{}").items():
         # the agent-server starts stdio servers with a reduced environment
         pass_env = server.pop("passEnv", [])

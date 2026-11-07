@@ -212,6 +212,42 @@ tokenProxy:
     limits:
       memory: 256Mi
 
+# Secrets read from vault items of a secret store, one ExternalSecret and Secret
+# <name>-agent-<entry> per entry, mounted read-only into the opencode container as files
+# under /var/run/vault-secrets/<entry>/<key>, never as environment
+vaultSecrets: []
+# - name: jira
+#   # vault item; empty: <name>-agent-<entry>
+#   item: atlassian-mcp-team
+#   # empty: secrets.externalSecret.storeKind, storeName and refreshInterval
+#   storeKind: ""
+#   storeName: ""
+#   refreshInterval: ""
+#   # file (key of the Secret) to property of the item: login.username,
+#   # login.password, notes or a custom field name
+#   data:
+#     JIRA_USERNAME: login.username
+#     JIRA_API_TOKEN: login.password
+
+mcp:
+  # remote MCP servers written into opencode.json: {name, path, url, enabled, agentToken,
+  # auth}. path is on gateway.upstream through the token proxy, url is used as is.
+  # agentToken: true sends url through the token proxy with the agent's own token
+  # (tokenProxy.agentToken), for a server that accepts tokens of that realm. auth sends the
+  # agent's own credential from vaultSecrets in one header (see README)
+  servers: []
+  # - name: atlassian
+  #   path: /mcp/<namespace>/atlassian
+  #   auth:
+  #     # vaultSecrets entry with the credential
+  #     secretRef: jira
+  #     # request header; not Authorization with path, which carries the agent token
+  #     header: X-Atlassian-Authorization
+  #     # basic: Basic base64(<userKey>:<tokenKey>); bearer: Bearer <tokenKey>; raw: <tokenKey>
+  #     format: basic
+  #     userKey: JIRA_USERNAME
+  #     tokenKey: JIRA_API_TOKEN
+
 # node labels and affinity of the agent pod; the OpenCode image is several Gi
 nodeSelector: {}
 affinity: {}

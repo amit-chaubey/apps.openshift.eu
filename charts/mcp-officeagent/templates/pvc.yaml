@@ -1,0 +1,26 @@
+{{- with .Values.documents }}
+{{- if and $.Values.enabled .enabled .persistence.enabled (not .persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mcp-officeagent.claim" $ }}
+  namespace: {{ include "mcp-officeagent.namespace" $ }}
+  labels:
+    {{- include "mcp-officeagent.labels" $ | nindent 4 }}
+  annotations:
+    # documents survive an uninstall
+    helm.sh/resource-policy: keep
+    {{- with .persistence.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+  - {{ .persistence.accessMode }}
+  {{- with .persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .persistence.size }}
+{{- end }}
+{{- end }}

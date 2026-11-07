@@ -1,4 +1,4 @@
-{{- if .Values.monitoring.enabled }}
+{{- if and .Values.monitoring.enabled .Values.monitoring.alerts }}
 {{- $fullname := include "mailu-wrapper.fullname" . }}
 {{- $ns := .Release.Namespace }}
 apiVersion: monitoring.coreos.com/v1

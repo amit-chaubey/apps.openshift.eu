@@ -1,5 +1,6 @@
 {{- if .Values.image.repository }}
 {{- if not .Values.image.tag }}{{ fail "image.tag is required" }}{{ end }}
+{{- if and .Values.auth.enabled .Values.rbacProxy.enabled }}{{ fail "auth.enabled and rbacProxy.enabled exclude each other: both take the Service port" }}{{ end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -61,7 +62,7 @@ spec:
         - secretRef:
             name: {{ . }}
         {{- end }}
-        {{- if not .Values.rbacProxy.enabled }}
+        {{- if not (or .Values.rbacProxy.enabled .Values.auth.enabled) }}
         ports:
         - name: mcp
           containerPort: {{ .Values.port }}
@@ -127,9 +128,15 @@ spec:
         - name: tls
           mountPath: /etc/tls/private
       {{- end }}
+      {{- if .Values.auth.enabled }}
+      {{- include "mcp-auth.container" (dict "root" . "name" .Release.Name "port" .Values.port) | nindent 6 }}
+      {{- end }}
       volumes:
       - name: tmp
         emptyDir: {}
+      {{- with include "mcp-auth.volumes" (dict "root" . "name" .Release.Name) }}
+      {{- . | nindent 6 }}
+      {{- end }}
       {{- if .Values.rbacProxy.enabled }}
       - name: rbac
         configMap:

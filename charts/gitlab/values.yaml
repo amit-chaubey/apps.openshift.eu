@@ -48,10 +48,20 @@ mcp:
 # empty: the default StorageClass of the cluster
 storageClassName: ""
 
+# annotations on the objects that hold data: GitLab, the database Cluster, the cache
+# volume and the bucket claim; for example a sync option that keeps them on uninstall
+dataAnnotations: {}
+
 objectStorage:
+  # false: no bucket claim and no conversion Job; the buckets and their connection
+  # exist already and are given in objectStorage.buckets and gitlab.extraValues
+  create: true
   # bucket for uploads, artifacts, packages and LFS; empty: generated name,
   # and GitLab is created by a second helm upgrade once the bucket exists
   bucket: ""
+  # bucket per object type (artifacts, lfs, uploads, packages, externalDiffs,
+  # terraformState, ciSecureFiles, dependencyProxy); empty: every type in bucket
+  buckets: {}
   # object StorageClass of the bucket claim; empty: none is set
   storageClassName: ""
   region: us-east-1
@@ -71,6 +81,8 @@ postgres:
     limits:
       cpu: "2"
       memory: 2Gi
+  # merged over the Cluster spec this chart renders
+  spec: {}
 
 valkey:
   image: docker.io/valkey/valkey:8.1
@@ -88,12 +100,33 @@ ssh:
   enabled: false
 
 route:
+  # false: no Route; GitLab is reached by an ingress given in gitlab.extraValues
+  enabled: true
   # hostname of GitLab; GitLab builds every link and clone address from it
   hostname: ""
   # certificate issued by cert-manager
   annotations:
     cert-manager.io/issuer-kind: ClusterIssuer
     cert-manager.io/issuer-name: letsencrypt
+
+apiExporter:
+  # merges with author and merger, branch protection, pipelines and schedules from the
+  # GitLab API, as Prometheus metrics; needs an access token, see secrets.apiExporterToken
+  enabled: false
+  image: python:3.13-bookworm@sha256:073ffebb96ae4d0ed73ccad59f08c47bd84af8a79f5258130f8458ac50ad9ff4
+  # label gitlab_instance of every metric; empty: route.hostname
+  instance: ""
+  # merges of this many days are exported
+  mergeDays: 30
+  intervalSeconds: 300
+  # a PodMonitor for the Prometheus of the platform's user workload monitoring
+  podMonitor: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
 
 secrets:
   # kubernetes: Secret from the values below. externalSecret: from a secret store
@@ -102,6 +135,9 @@ secrets:
   rootPassword: ""
   # password of the cache; empty: generated once and kept
   valkeyPassword: ""
+  # access token for apiExporter: a group or personal access token with role Reporter
+  # and scope read_api; GitLab creates it, so it cannot be generated here
+  apiExporterToken: ""
   externalSecret:
     storeKind: ClusterSecretStore
     storeName: ""
@@ -110,3 +146,5 @@ secrets:
     items:
       root-password: gitlab-root
       valkey-password: gitlab-valkey
+    # vault item of the apiExporter token, read only when apiExporter.enabled
+    apiExporterItem: gitlab-api-exporter

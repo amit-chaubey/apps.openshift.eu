@@ -1,0 +1,15 @@
+googleWorkspace:
+  enabled: true
+  secrets:
+    clientId: test-client
+    clientSecret: test-secret
+  googleDrive:
+    enabled: false
+microsoft365:
+  enabled: true
+  microsoft365:
+    route:
+      host: m365.apps.example.com
+    secrets:
+      clientId: test-client
+      clientSecret: test-secret

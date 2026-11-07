@@ -1,0 +1,162 @@
+# Team of the tenant the server serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the server belongs to; required with team
+tenant: ""
+
+# switch of this server when a bundle chart includes it
+enabled: true
+
+# name of the server's objects and of the server on an MCP gateway (tools <name>_*).
+# Empty: mcp.server
+nameOverride: ""
+
+# korotovsky slack-mcp-server image
+image:
+  repository: ghcr.io/korotovsky/slack-mcp-server
+  tag: v1.3.0@sha256:35cbc988d9282409e27b755957e48a6096fcf037dee72118e97177fe38b1a1b3
+  pullPolicy: IfNotPresent
+
+slack:
+  # Existing Secret with the workspace's Bot User OAuth Token (xoxb-...) under tokenKey.
+  # Empty: <release>-<secretSuffix>, written from secrets below
+  existingSecret: ""
+  tokenKey: token
+  # bot: a Bot User OAuth Token (xoxb-...), the server acts as the app's bot. user: a User
+  # OAuth Token (xoxp-...), the server acts as that person and can also search messages
+  tokenType: bot
+  # name suffix of the chart's own token Secret
+  secretSuffix: slack-bot-token
+  # tool conversations_add_message (bot scope chat:write). false: no tool posts to Slack.
+  # true: every channel the bot is in
+  addMessage: false
+  # with addMessage: only these channel IDs (C...); empty: every channel the bot is in
+  addMessageChannels: []
+  # tools reactions_add and reactions_remove (bot scope reactions:write)
+  reactions: false
+  # comma-separated tool names to register instead of the defaults; empty: the tools that
+  # only read (channels_list, channels_me, conversations_history, conversations_replies,
+  # users_search, usergroups_list; with a user token also conversations_search_messages and
+  # conversations_unreads) and those switched on above
+  enabledTools: ""
+  # users and channels cache lifetime
+  cacheTtl: 1h
+  # debug, info, warn or error
+  logLevel: info
+
+secrets:
+  # kubernetes: the token Secret from botToken. externalSecret: from a secret store
+  type: kubernetes
+  # Bot User OAuth Token of the Slack app. Empty: no Secret, and the server does not start
+  # until one exists
+  botToken: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # vault item with the token as password. Empty: <release>-<secretSuffix>
+    item: ""
+    # property of the item that holds the token
+    property: login.password
+
+# container port of the server; not 80, 443, 8080 or 8443 (open to every project)
+port: 13080
+
+mcp:
+  # Service port appProtocol an MCP gateway discovers; empty leaves it unset
+  appProtocol: agentgateway.dev/mcp
+  # prefix of the catalog labels
+  labelDomain: mcp.openshift.eu
+  # <labelDomain>/server
+  server: slack
+  # <labelDomain>/bundle
+  bundle: slack
+  # <labelDomain>/category
+  category: collaboration
+
+service:
+  # extra labels on the Service, for example the gateway's exposure label
+  labels: {}
+  annotations: {}
+
+# requests and limits of the server
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Token check in front of the server (an oauth2-proxy sidecar): every request but the health
+# paths needs a bearer JWT of auth.issuerUrl for one of auth.audiences; the Service port then
+# reaches the sidecar and the server listens on localhost only. Off: the server asks callers
+# for no credential, so only a gateway that authenticates callers may reach it
+auth:
+  enabled: false
+  # OpenID Connect issuer of the tokens (the iss claim). Empty with auth.enabled: every
+  # request but the health paths is refused (401)
+  issuerUrl: ""
+  # a token's aud claim must name one of these; empty: the release namespace. Each entry is
+  # a template, for example "{{ .Release.Namespace }}"
+  audiences: []
+  # a token's groups claim must name one of these (403 otherwise); empty: any group. Each
+  # entry is a template
+  allowedGroups: []
+  # address callers use for the server, the resource of its protected resource metadata
+  # (/.well-known/oauth-protected-resource, served without a token); a template. Empty: the
+  # Service inside the cluster
+  resourceUrl: ""
+  # claim that carries the groups of the caller
+  groupsClaim: groups
+  # localhost port of the server behind the sidecar
+  upstreamPort: 13081
+  # requests that pass without a token, method=path_regex or path_regex, for example the
+  # server's health path for its probes
+  skipAuthRoutes: []
+  # longest wait for the server's response headers; a tool call may take that long
+  upstreamTimeout: 3600s
+  # how often a streamed response is flushed; event streams are flushed at once
+  flushInterval: 100ms
+  # existing Secret with the keys cookie-secret and client-secret; empty: <name>-auth,
+  # written by the chart from the two values below
+  existingSecret: ""
+  # seed of the session cookie (16, 24 or 32 bytes); empty: generated once and kept. A
+  # GitOps tool that renders without cluster access must pass it
+  cookieSecret: ""
+  # client secret the proxy requires but never uses (bearer tokens only); empty: generated
+  # once and kept. A GitOps tool that renders without cluster access must pass it
+  clientSecret: ""
+  # further oauth2-proxy flags, for example --oidc-email-claim=sub
+  extraArgs: []
+  # oauth2-proxy image, published by the oauth2-proxy project
+  image:
+    repository: quay.io/oauth2-proxy/oauth2-proxy
+    tag: v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+    pullPolicy: IfNotPresent
+  # requests and limits of the sidecar
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+networkPolicy:
+  enabled: true
+  # Namespaces (label selectors) that may call the server besides its own, e.g. the gateway's
+  ingressNamespaces: []
+  egress:
+    # The server reaches the public internet only (slack.com)
+    enabled: true
+    exceptCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - 169.254.0.0/16
+    - 127.0.0.0/8
+    # Your own public ranges
+    extraExceptCidrs: []
+    dnsNamespace: openshift-dns
+    dnsPort: 5353

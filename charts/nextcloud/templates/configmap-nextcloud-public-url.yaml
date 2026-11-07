@@ -1,0 +1,16 @@
+{{- if and .Values.onlyoffice.enabled (index .Values "mcp-onlyoffice-live" "enabled") }}
+# Public address of Nextcloud, for the live editing MCP server's browser: it calls the API
+# on the Service nextcloud and opens the editor pages here
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nextcloud-public-url
+  labels:
+    app: nextcloud
+    app.kubernetes.io/name: nextcloud
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: nextcloud
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+data:
+  url: https://{{ include "wrapper.host" . }}
+{{- end }}

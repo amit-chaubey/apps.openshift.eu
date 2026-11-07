@@ -25,3 +25,16 @@ data:
     service anvil {
       chroot =
     }
+    service ipc {
+      chroot =
+    }
+    # a client inside the cluster (upstream.subnet), such as the Mail app of Nextcloud on the
+    # webmail ports, may log in without TLS, as Mailu's own containers do
+    {{- range splitList "," (.Values.upstream.subnet | default "") }}
+    {{- with trim . }}
+    remote {{ . }} {
+      ssl = yes
+      disable_plaintext_auth = no
+    }
+    {{- end }}
+    {{- end }}

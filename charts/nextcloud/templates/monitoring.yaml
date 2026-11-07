@@ -1,7 +1,8 @@
 {{- if .Values.monitoring.enabled }}
 {{- $m := .Values.monitoring }}
 {{- $url := include "wrapper.internalUrl" . }}
-{{- $exporters := list (dict "name" "nextcloud-exporter" "image" $m.nextcloudExporterImage "port" 9205 "probe" "/") }}
+{{- /* no probe path: the exporter's / scrapes all of Nextcloud, check the port */}}
+{{- $exporters := list (dict "name" "nextcloud-exporter" "image" $m.nextcloudExporterImage "port" 9205 "probe" "") }}
 {{- if include "wrapper.cacheEnabled" . }}
 {{- $exporters = append $exporters (dict "name" "nextcloud-redis-exporter" "image" $m.redisExporterImage "port" 9121 "probe" "/health") }}
 {{- end }}
@@ -82,15 +83,25 @@ spec:
           containerPort: {{ $e.port }}
           protocol: TCP
         livenessProbe:
+          {{- if $e.probe }}
           httpGet:
             path: {{ $e.probe }}
             port: metrics
+          {{- else }}
+          tcpSocket:
+            port: metrics
+          {{- end }}
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
+          {{- if $e.probe }}
           httpGet:
             path: {{ $e.probe }}
             port: metrics
+          {{- else }}
+          tcpSocket:
+            port: metrics
+          {{- end }}
           initialDelaySeconds: 5
           periodSeconds: 10
         resources:

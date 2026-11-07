@@ -7,6 +7,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 C=${1:?chart name}
+# a library chart is packaged inside the charts that depend on it, never released alone
+if grep -q '^type: library' "charts/$C/Chart.yaml"; then
+  echo "charts/$C is a library chart, not released"
+  exit 0
+fi
 for t in gitleaks syft; do
   command -v $t >/dev/null || { echo "$t is required for a release"; exit 1; }
 done
@@ -23,9 +28,13 @@ if gh release view "$TAG" >/dev/null 2>&1; then
 else
   helm package "charts/$C" -d "$P" >/dev/null
   ci/sbom.py "charts/$C" "$P/$C-$V.cdx.json"
-  gh release create "$TAG" "$P/$C-$V.tgz" "$P/$C-$V.cdx.json" --target main --title "$TAG" \
+  # an MCP server chart also gets its MCP Registry server.json
+  ci/server_json.py "charts/$C" "$P/$C-$V.server.json"
+  assets=("$P/$C-$V.tgz" "$P/$C-$V.cdx.json")
+  [ -f "$P/$C-$V.server.json" ] && assets+=("$P/$C-$V.server.json")
+  gh release create "$TAG" "${assets[@]}" --target main --title "$TAG" \
     --notes-file "$N" >/dev/null
-  rm -f "$P/$C-$V.tgz" "$P/$C-$V.cdx.json"
+  rm -f "${assets[@]}"
   echo "release $TAG created"
 fi
 for t in $(gh release list --limit 1000 --json tagName --jq '.[].tagName'); do

@@ -1,0 +1,33 @@
+apiVersion: v2
+name: mcp-onlyoffice-live
+description: Live office editing MCP server for the agents of a project; an agent opens a Nextcloud document in ONLYOFFICE as itself and reads, writes, replaces, comments and tracks changes while people watch its cursor and edits in the same co-editing session
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+home: https://apps.openshift.eu
+icon: https://avatars.githubusercontent.com/ONLYOFFICE
+keywords:
+- ai
+- mcp
+- mcp-server
+- office-live
+- documents
+- onlyoffice
+- nextcloud
+- co-editing
+- docx
+- xlsx
+- pptx
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Live office editing MCP server
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/vendor: GRN.CLOUD B.V.
+  apps.openshift.eu/category: documents
+  mcp.openshift.eu/server: office-live
+  mcp.openshift.eu/bundle: office-live
+  mcp.openshift.eu/category: documents

@@ -37,7 +37,13 @@ data:
     app() { run 120 "app $1" sh -c 'php occ app:install "$0" || php occ app:enable "$0"' "$1"; }
     set_sys() { run 30 "system setting $1" php occ config:system:set "$@"; }
     set_app() { run 30 "setting $1 $2" php occ config:app:set "$1" "$2" --value="$3"; }
-    set_secret() { run 30 "setting $1 $2" php occ config:app:set "$1" "$2" --type=string --lazy --sensitive -n --value="$3"; }
+    # a secret never goes on a command line: occ-secret.php puts the content of the secret
+    # file in place of @SECRET@, inside php; set_app_secret <app> <key> <file> [<value> [<option>...]]
+    set_app_secret() {
+      a=$1; k=$2; f=$3; v=${4:-@SECRET@}; shift 3; [ $# -gt 0 ] && shift
+      run 30 "setting $a $k" php /opt/nextcloud-chart/occ-secret.php "$s/$f" config:app:set "$a" "$k" --value="$v" "$@"
+    }
+    set_secret() { run 30 "setting $1 $2" php /opt/nextcloud-chart/occ-secret.php "$s/$3" config:app:set "$1" "$2" --type=string --lazy --sensitive -n --value=@SECRET@; }
     # a lock nobody releases makes every write wait: give the file a new inode
     lock='$f = @fopen("config/config.php", "r+"); if (!$f) exit(0);
       for ($i = 0; $i < 10; $i++) { if (flock($f, LOCK_EX | LOCK_NB)) exit(0); sleep(2); } exit(1);'
@@ -50,6 +56,8 @@ data:
       fi
     fi
     set_sys trusted_domains 9 --value=nextcloud
+    # occ and cron build links and tell Talk's signaling server who calls with this URL
+    set_sys overwrite.cli.url --value=https://{{ include "wrapper.host" . }}
     {{- if ne (toString $set.maintenanceWindowStart) "" }}
     set_sys maintenance_window_start --type=integer --value={{ $set.maintenanceWindowStart }}
     {{- end }}
@@ -59,19 +67,39 @@ data:
     {{- if $set.repairOnUpgrade }}
     v=$(timeout 10 php -r 'require "version.php"; echo implode(".", $OC_Version);')
     if [ -n "$v" ] && [ ! -e "data/.chart-repair-$v" ]; then
+      # a major upgrade disables store apps without a compatible release; the app
+      # steps below enable them again once updated
+      run 300 "app updates" php occ app:update --all
       run 120 "missing indices" php occ db:add-missing-indices
       run 120 "missing columns" php occ db:add-missing-columns
       run 120 "missing primary keys" php occ db:add-missing-primary-keys
       run 600 "expensive repair" php occ maintenance:repair --include-expensive && touch "data/.chart-repair-$v"
     fi
     {{- end }}
+    {{- range $set.apps }}
+    app {{ . }}
+    {{- end }}
+    {{- if include "wrapper.mailActive" . }}
+    app mail
+    {{- end }}
     {{- if .Values.onlyoffice.enabled }}
     app onlyoffice
-    set_app onlyoffice DocumentServerUrl "https://{{ include "wrapper.onlyofficeHost" . }}/"
+    set_app onlyoffice DocumentServerUrl "https://{{ $host }}/office/"
     set_app onlyoffice DocumentServerInternalUrl "http://onlyoffice/"
     set_app onlyoffice StorageUrl "{{ include "wrapper.internalUrl" . }}/"
-    set_app onlyoffice jwt_secret "$(cat $s/jwt-secret)"
+    set_app_secret onlyoffice jwt_secret jwt-secret
     set_app onlyoffice jwt_header Authorization
+    # formats the editor opens for editing although saving them may lose formatting
+    set_app onlyoffice editFormats '{{ include "wrapper.onlyofficeEditFormats" . }}'
+    {{- if .Values.onlyoffice.lockFiles }}
+    # ONLYOFFICE locks a file through files_lock while it is open in the editor
+    app files_lock
+    {{- end }}
+    {{- else }}
+    # without a document server the connector only shows errors
+    if timeout 30 php occ app:list --output=json | grep -q '"onlyoffice":'; then
+      run 60 "disable app onlyoffice" php occ app:disable onlyoffice
+    fi
     {{- end }}
     {{- if .Values.notifyPush.enabled }}
     app notify_push
@@ -80,18 +108,43 @@ data:
     {{- if .Values.whiteboard.enabled }}
     app whiteboard
     set_app whiteboard collabBackendUrl "https://{{ $host }}/whiteboard"
-    set_secret whiteboard jwt_secret_key "$(cat $s/whiteboard-jwt-secret)"
+    set_secret whiteboard jwt_secret_key whiteboard-jwt-secret
+    {{- end }}
+    {{- if and .Values.mailu.enabled .Values.mailRoute.enabled .Values.mailRoute.externalSites }}
+    {{- $mail := printf "https://%s/mail" $host }}
+    {{- $inbox := printf "%s/inbox/" $mail }}
+    {{- $login := include "wrapper.mailLoginActive" . }}
+    {{- /* the provider's login page refuses a frame: the login opens as a page */}}
+    {{- $webmail := dict "id" 1 "name" "Webmail" "url" (ternary (printf "%s/login?url=/webmail/" $mail) $inbox (not (empty $login))) "lang" "" "type" "link" "device" "" "icon" "external.svg" "groups" list "redirect" (not (empty $login)) }}
+    {{- $sites := dict
+      "1" $webmail
+      "2" (dict "id" 2 "name" "Mail admin" "url" (printf "%s/admin/" $mail) "lang" "" "type" "link" "device" "" "icon" "settings.svg" "groups" (list "admin") "redirect" false) }}
+    app external
+    sites="$(timeout 30 php occ config:app:get external sites 2>/dev/null)"
+    if [ -z "$sites" ]; then
+      set_app external sites {{ $sites | toJson | squote }}
+    {{- if $login }}
+    else
+      # an entry still on the inbox gets the login; the tenant's own entries stay
+      new="$(printf '%s' "$sites" | OLD={{ $inbox | squote }} NEW={{ $webmail.url | squote }} php -r '
+        $s = json_decode(stream_get_contents(STDIN), true); $c = false;
+        if (is_array($s)) foreach ($s as &$e) { if (($e["url"] ?? "") === getenv("OLD")) { $e["url"] = getenv("NEW"); $e["redirect"] = true; $c = true; } }
+        if ($c) echo json_encode($s, JSON_UNESCAPED_SLASHES);')"
+      if [ -n "$new" ]; then set_app external sites "$new"; fi
+    {{- end }}
+    fi
     {{- end }}
     {{- if .Values.talk.enabled }}
     app spreed
-    set_app spreed signaling_servers "{\"servers\":[{\"server\":\"https://{{ include "wrapper.signalingHost" . }}/\",\"verify\":true}],\"secret\":\"$(cat $s/signaling-secret)\"}"
+    set_app_secret spreed signaling_servers signaling-secret "{\"servers\":[{\"server\":\"https://{{ $host }}/talk/signaling/\",\"verify\":true}],\"secret\":\"@SECRET@\"}"
     {{- if .Values.talk.turn.enabled }}
     {{- $turn := printf "%s:%v" (include "wrapper.turnHost" .) .Values.talk.turn.port }}
-    set_app spreed stun_servers "[\"{{ $turn }}\"]"
-    set_app spreed turn_servers "[{\"schemes\":\"turn\",\"server\":\"{{ $turn }}\",\"secret\":\"$(cat $s/turn-secret)\",\"protocols\":\"udp,tcp\"}]"
+    # Talk declares the STUN and TURN lists as arrays; a plain string is refused
+    run 30 "setting spreed stun_servers" php occ config:app:set spreed stun_servers --type=array -n --value="[\"{{ $turn }}\"]"
+    set_app_secret spreed turn_servers turn-secret "[{\"schemes\":\"turn\",\"server\":\"{{ $turn }}\",\"secret\":\"@SECRET@\",\"protocols\":\"udp,tcp\"}]" --type=array -n
     {{- end }}
     {{- if .Values.talk.recording.enabled }}
-    set_app spreed recording_servers "{\"servers\":[{\"server\":\"https://{{ $host }}/apps/talk/recording\",\"verify\":true}],\"secret\":\"$(cat $s/recording-secret)\"}"
+    set_app_secret spreed recording_servers recording-secret "{\"servers\":[{\"server\":\"https://{{ $host }}/talk/recording\",\"verify\":true}],\"secret\":\"@SECRET@\"}"
     {{- end }}
     {{- end }}
     {{- if .Values.ai.enabled }}
@@ -100,7 +153,7 @@ data:
     set_app assistant assistant_enabled 1
     app integration_openai
     set_app integration_openai url "{{ required "ai.url is required when ai.enabled" $ai.url }}"
-    set_secret integration_openai api_key "$(cat $s/ai-api-key)"
+    set_secret integration_openai api_key ai-api-key
     {{- range $key, $model := dict "default_completion_model_id" $ai.models.completion "default_image_model_id" $ai.models.image "default_stt_model_id" $ai.models.speechToText "default_tts_model_id" $ai.models.textToSpeech }}
     {{- if $model }}
     set_app integration_openai {{ $key }} "{{ $model }}"
@@ -112,15 +165,22 @@ data:
     {{- end }}
     {{- end }}
     {{- if .Values.monitoring.enabled }}
-    set_app serverinfo token "$(cat $s/metrics-token)"
+    set_app_secret serverinfo token metrics-token
+    {{- end }}
+    {{- if not .Values.sso.enabled }}
+    # sso switched off: the provider that sso.sh set up goes
+    sso_state="$(php occ config:system:get datadirectory)/.chart-sso"
+    if [ -e "$sso_state" ]; then
+      run 30 "remove sso provider" php occ user_oidc:provider:delete {{ .Values.oidc.identifier | quote }} -f && rm -f "$sso_state"
+    fi
     {{- end }}
     {{- if include "wrapper.oidcActive" . }}
     {{- $o := .Values.oidc }}
     app user_oidc
     set_app user_oidc allow_multiple_user_backends 1
-    run 60 "oidc provider {{ $o.identifier }}" php occ user_oidc:provider {{ $o.identifier | quote }} \
+    run 60 "oidc provider {{ $o.identifier }}" php /opt/nextcloud-chart/occ-secret.php "$s/oidc-client-secret" user_oidc:provider {{ $o.identifier | quote }} \
       --clientid={{ $o.clientId | quote }} \
-      --clientsecret="$(cat $s/oidc-client-secret)" \
+      --clientsecret=@SECRET@ \
       --discoveryuri={{ $o.discoveryUri | quote }} \
       --scope={{ $o.scope | quote }} --unique-uid=0 \
       --mapping-uid={{ $o.uidClaim | quote }} --mapping-display-name=name --mapping-email=email \
@@ -132,3 +192,204 @@ data:
       --send-id-token-hint=1
     {{- end }}
     exit 0
+  # occ-secret.php <secret file> <occ arguments>: occ in this php process, with @SECRET@ in
+  # the arguments replaced by the content of the file, so no command line holds the secret
+  occ-secret.php: |
+    <?php
+    $secret = rtrim((string) @file_get_contents($argv[1]), "\r\n");
+    if ($secret === '') {
+        fwrite(STDERR, "occ-secret: empty or missing secret file\n");
+        exit(1);
+    }
+    $argv = array_merge(['occ'], array_map(fn ($a) => str_replace('@SECRET@', $secret, $a), array_slice($argv, 2)));
+    $_SERVER['argv'] = $argv;
+    $_SERVER['argc'] = $argc = count($argv);
+    require '/var/www/html/console.php';
+  # the cron sidecar: waits until Nextcloud serves, then runs the background jobs
+  cron.sh: |
+    #!/bin/sh
+    until curl -fs -m 5 http://localhost/status.php | grep -q '"installed":true'; do sleep 10; done
+    # every minute: a changed setup.sh (new values) runs again without a restart, and with
+    # sso.enabled the provider follows the platform's Secret
+    (last=$(sha256sum < /opt/nextcloud-chart/setup.sh)
+     while :; do
+       sleep 60
+       now=$(sha256sum < /opt/nextcloud-chart/setup.sh)
+       if [ "$now" != "$last" ]; then
+         su -s /bin/sh www-data -c 'sh /opt/nextcloud-chart/setup.sh' && last=$now
+       fi
+       {{- if .Values.sso.enabled }}
+       su -s /bin/sh www-data -c 'sh /opt/nextcloud-chart/sso.sh'
+       {{- end }}
+     done) &
+    {{- if include "wrapper.mailActive" . }}
+    # every minute: a mailbox and a Mail account for each new user
+    (while :; do su -s /bin/sh www-data -c 'sh /opt/nextcloud-chart/mail.sh'; sleep 60; done) &
+    {{- end }}
+    exec /cron.sh
+  {{- if .Values.sso.enabled }}
+  {{- $o := .Values.oidc }}
+  # sets up provider {{ $o.identifier }} from the platform's Secret public-nextcloud when its
+  # content changed since the last run; nothing to do while the Secret is not there
+  sso.sh: |
+    #!/bin/sh
+    cd /var/www/html
+    s=/run/secrets/setup
+    state="$(php occ config:system:get datadirectory)/.chart-sso"
+    for k in client-id client-secret discovery-uri; do
+      [ -s "$s/sso-$k" ] && continue
+      # the platform withdrew the client: so goes the provider
+      if [ -e "$state" ] && php occ user_oidc:provider:delete {{ $o.identifier | quote }} -f >/dev/null 2>&1; then
+        rm -f "$state"; echo "sso: provider {{ $o.identifier }} removed, no Secret public-nextcloud"
+      fi
+      exit 0
+    done
+    sum=$(cat "$s/sso-client-id" "$s/sso-client-secret" "$s/sso-discovery-uri" "$s/sso-groups-regex" 2>/dev/null | sha256sum)
+    [ "$(cat "$state" 2>/dev/null)" = "$sum" ] && exit 0
+    php occ app:install user_oidc >/dev/null 2>&1 || php occ app:enable user_oidc >/dev/null 2>&1
+    php occ config:app:set user_oidc allow_multiple_user_backends --value=1 >/dev/null 2>&1
+    set -- --clientid="$(cat "$s/sso-client-id")" --clientsecret=@SECRET@ \
+      --discoveryuri="$(cat "$s/sso-discovery-uri")" --scope={{ $o.scope | quote }} --unique-uid=0 \
+      --mapping-uid={{ $o.uidClaim | quote }} --mapping-display-name=name --mapping-email=email \
+      --mapping-groups={{ $o.groupsClaim | quote }} --group-provisioning=1 \
+      --check-bearer={{ ternary 1 0 $o.bearer }} --bearer-provisioning={{ ternary 1 0 $o.bearer }} \
+      --send-id-token-hint=1
+    regex=$(cat "$s/sso-groups-regex" 2>/dev/null)
+    if [ -n "$regex" ]; then
+      set -- "$@" --group-whitelist-regex="/$regex/" --group-restrict-login-to-whitelist=1
+    fi
+    if timeout -k 5 60 php /opt/nextcloud-chart/occ-secret.php "$s/sso-client-secret" user_oidc:provider {{ $o.identifier | quote }} "$@" >/dev/null; then
+      echo "$sum" > "$state"
+      echo "sso: provider {{ $o.identifier }} set up for client $(cat "$s/sso-client-id")"
+    else
+      echo "sso: provider {{ $o.identifier }} not set up, exit $?"
+    fi
+  {{- end }}
+  {{- if include "wrapper.mailActive" . }}
+  {{- $mailu := .Values.mailu.upstream }}
+  {{- $name := $mailu.fullnameOverride | default "mailu" }}
+  {{- $domains := list }}
+  {{- range (.Values.mail.domains | default (list $mailu.domain)) }}
+  {{- $domains = append $domains (lower .) }}
+  {{- end }}
+  # gives each user whose email address is in one of the mail domains a mailbox with
+  # that address on the Mailu server and a Mail account with an app token of it; a
+  # user that has one is not touched again
+  mail.sh: |
+    #!/bin/sh
+    cd /var/www/html
+    domains={{ join " " $domains | quote }}
+    api="http://{{ $name }}-admin:8080{{ $mailu.api.uri | default "/api" }}/v1"
+    front={{ $name }}-front
+    nets={{ $mailu.subnet | quote }}
+    log() { echo "mail: $*"; }
+    [ -s /run/secrets/setup/mailu-api-token ] || { log "no Mailu API token"; exit 0; }
+    # secrets go through files in memory and the environment, never on a command line
+    tmp=$(mktemp -d -p /dev/shm 2>/dev/null || mktemp -d) && trap 'rm -rf "$tmp"' EXIT
+    printf 'Authorization: Bearer %s\n' "$(cat /run/secrets/setup/mailu-api-token)" > "$tmp/auth"
+    # get <path> | post <path> < json: the status code; the body is in $tmp/out
+    get() { curl -s -m 20 -o "$tmp/out" -w '%{http_code}' -H @"$tmp/auth" "$api/$1"; }
+    post() { curl -s -m 20 -o "$tmp/out" -w '%{http_code}' -H @"$tmp/auth" -H 'Content-Type: application/json' --data-binary @- "$api/$1"; }
+    del() { curl -s -m 20 -o /dev/null -X DELETE -H @"$tmp/auth" "$api/$1"; }
+    field() { php -r '$j = json_decode(file_get_contents($argv[1]), true); echo $j[$argv[2]] ?? "";' "$tmp/out" "$1"; }
+    # json key value ...: an object; a key ending in [] takes a comma separated list
+    json() { php -r '$o = []; for ($i = 1; $i + 1 < $argc; $i += 2) { $k = $argv[$i]; $v = $argv[$i + 1];
+      if (substr($k, -2) === "[]") { $o[substr($k, 0, -2)] = explode(",", $v); } else { $o[$k] = $v; } } echo json_encode($o);' "$@"; }
+    php occ app:list --output=json | php -r 'exit(isset(json_decode(stream_get_contents(STDIN), true)["enabled"]["mail"]) ? 0 : 1);' \
+      || { log "Mail app not enabled yet"; exit 0; }
+    create=mail:account:create-imap
+    php occ list mail --raw | grep -q "^$create " || create=mail:account:create
+    state="$(php occ config:system:get datadirectory)/.chart-mail"
+    mkdir -p "$state"
+    # only the mail domains are hosted here: a domain in Mailu is local for all its mail
+    for domain in $domains; do
+      case $(get "domain/$domain") in
+        200) ;;
+        404) [ "$(json name "$domain" | post domain)" = 200 ] || { log "domain $domain not created: $(cat "$tmp/out")"; exit 0; } ;;
+        *) log "Mailu API not ready"; exit 0 ;;
+      esac
+    done
+    # user id, display name and email address as Nextcloud stores them (user_oidc: the login email)
+    php occ user:list --info --output=json --limit=100000 \
+      | php -r 'foreach (json_decode(stream_get_contents(STDIN), true) ?: [] as $u => $i)
+          echo $u, "\t", $i["display_name"] ?? "", "\t", strtolower(trim($i["email"] ?? "")), "\n";' > "$tmp/users"
+    # skip <uid> <email> <reason> <kind>: no mailbox; tried again when the email address
+    # changes, and a kind domain also when its domain becomes a mail domain
+    skip() { log "$1: no mailbox, $3"; echo "skip $2 ${4:-other}" > "$state/$1"; }
+    while IFS="$(printf '\t')" read -r uid name addr; do
+      if [ -e "$state/$uid" ]; then
+        read -r first was kind < "$state/$uid" || true
+        [ "$first" = skip ] || continue
+        if [ "${was:-}" = "$addr" ]; then
+          [ "${kind:-domain}" = domain ] || continue
+          case " $domains " in *" ${addr#*@} "*) ;; *) continue ;; esac
+        fi
+      fi
+      [ -n "$name" ] || name=$uid
+      [ -n "$addr" ] || { skip "$uid" "" "no email address" none; continue; }
+      case ${addr%@*} in
+        ''|*[!a-z0-9._+-]*) skip "$uid" "$addr" "$addr is no address Mailu takes" address; continue ;;
+      esac
+      case " $domains " in
+        *" ${addr#*@} "*) ;;
+        *) skip "$uid" "$addr" "${addr#*@} is not a mail domain of this server" domain; continue ;;
+      esac
+      case $(get "user/$addr") in
+        404)
+          # a random password nobody knows, made inside php
+          [ "$(ADDR="$addr" NAME="$name" UID_="$uid" php -r 'echo json_encode(["email" => getenv("ADDR"),
+            "raw_password" => base64_encode(random_bytes(24)), "displayed_name" => getenv("NAME"),
+            "comment" => "nextcloud:" . getenv("UID_")]);' | post user)" = 200 ] \
+            || { log "$uid: mailbox $addr not created: $(cat "$tmp/out")"; continue; } ;;
+        200)
+          # an existing mailbox only when this script made it for this user
+          [ "$(field comment)" = "nextcloud:$uid" ] \
+            || { skip "$uid" "$addr" "$addr exists for someone else" exists; continue; } ;;
+        *) log "$uid: Mailu API not ready"; continue ;;
+      esac
+      # the token works only from the networks inside the cluster
+      [ "$(json email "$addr" comment "Nextcloud Mail" 'AuthorizedIP[]' "$nets" | post token)" = 200 ] \
+        || { log "$uid: no app token for $addr: $(cat "$tmp/out")"; continue; }
+      id=$(field id)
+      # occ runs inside php with the token read from the API answer, so no argv holds it
+      if CREATE="$create" UID_="$uid" NAME="$name" ADDR="$addr" FRONT="$front" ANSWER="$tmp/out" php -r '
+        $t = json_decode(file_get_contents(getenv("ANSWER")), true)["token"] ?? "";
+        unlink(getenv("ANSWER"));
+        if ($t === "") exit(1);
+        $a = getenv("ADDR"); $f = getenv("FRONT");
+        $argv = ["occ", getenv("CREATE"), getenv("UID_"), getenv("NAME"), $a, $f, "10143", "none", $a, $t, $f, "10025", "none", $a, $t];
+        $_SERVER["argv"] = $argv; $_SERVER["argc"] = $argc = count($argv);
+        require "/var/www/html/console.php";' >/dev/null; then
+        echo "$addr" > "$state/$uid"
+        log "$uid: Mail account $addr"
+        # the mailboxes, Sent among them, are known before the user first sends
+        account=$(php occ mail:account:export "$uid" --output=json \
+          | php -r 'foreach (json_decode(stream_get_contents(STDIN), true) ?: [] as $a) if (($a["email"] ?? "") === $argv[1]) echo $a["id"];' "$addr")
+        [ -n "$account" ] && timeout 120 php occ mail:account:sync "$account" >/dev/null 2>&1
+      else
+        del "token/$id"
+        log "$uid: Mail account $addr not created"
+      fi
+    done < "$tmp/users"
+    # a Nextcloud administrator (group admin, from the Keycloak login) administers Mailu: a
+    # mailbox made here for one is a global admin, and stops being one when the user leaves
+    # the group; an address outside the mail domains (a public provider) gets no mailbox
+    php occ group:list --output=json \
+      | php -r 'echo implode("\n", json_decode(stream_get_contents(STDIN), true)["admin"] ?? []), "\n";' > "$tmp/admins"
+    patch() { curl -s -m 20 -o "$tmp/out" -w '%{http_code}' -X PATCH -H @"$tmp/auth" -H 'Content-Type: application/json' --data-binary @- "$api/$1"; }
+    while IFS="$(printf '\t')" read -r uid name addr; do
+      [ -s "$state/$uid" ] || continue
+      read -r made rest < "$state/$uid" || true
+      [ -n "$addr" ] && [ "$made" = "$addr" ] || continue
+      [ "$(get "user/$addr")" = 200 ] && [ "$(field comment)" = "nextcloud:$uid" ] || continue
+      want=false
+      grep -qxF "$uid" "$tmp/admins" && want=true
+      have=$(php -r 'echo empty(json_decode(file_get_contents($argv[1]), true)["global_admin"]) ? "false" : "true";' "$tmp/out")
+      [ "$have" = "$want" ] && continue
+      if [ "$(echo "{\"global_admin\": $want}" | patch "user/$addr")" = 200 ]; then
+        log "$uid: Mailu admin $want for $addr"
+      else
+        log "$uid: Mailu admin not set for $addr: $(cat "$tmp/out")"
+      fi
+    done < "$tmp/users"
+  {{- end }}

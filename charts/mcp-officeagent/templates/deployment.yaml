@@ -1,0 +1,139 @@
+{{- if .Values.enabled }}
+{{- $oa := .Values.officeagent }}
+{{- $docs := .Values.documents }}
+{{- $auth := .Values.auth }}
+{{- if not (or $oa.session.enabled $docs.enabled) }}
+{{- fail "officeagent.session.enabled or documents.enabled must be true: the server needs a connection" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-officeagent.name" . }}
+  namespace: {{ include "mcp-officeagent.namespace" . }}
+  labels:
+    {{- include "mcp-officeagent.labels" . | nindent 4 }}
+    {{- include "mcp-officeagent.catalogLabels" . | nindent 4 }}
+  annotations:
+    app.openshift.io/custom-icon: https://avatars.githubusercontent.com/ONLYOFFICE
+spec:
+  # session documents live in the memory of one process, the documents claim is ReadWriteOnce
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "mcp-officeagent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-officeagent.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+    spec:
+      # the server needs no Kubernetes API access
+      automountServiceAccountToken: false
+      {{- with .Values.runAsUser }}
+      securityContext:
+        runAsUser: {{ . }}
+        fsGroup: {{ . }}
+      {{- end }}
+      containers:
+      - name: server
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: HOME
+          value: /tmp
+        # with auth.enabled only the token check in the same pod reaches the server
+        - name: ASPNETCORE_URLS
+          value: http://{{ include "mcp-auth.serverHost" . }}:{{ include "mcp-auth.serverPort" (dict "root" . "port" .Values.port) }}
+        - name: OfficeAgent__Transport
+          value: http
+        - name: OfficeAgent__AllowCreation
+          value: {{ $oa.allowCreation | quote }}
+        - name: OfficeAgent__AllowRegistration
+          value: {{ $oa.allowRegistration | quote }}
+        - name: OfficeAgent__AllowInlineContent
+          value: {{ $oa.allowInlineContent | quote }}
+        - name: OfficeAgent__RequirePlanSnapshot
+          value: {{ $oa.requirePlanSnapshot | quote }}
+        - name: OfficeAgent__StrictToolSchemas
+          value: {{ $oa.strictToolSchemas | quote }}
+        {{- if $oa.session.enabled }}
+        - name: OfficeAgent__EphemeralConnectionId
+          value: session
+        - name: OfficeAgent__EphemeralMaximumTotalBytes
+          value: {{ $oa.session.maximumTotalBytes | int64 | quote }}
+        - name: OfficeAgent__EphemeralCalculateFormulas
+          value: {{ $oa.calculateFormulas | quote }}
+        {{- end }}
+        {{- if $docs.enabled }}
+        - name: OfficeAgent__FileSystemConnections__0__ConnectionId
+          value: {{ $docs.connectionId | quote }}
+        - name: OfficeAgent__FileSystemConnections__0__RootPath
+          value: /documents
+        - name: OfficeAgent__FileSystemConnections__0__DefaultChangeMode
+          value: {{ $docs.defaultChangeMode | quote }}
+        - name: OfficeAgent__FileSystemConnections__0__MaximumBytes
+          value: {{ $docs.maximumBytes | int64 | quote }}
+        - name: OfficeAgent__FileSystemConnections__0__CalculateFormulas
+          value: {{ $oa.calculateFormulas | quote }}
+        {{- range $i, $e := $docs.allowedExtensions }}
+        - name: OfficeAgent__FileSystemConnections__0__AllowedExtensions__{{ $i }}
+          value: {{ $e | quote }}
+        {{- end }}
+        {{- end }}
+        {{- if not $auth.enabled }}
+        ports:
+        - name: mcp
+          containerPort: {{ .Values.port }}
+          protocol: TCP
+        {{- end }}
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            # with auth.enabled through the token check, which lets /healthz pass
+            port: {{ if $auth.enabled }}{{ .Values.port }}{{ else }}mcp{{ end }}
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            # with auth.enabled through the token check, which lets /healthz pass
+            port: {{ if $auth.enabled }}{{ .Values.port }}{{ else }}mcp{{ end }}
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        {{- if $docs.enabled }}
+        - name: documents
+          mountPath: /documents
+        {{- end }}
+      {{- if $auth.enabled }}
+      {{- include "mcp-auth.container" (dict "root" . "name" (include "mcp-officeagent.name" .) "port" .Values.port "healthPath" "/healthz") | nindent 6 }}
+      {{- end }}
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      {{- with include "mcp-auth.volumes" (dict "root" . "name" (include "mcp-officeagent.name" .)) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      {{- if $docs.enabled }}
+      - name: documents
+        {{- if $docs.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "mcp-officeagent.claim" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- end }}
+{{- end }}

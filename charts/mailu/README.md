@@ -39,13 +39,16 @@ Read the webmail address and the password of the first account (`admin@<domain>`
 | `global.dkim.managed` | `false` | `true`: cert-manager makes the DKIM signing key. Set it at install. |
 | `global.dkim.secretTemplate` | `{}` | Labels and annotations of the Secret with that key. A platform that publishes the DKIM record recognises the Secret by them. |
 | `dns.spf`, `dns.dmarc` | `v=spf1 mx -all`, `v=DMARC1; p=quarantine` | Content of the SPF and DMARC records. |
+| `dns.mx.enabled`, `dns.mx.priority` | `true`, `10` | With `dns.enabled`, request the `MX` record of the mail domain, pointing at the first of `upstream.hostnames`. |
 | `global.publicAddress.shared` | `false` | Let the other public Services of the project share one address. The mail Service never shares. |
 | `mailService.annotations` | `{}` | Annotations of that Service, for example the address pool. |
 | `mailService.ports.*` | mail ports on | Ports of that Service. `http` and `https` are off. |
 | `egressService.enabled` | `false` | Second public address, used as the source of outgoing mail. |
+| `egressService.hostname` | empty | Name of that address. Empty: `outbound.<domain>`. With `dns.enabled` it gets an `A` record and the SPF record names it. |
 | `route.hostname` | empty | Hostname of webmail. Empty: OpenShift assigns one. |
 | `certificate.enabled` | `false` | Request a certificate for `upstream.hostnames` from `certificate.issuerName`. |
 | `monitoring.enabled` | `false` | ServiceMonitors and alert rules. Needs the right to create them. |
+| `monitoring.alerts` | `true` | `false` keeps the ServiceMonitors and leaves out the alert rules, for a platform that alerts centrally. |
 | `imapsync.enabled` | `false` | Page to copy mailboxes from another mail server. |
 
 Web access goes through the Route: the router ends TLS and sends plain HTTP to the mail
@@ -56,6 +59,11 @@ pages on the mail address itself, set `mailService.ports.http` and
 Without `certificate.enabled` the mail ports use a certificate of the cluster's internal
 service CA. Mail clients and other mail servers do not trust it. Set `certificate.enabled`
 before real use.
+
+A client from the networks in `upstream.subnet` (inside the cluster) may log in without
+TLS, as Mailu's own containers do. A mail client in the same project uses the front end's
+webmail ports, `mailu-front:10143` (IMAP) and `mailu-front:10025` (SMTP), with the
+mailbox password or an app token of the mailbox.
 
 Secrets left empty are generated at the first install and kept on every upgrade with
 `helm upgrade`. A tool that renders the chart without access to the cluster, such as
@@ -82,8 +90,11 @@ project, the mail domain and the hostname of the mail server.
   reaches the public range. Without it you can send mail but not receive it.
 - Outgoing address. Outgoing mail must leave from a public address with reverse DNS. Ask
   whether the platform sends the mail of your pods from the address of the mail Service.
-  If it does not, set `egressService.enabled=true` with the same pool annotation; outgoing
-  mail then leaves from the address of `mailu-postfix-egress`.
+  If it does not, set `egressService.enabled=true` with the same pool annotation in
+  `egressService.annotations`; outgoing mail then leaves from the address of
+  `mailu-postfix-egress`, which never shares. It cannot be the address of the mail
+  Service: that Service keeps the clients' addresses (`externalTrafficPolicy: Local`), and
+  a load balancer shares such an address only between Services that select the same pods.
 - DNS records. `<mail host>` is the first of `upstream.hostnames`, `<domain>` is
   `upstream.domain`, `<address>` is shown by `oc get service mailu-front-ext`.
 
@@ -91,21 +102,22 @@ project, the mail domain and the hostname of the mail server.
   |---|---|---|
   | `A` | `<mail host>` | `<address>` |
   | `MX` | `<domain>` | `10 <mail host>` |
-  | `TXT` | `<domain>` | `v=spf1 mx -all` (SPF). Add `ip4:<outgoing address>` when mail leaves from another address. |
+  | `TXT` | `<domain>` | `v=spf1 mx -all` (SPF). With `egressService.enabled`: `v=spf1 a:<outgoing host> mx -all`. |
+  | `A` | `<outgoing host>` | `<outgoing address>`, shown by `oc get service mailu-postfix-egress`. Only with `egressService.enabled`. |
   | `TXT` | `dkim._domainkey.<domain>` | The record shown in the admin interface under Mail domains, Details (DKIM). Press Generate keys first, unless `global.dkim.managed=true`. |
   | `TXT` | `_dmarc.<domain>` | `v=DMARC1; p=quarantine; rua=mailto:postmaster@<domain>` (DMARC) |
   | `CNAME` | `autoconfig.<domain>` | `<mail host>`. Optional; also set `mailService.ports.http` and `https` to true. |
-  | `PTR` | `<outgoing address>` | `<mail host>`. Set by the owner of the address: ask the platform team. |
+  | `PTR` | `<outgoing address>` | `<mail host>`, or `<outgoing host>` with `egressService.enabled`. Set by the owner of the address: ask the platform team. |
 
   Your own DNS zone: create these records at your DNS provider. Start with `A` and wait
   until it resolves, then `MX`; mail for the domain arrives here from that moment.
 
   A zone the platform serves: set `dns.enabled=true` and `global.dkim.managed=true`. The
-  `A` record then follows the Service, SPF and DMARC are requested with a DNSEndpoint,
-  and the DKIM record follows the signing key that cert-manager keeps in the Secret
-  `mailu-dkim`. The `MX` record is not written by the platform: ask the platform team
-  for `MX <domain> 10 <mail host>.` and check with `dig MX <domain>`. Do not press
-  Generate keys with a managed key: the key file is read-only.
+  `A` records then follow the Services, `MX`, SPF and DMARC are requested with a
+  DNSEndpoint, and the DKIM record follows the signing key that cert-manager keeps in the
+  Secret `mailu-dkim`. Check with `dig MX <domain>`: a DNS provider that does not write
+  `MX` records from a DNSEndpoint leaves it out, then ask the platform team for it. Do
+  not press Generate keys with a managed key: the key file is read-only.
 - Shared address. With `global.publicAddress.shared=true` the public Services of the
   project that can share one address do so, and switch to `externalTrafficPolicy:
   Cluster`. The mail Service keeps its own address: behind a shared address every
@@ -118,7 +130,10 @@ project, the mail domain and the hostname of the mail server.
 - Webmail hostname. A `route.hostname` outside the default application domain needs a DNS
   record pointing at the platform's ingress.
 - Certificate. Ask for the name of the issuer and set `certificate.enabled=true` and
-  `certificate.issuerName`. The certificate is issued once the DNS records exist.
+  `certificate.issuerName`. The certificate is issued once the DNS records exist. The
+  `<mail host>` points at the mail Service, not at the platform's ingress, so an issuer
+  that proves the name over HTTP (ACME HTTP-01) cannot issue it: the issuer must prove it
+  through DNS (ACME DNS-01) for the zone of the mail domain.
 - Monitoring. `monitoring.enabled=true` needs the role `monitoring-edit` in your project.
 - With `secrets.type=externalSecret`, create four items in your vault collection, named
   as in `secrets.externalSecret.items`, each with the value in the password field, and

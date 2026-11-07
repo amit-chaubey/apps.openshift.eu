@@ -1,0 +1,25 @@
+{
+  "name": "Agent bridge",
+  "guid": "asc.{df70ce25-fed9-41b6-9a25-f50497e3988d}",
+  "version": "1.0.0",
+  "baseUrl": "",
+  "variations": [
+    {
+      "description": "Lets the browser session of an agent edit the document through the plugin API; invisible, does nothing on its own",
+      "url": "index.html",
+      "icons": [],
+      "type": "system",
+      "isSystem": true,
+      "isViewer": true,
+      "EditorsSupport": ["word", "cell", "slide"],
+      "isVisual": false,
+      "isModal": false,
+      "isInsideMode": false,
+      "initDataType": "none",
+      "initData": "",
+      "isUpdateOleOnResize": false,
+      "buttons": [],
+      "events": []
+    }
+  ]
+}

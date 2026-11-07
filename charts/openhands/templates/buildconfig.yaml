@@ -1,6 +1,6 @@
 {{- if .Values.build.enabled }}
 {{- $name := include "openhands.name" . }}
-{{- $hash := include "openhands.buildHash" . }}
+{{- $build := include "openhands.buildName" . }}
 {{- if ne .Values.build.output.kind "DockerImage" }}
 apiVersion: image.openshift.io/v1
 kind: ImageStream
@@ -10,20 +10,26 @@ metadata:
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: build
+  annotations:
+    # before the build, which pushes into it
+    argocd.argoproj.io/sync-wave: "-2"
 spec:
   lookupPolicy:
     local: true
 ---
 {{- end }}
-# build context of the Containerfile; the name hash keeps a running build's inputs fixed
+# build context of the Containerfile, one per image tag
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $name }}-build-{{ $hash }}
+  name: {{ $build }}
   namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: build
+  annotations:
+    # before the build-wait Job
+    argocd.argoproj.io/sync-wave: "-2"
 data:
   install-tools.sh: |
 {{ .Files.Get "files/install-tools.sh" | indent 4 }}
@@ -40,15 +46,18 @@ data:
   patch-acp-usage.py: |
 {{ .Files.Get "files/patch-acp-usage.py" | indent 4 }}
 ---
-# the name hash makes ConfigChange rebuild when the Containerfile or the toolset changes
+# a new image tag is a new BuildConfig, which ConfigChange builds once
 apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
-  name: {{ $name }}-{{ $hash }}
+  name: {{ $build }}
   namespace: {{ include "openhands.namespace" . }}
   labels:
     {{- include "openhands.labels" . | nindent 4 }}
     app.kubernetes.io/component: build
+  annotations:
+    # before the build-wait Job
+    argocd.argoproj.io/sync-wave: "-2"
 spec:
   runPolicy: Serial
   source:
@@ -57,7 +66,7 @@ spec:
       {{- include "openhands.containerfile" . | nindent 6 }}
     configMaps:
     - configMap:
-        name: {{ $name }}-build-{{ $hash }}
+        name: {{ $build }}
   strategy:
     type: Docker
     dockerStrategy:
@@ -90,4 +99,111 @@ spec:
   - type: ConfigChange
   resources:
     {{- toYaml .Values.build.resources | nindent 4 }}
+{{- if .Values.build.wait.enabled }}
+---
+# the build-wait Job reads builds of the namespace and nothing else
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}-build-wait
+  namespace: {{ include "openhands.namespace" . }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: build
+  annotations:
+    # before the build-wait Job
+    argocd.argoproj.io/sync-wave: "-2"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}-build-wait
+  namespace: {{ include "openhands.namespace" . }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: build
+  annotations:
+    # before the build-wait Job
+    argocd.argoproj.io/sync-wave: "-2"
+rules:
+- apiGroups:
+  - build.openshift.io
+  resources:
+  - builds
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-build-wait
+  namespace: {{ include "openhands.namespace" . }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: build
+  annotations:
+    # before the build-wait Job
+    argocd.argoproj.io/sync-wave: "-2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}-build-wait
+subjects:
+- kind: ServiceAccount
+  name: {{ $name }}-build-wait
+  namespace: {{ include "openhands.namespace" . }}
+---
+# Argo CD changes the StatefulSet (wave 0) only after the image of this tag is built:
+# until then the pod keeps running the previous image
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-wait" $build | trunc 63 | trimSuffix "-" }}
+  namespace: {{ include "openhands.namespace" . }}
+  labels:
+    {{- include "openhands.labels" . | nindent 4 }}
+    app.kubernetes.io/component: build
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    # a failed Job stays until the next sync, for its log
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    # after the BuildConfig, before the StatefulSet
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ int .Values.build.wait.timeoutSeconds }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}-build-wait
+        app.kubernetes.io/name: openhands
+    spec:
+      serviceAccountName: {{ $name }}-build-wait
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: wait
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - -c
+        - |
+          {{- .Files.Get "files/wait-build.py" | nindent 10 }}
+        env:
+        - name: BUILD_CONFIG
+          value: {{ $build }}
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
+{{- end }}
 {{- end }}

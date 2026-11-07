@@ -1,9 +1,9 @@
 apiVersion: v2
 name: nextcloud
-description: Nextcloud files, calendar and contacts with OnlyOffice document editing, Talk, an AI assistant, whiteboard, push and a MariaDB database with backup
+description: Nextcloud files, calendar and contacts with OnlyOffice document editing, Talk, an AI assistant, whiteboard, push and a MariaDB database with backup, and three MCP servers for agents on its own host (Nextcloud, Office documents, live co-editing with people)
 type: application
-version: 0.7.0
-appVersion: "33.0.10"
+version: 0.17.3
+appVersion: "35.0.2"
 home: https://apps.openshift.eu
 icon: https://raw.githubusercontent.com/nextcloud/promo/master/nextcloud-icon.svg
 keywords:
@@ -19,11 +19,27 @@ maintainers:
 annotations:
   charts.openshift.io/name: Nextcloud
   charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/category: collaboration
+  apps.openshift.eu/vendor: Nextcloud GmbH
 dependencies:
 - name: nextcloud
   version: 9.1.4
   repository: https://nextcloud.github.io/helm/
 - name: mailu
-  version: 0.1.5
-  repository: https://apps.openshift.eu
+  version: 0.2.4
+  repository: file://../mailu
   condition: mailu.enabled
+- name: mcp-nextcloud
+  version: 0.1.0
+  repository: file://../mcp-nextcloud
+  condition: mcp-nextcloud.enabled
+- name: mcp-officeagent
+  version: 0.3.1
+  repository: file://../mcp-officeagent
+  # needs OnlyOffice; its own enabled switches it off inside
+  condition: onlyoffice.enabled
+- name: mcp-onlyoffice-live
+  version: 0.2.0
+  repository: file://../mcp-onlyoffice-live
+  # needs OnlyOffice; its own enabled switches it off inside
+  condition: onlyoffice.enabled

@@ -1,0 +1,11 @@
+{{- /* the setup script runs at Nextcloud start: the pod annotation that rolls it must follow the chart version */ -}}
+{{- $v := index (.Values.nextcloud.podAnnotations | default dict) "chart-version" | toString -}}
+{{- if ne $v .Chart.Version -}}
+{{- fail (printf "nextcloud.podAnnotations.chart-version is %q, set it to the chart version %q" $v .Chart.Version) -}}
+{{- end -}}
+{{- if and .Values.mailu.enabled .Values.mailRoute.enabled -}}
+{{- $f := index (.Values.mailu.upstream.front.podAnnotations | default dict) "chart-version" | toString -}}
+{{- if ne $f .Chart.Version -}}
+{{- fail (printf "mailu.upstream.front.podAnnotations.chart-version is %q, set it to the chart version %q" $f .Chart.Version) -}}
+{{- end -}}
+{{- end -}}

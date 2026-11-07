@@ -1,0 +1,13 @@
+# The bundles; each takes the values of its chart. Switch a bundle on with enabled: true
+# and leave single servers of it out with <server>.enabled: false, for example
+# googleWorkspace: {enabled: true, googleDrive: {enabled: false}}
+
+# mcp-bundle-google-workspace: Gmail, Drive, Docs, Sheets, Calendar; secrets holds the
+# shared Google OAuth client
+googleWorkspace:
+  enabled: false
+
+# mcp-bundle-microsoft-365: microsoft365 holds the values of mcp-microsoft-365 (route.host,
+# microsoft.tenantId, secrets)
+microsoft365:
+  enabled: false

@@ -42,6 +42,27 @@
           "type": "string",
           "title": "Hostname of OnlyOffice",
           "description": "Leave empty for office-<hostname of Nextcloud>"
+        },
+        "agentBridge": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "title": "Plugin for the live editing MCP server",
+              "description": "Serve the agent-bridge plugin from the document server, through which agents edit documents live"
+            }
+          }
+        },
+        "lockFiles": {
+          "type": "boolean",
+          "title": "Lock open files",
+          "description": "Enable the Nextcloud app files_lock, so a file open in OnlyOffice cannot be overwritten by another write"
+        },
+        "editFormats": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["odt", "ods", "odp", "rtf", "txt", "csv"]},
+          "title": "Editable formats",
+          "description": "Formats OnlyOffice opens for editing besides docx, xlsx and pptx; saving them may lose formatting"
         }
       }
     },
@@ -249,6 +270,64 @@
           "type": "string",
           "title": "Default phone region",
           "description": "Country code such as NL; empty leaves it unset"
+        },
+        "apps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "title": "Apps installed at every start",
+          "description": "Store app ids; groupfolders is Team folders"
+        }
+      }
+    },
+    "mail": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Mailbox in the Mail app for every user with an address in a mail domain"
+        },
+        "domains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+          },
+          "title": "Mail domains",
+          "description": "Domains hosted on the mail server; empty: the Mailu domain"
+        }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "route": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "type": "string",
+              "pattern": "^[0-9]+(ms|s|m|h|d)$"
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     }

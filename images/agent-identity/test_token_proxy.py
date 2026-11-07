@@ -48,6 +48,11 @@ class FakeUpstream:
                 if self.path == "/stream":
                     self._stream()
                     return
+                if self.path == "/idle-stream":
+                    self._idle_stream()
+                    return
+                if self.path.startswith("/slow"):
+                    time.sleep(1.5)
                 if self.path == "/short":
                     self.send_response(200)
                     self.send_header("Content-Length", "100")
@@ -78,6 +83,17 @@ class FakeUpstream:
                         # chunk 2 is only sent once the client has read chunk 1
                         outer.first_chunk_read.wait(timeout=10)
                 self.wfile.write(b"0\r\n\r\n")
+
+            def _idle_stream(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                self.wfile.flush()
+                # silent for longer than the proxy's upstream timeout
+                time.sleep(1.5)
+                data = b"data: late\n\n"
+                self.wfile.write(b"%x\r\n%s\r\n0\r\n\r\n" % (len(data), data))
 
         self.server = serve(Handler)
         self.url = f"http://127.0.0.1:{self.server.server_port}"
@@ -176,6 +192,26 @@ class ForwardTest(ProxyCase):
         self.upstream.first_chunk_read.set()
         self.assertIn(b"data: 3", resp.read())
 
+    def test_idle_event_stream_outlives_the_upstream_timeout(self):
+        self.patch_timeout(0.5)
+        _, resp = self.get("/idle-stream")
+        self.assertEqual(resp.status, 200)
+        self.assertIn(b"data: late", resp.read())
+
+    def test_slow_plain_response_still_times_out(self):
+        self.patch_timeout(0.5)
+        with self.assertLogs(level="ERROR") as logs:
+            _, resp = self.get("/slow?key=hidden")
+            resp.read()
+        self.assertEqual(resp.status, 502)
+        self.assertIn("GET /slow", "".join(logs.output))
+        self.assertNotIn("hidden", "".join(logs.output))
+
+    def patch_timeout(self, seconds):
+        saved = tp.UPSTREAM_TIMEOUT
+        tp.UPSTREAM_TIMEOUT = seconds
+        self.addCleanup(setattr, tp, "UPSTREAM_TIMEOUT", saved)
+
     def test_short_upstream_body_does_not_hang_client(self):
         started = time.monotonic()
         _, resp = self.get("/short")
@@ -259,7 +295,7 @@ class AgentTokenTest(ProxyCase):
 
     def test_mcp_path_carries_the_agent_token(self):
         self.start_token_endpoint()
-        _, resp = self.get("/mcp/hoolia-aib/nextcloud")
+        _, resp = self.get("/mcp/acme-agents/nextcloud")
         resp.read()
         self.assertEqual(self.upstream.requests[0][2]["Authorization"], "Bearer kc-1")
         form = self.token_endpoint.forms[0]
@@ -305,7 +341,7 @@ class AgentTokenTest(ProxyCase):
         self.addCleanup(self.proxy.server_close)
         self.port = self.proxy.server_port
         for _ in range(2):
-            _, resp = self.get("/mcp/grncloud-engineering/gitlab")
+            _, resp = self.get("/mcp/acme-engineering/gitlab")
             resp.read()
         self.proxy.shutdown()
         self.assertEqual(self.tenant_endpoint.forms[0]["client_assertion"], "sa-for-the-realm")
@@ -334,6 +370,129 @@ class AgentTokenTest(ProxyCase):
                 os.environ.pop(key, None)
                 if value is not None:
                     os.environ[key] = value
+
+
+def self_signed(directory):
+    """A certificate for 127.0.0.1 and its key, made with the openssl command."""
+    import subprocess
+    cert, key = os.path.join(directory, "cert.pem"), os.path.join(directory, "key.pem")
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+                    "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1",
+                    "-keyout", key, "-out", cert], check=True, capture_output=True)
+    return cert, key
+
+
+class TargetTest(AgentTokenTest):
+    """/_target/<id>: the agent token to a URL the MCP sync registered, and nowhere else."""
+
+    def setUp(self):
+        super().setUp()
+        import ssl
+        directory = tempfile.mkdtemp(prefix="token-proxy-targets-")
+        self.cert, key = self_signed(directory)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(self.cert, key)
+        self.tls = FakeUpstream()
+        self.tls.server.socket = context.wrap_socket(self.tls.server.socket, server_side=True)
+        self.tls_url = f"https://127.0.0.1:{self.tls.server.server_port}"
+        self.targets_file = os.path.join(directory, "targets.json")
+        self.write_targets({"acme-agents.officeagent": self.tls_url + "/mcp/officeagent",
+                            "acme-agents.plain": "http://127.0.0.1:1/mcp",
+                            "acme-agents.svc": "http://officeagent.acme-nextcloud.svc:13080/"})
+        saved = os.environ.get("SSL_CERT_FILE")
+        os.environ["SSL_CERT_FILE"] = self.cert
+        self.addCleanup(lambda: os.environ.pop("SSL_CERT_FILE", None) if saved is None
+                        else os.environ.__setitem__("SSL_CERT_FILE", saved))
+
+    def write_targets(self, targets):
+        with open(self.targets_file + ".tmp", "w") as handle:
+            json.dump(targets, handle)
+        os.replace(self.targets_file + ".tmp", self.targets_file)
+
+    def start_with_targets(self):
+        self.start_token_endpoint()
+        self.proxy.shutdown()
+        self.proxy.server_close()
+        self.settings = tp.Settings(
+            token_file=self.token_file, upstream=self.upstream.url, port=0,
+            agent_token_url=self.token_endpoint.url, agent_token_assertion_file=self.assertion_file,
+            agent_token_paths=("/mcp",), targets_file=self.targets_file)
+        self.proxy = tp.build_server(self.settings, port=0)
+        threading.Thread(target=self.proxy.serve_forever, daemon=True).start()
+        self.addCleanup(self.proxy.shutdown)
+        self.addCleanup(self.proxy.server_close)
+        self.port = self.proxy.server_port
+
+    def test_registered_target_gets_the_agent_token_over_verified_tls(self):
+        self.start_with_targets()
+        _, resp = self.get("/_target/acme-agents.officeagent", headers={"Authorization": "Bearer caller"},
+                           method="POST", body=b'{"jsonrpc":"2.0"}')
+        self.assertEqual(resp.status, 200)
+        resp.read()
+        method, path, headers, body = self.tls.requests[0]
+        self.assertEqual((method, path, body), ("POST", "/mcp/officeagent", b'{"jsonrpc":"2.0"}'))
+        self.assertEqual(headers["Authorization"], "Bearer kc-1")
+        self.assertEqual(headers["Host"], f"127.0.0.1:{self.tls.server.server_port}")
+        self.assertEqual(self.upstream.requests, [])
+
+    def test_target_keeps_the_rest_of_the_path_and_the_query(self):
+        self.start_with_targets()
+        _, resp = self.get("/_target/acme-agents.officeagent/sub?x=1")
+        resp.read()
+        self.assertEqual(self.tls.requests[0][1], "/mcp/officeagent/sub?x=1")
+
+    def test_target_relays_an_event_stream(self):
+        self.start_with_targets()
+        self.write_targets({"acme-agents.stream": self.tls_url + "/stream"})
+        _, resp = self.get("/_target/acme-agents.stream")
+        self.assertEqual(resp.getheader("Content-Type"), "text/event-stream")
+        self.assertEqual(resp.read1(64), b"data: 1\n\n")
+        self.tls.first_chunk_read.set()
+        self.assertEqual(resp.read(), b"data: 2\n\ndata: 3\n\n")
+
+    def test_unknown_target_is_refused_without_a_token(self):
+        self.start_with_targets()
+        for path in ("/_target/other", "/_target/../etc", "/_target/https:%2F%2Fevil.example"):
+            _, resp = self.get(path)
+            self.assertEqual(resp.status, 403)
+            resp.read()
+        self.assertEqual(self.tls.requests + self.upstream.requests, [])
+        self.assertEqual(self.token_endpoint.forms, [])
+
+    def test_plain_http_target_outside_the_cluster_is_refused(self):
+        self.start_with_targets()
+        _, resp = self.get("/_target/acme-agents.plain")
+        self.assertEqual(resp.status, 403)
+        resp.read()
+        self.assertTrue(tp.target_allowed("http://officeagent.acme-nextcloud.svc:13080/"))
+        self.assertTrue(tp.target_allowed("http://x.y.svc.cluster.local/mcp"))
+        self.assertFalse(tp.target_allowed("http://127.0.0.1/mcp"))
+        self.assertFalse(tp.target_allowed("ftp://x.svc/"))
+
+    def test_untrusted_certificate_is_refused(self):
+        self.start_with_targets()
+        os.environ["SSL_CERT_FILE"] = os.path.join(os.path.dirname(self.targets_file), "absent.pem")
+        with self.assertLogs(level="ERROR"):
+            _, resp = self.get("/_target/acme-agents.officeagent")
+            resp.read()
+        self.assertEqual(resp.status, 502)
+        self.assertEqual(self.tls.requests, [])
+
+    def test_targets_file_is_read_again_when_it_changes(self):
+        self.start_with_targets()
+        self.write_targets({})
+        time.sleep(0.01)
+        os.utime(self.targets_file, (time.time() + 5, time.time() + 5))
+        _, resp = self.get("/_target/acme-agents.officeagent")
+        self.assertEqual(resp.status, 403)
+        resp.read()
+
+    def test_without_targets_file_the_prefix_is_refused(self):
+        self.start_token_endpoint()
+        _, resp = self.get("/_target/acme-agents.officeagent")
+        self.assertEqual(resp.status, 403)
+        resp.read()
+        self.assertEqual(self.tls.requests, [])
 
 
 if __name__ == "__main__":

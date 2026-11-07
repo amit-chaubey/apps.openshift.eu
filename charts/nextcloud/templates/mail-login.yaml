@@ -1,0 +1,133 @@
+{{- /*
+Webmail login on https://<host>/mail/login: oauth2-proxy signs the user in at the OpenID
+Connect provider and calls Mailu's /sso/login through the front, with the user's email in
+the header from Secret nextcloud-mail-login; Mailu logs that mailbox in and redirects to url
+*/ -}}
+{{- if include "wrapper.mailLoginActive" . }}
+{{- $front := printf "%s-front" (.Values.mailu.upstream.fullnameOverride | default "mailu") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nextcloud-mail-login
+  annotations:
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"{{ $front }}"}]'
+    app.openshift.io/vcs-uri: https://github.com/oauth2-proxy/oauth2-proxy
+  labels:
+    app: nextcloud-mail-login
+    app.kubernetes.io/name: nextcloud-mail-login
+    app.kubernetes.io/instance: nextcloud-mail-login
+    app.kubernetes.io/component: mail-login
+    app.kubernetes.io/part-of: nextcloud-mail
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: golang
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "wrapper.labels" "nextcloud-mail-login" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "wrapper.labels" "nextcloud-mail-login" | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - name: oauth2-proxy
+        image: {{ .Values.mailRoute.sso.image }}
+        imagePullPolicy: IfNotPresent
+        args:
+        - --alpha-config=/etc/mail-login/alpha.yaml
+        - --cookie-secret-file=/etc/mail-login/cookie-secret
+        - --cookie-name=_mail_login
+        - --cookie-path=/mail/login
+        - --cookie-secure=true
+        - --cookie-samesite=lax
+        - --proxy-prefix=/mail/login/oauth2
+        - --redirect-url=https://{{ include "wrapper.host" . }}/mail/login/oauth2/callback
+        - --email-domain=*
+        - --skip-provider-button=true
+        {{- if .Values.sso.enabled }}
+        # the pod waits for the platform's Secret and reads it at start
+        env:
+        - name: SSO_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: public-nextcloud
+              key: sso-client-id
+        - name: SSO_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: public-nextcloud
+              key: sso-client-secret
+        - name: SSO_ISSUER_URL
+          valueFrom:
+            secretKeyRef:
+              name: public-nextcloud
+              key: sso-issuer-url
+        {{- end }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: http
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.mailRoute.sso.resources | nindent 10 }}
+        securityContext:
+          {{- include "wrapper.restricted" . | nindent 10 }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/mail-login
+          readOnly: true
+        {{- if not .Values.sso.enabled }}
+        - name: oidc
+          mountPath: /etc/oidc
+          readOnly: true
+        {{- end }}
+      volumes:
+      - name: config
+        secret:
+          secretName: nextcloud-mail-login
+          items:
+          - key: alpha.yaml
+            path: alpha.yaml
+          - key: cookie-secret
+            path: cookie-secret
+      {{- if not .Values.sso.enabled }}
+      - name: oidc
+        secret:
+          secretName: nextcloud-oidc
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nextcloud-mail-login
+  labels:
+    app: nextcloud-mail-login
+    app.kubernetes.io/name: nextcloud-mail-login
+    app.kubernetes.io/instance: nextcloud-mail-login
+    app.kubernetes.io/component: mail-login
+    app.kubernetes.io/part-of: nextcloud-mail
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+    protocol: TCP
+  selector:
+    {{- include "wrapper.labels" "nextcloud-mail-login" | nindent 4 }}
+---
+{{ include "wrapper.pathRoute" (dict "root" . "name" "nextcloud-mail-login" "partOf" "nextcloud-mail" "path" "/mail/login" "rewrite" "/mail/login" "port" "http") }}
+{{- end }}

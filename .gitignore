@@ -1,3 +1,5 @@
 charts/*/charts/
 *.tgz
 __pycache__/
+site/
+node_modules/

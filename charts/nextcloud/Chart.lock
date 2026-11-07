@@ -3,7 +3,16 @@ dependencies:
   repository: https://nextcloud.github.io/helm/
   version: 9.1.4
 - name: mailu
-  repository: https://apps.openshift.eu
-  version: 0.1.5
-digest: sha256:9f3dd6808a212c8d2073c0bfb48b0661fe223680fd9e5988c82107c483ebcef5
-generated: "2026-10-11T16:27:44.731918843Z"
+  repository: file://../mailu
+  version: 0.2.4
+- name: mcp-nextcloud
+  repository: file://../mcp-nextcloud
+  version: 0.1.0
+- name: mcp-officeagent
+  repository: file://../mcp-officeagent
+  version: 0.3.1
+- name: mcp-onlyoffice-live
+  repository: file://../mcp-onlyoffice-live
+  version: 0.2.0
+digest: sha256:60396cb2b5a2c3ff170ae7301698f67ab47135a04c05dbf5b95e045bf95a359e
+generated: "2026-11-02T19:33:25.237418187Z"

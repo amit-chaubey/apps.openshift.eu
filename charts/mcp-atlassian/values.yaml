@@ -1,0 +1,136 @@
+# Team of the tenant the server serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the server belongs to; required with team
+tenant: ""
+
+image:
+  repository: ghcr.io/sooperset/mcp-atlassian
+  tag: 0.23.1
+  pullPolicy: IfNotPresent
+
+# Atlassian Cloud site; both URLs may be empty to serve only one product
+jira:
+  url: ""
+confluence:
+  url: ""
+
+credentials:
+  # perCaller: the server holds no account; every request carries its caller's own
+  # Atlassian account (Authorization: Basic base64(email:api_token) or Bearer) and a request
+  # without one is refused. shared: one account for every caller, from existingSecret
+  mode: perCaller
+  # Request header an MCP gateway copies into the backend Authorization, so a caller can
+  # authenticate to the gateway and to Atlassian at once (Service annotation
+  # agentgateway.dev/mcp-credential-header). Empty: no annotation
+  gatewayHeader: X-Atlassian-Authorization
+  # shared mode: a caller that sends its own account in gatewayHeader acts as itself; the
+  # shared account serves callers without one. Needs gatewayHeader, not auth.enabled
+  callerOverride: false
+  # Cloud ID of the site (https://<site>/_edge/tenant_info). Bearer tokens (OAuth access
+  # tokens, service account API keys) then go to api.atlassian.com/ex/<product>/<cloudId>.
+  # In shared mode it needs the shared account as ATLASSIAN_OAUTH_ACCESS_TOKEN in
+  # existingSecret. Empty: Bearer tokens go to the site URL, which refuses them
+  cloudId: ""
+  # shared mode: Secret with JIRA_USERNAME, JIRA_API_TOKEN (and CONFLUENCE_* if different),
+  # or with cloudId ATLASSIAN_OAUTH_ACCESS_TOKEN
+  existingSecret: ""
+
+# Extra plain environment variables of the server, name to value
+env: {}
+
+port: 8000
+path: /mcp
+
+mcp:
+  # Port appProtocol an MCP gateway discovers
+  appProtocol: agentgateway.dev/mcp
+  # Tool prefix on the gateway (<targetName>_<tool>)
+  targetName: atlassian
+
+service:
+  # Extra Service labels, for example the platform's exposure label
+  labels: {}
+  annotations: {}
+
+podLabels: {}
+podAnnotations: {}
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+# Token check in front of the server (an oauth2-proxy sidecar): every request but the health
+# paths needs a bearer JWT of auth.issuerUrl for one of auth.audiences; the Service port then
+# reaches the sidecar and the server listens on localhost only. Off: the server asks callers
+# for no credential, so only a gateway that authenticates callers may reach it
+auth:
+  enabled: false
+  # OpenID Connect issuer of the tokens (the iss claim). Empty with auth.enabled: every
+  # request but the health paths is refused (401)
+  issuerUrl: ""
+  # a token's aud claim must name one of these; empty: the release namespace. Each entry is
+  # a template, for example "{{ .Release.Namespace }}"
+  audiences: []
+  # a token's groups claim must name one of these (403 otherwise); empty: any group. Each
+  # entry is a template
+  allowedGroups: []
+  # address callers use for the server, the resource of its protected resource metadata
+  # (/.well-known/oauth-protected-resource, served without a token); a template. Empty: the
+  # Service inside the cluster
+  resourceUrl: ""
+  # claim that carries the groups of the caller
+  groupsClaim: groups
+  # localhost port of the server behind the sidecar
+  upstreamPort: 18000
+  # requests that pass without a token, method=path_regex or path_regex, for example the
+  # server's health path for its probes
+  skipAuthRoutes: []
+  # longest wait for the server's response headers; a tool call may take that long
+  upstreamTimeout: 3600s
+  # how often a streamed response is flushed; event streams are flushed at once
+  flushInterval: 100ms
+  # existing Secret with the keys cookie-secret and client-secret; empty: <name>-auth,
+  # written by the chart from the two values below
+  existingSecret: ""
+  # seed of the session cookie (16, 24 or 32 bytes); empty: generated once and kept. A
+  # GitOps tool that renders without cluster access must pass it
+  cookieSecret: ""
+  # client secret the proxy requires but never uses (bearer tokens only); empty: generated
+  # once and kept. A GitOps tool that renders without cluster access must pass it
+  clientSecret: ""
+  # further oauth2-proxy flags, for example --oidc-email-claim=sub
+  extraArgs: []
+  # oauth2-proxy image, published by the oauth2-proxy project
+  image:
+    repository: quay.io/oauth2-proxy/oauth2-proxy
+    tag: v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+    pullPolicy: IfNotPresent
+  # requests and limits of the sidecar
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+networkPolicy:
+  enabled: true
+  # Namespaces (label selectors) that may call the server besides its own, e.g. the gateway's
+  ingressNamespaces: []
+  egress:
+    # The server reaches the public internet only (Atlassian Cloud)
+    enabled: true
+    exceptCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - 169.254.0.0/16
+    - 127.0.0.0/8
+    dnsNamespace: openshift-dns
+    dnsPort: 5353

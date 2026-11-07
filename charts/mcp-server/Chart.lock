@@ -1,0 +1,6 @@
+dependencies:
+- name: mcp-auth
+  repository: file://../mcp-auth
+  version: 0.1.0
+digest: sha256:b319a40a8a739bec12eacd509a76e50d504fde9ec630d9617bf8f705363a6846
+generated: "2026-10-27T08:19:11.17947636Z"

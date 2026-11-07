@@ -80,18 +80,30 @@ the cluster, else a new random one. Takes value, existing (Secret data), key, le
 {{- end }}
 {{- end -}}
 
-{{/* A changed Containerfile, build script or toolset gets a new image tag */}}
-{{- define "openhands.buildHash" -}}
-{{- list (include "openhands.containerfile" .) (.Files.Get "files/install-tools.sh") (.Files.Get "files/verify-tools.sh") (.Files.Get "files/mcp_oauth_redirect.py") (include "openhands.toolsTxt" .) (include "openhands.checksTxt" .) | join "\n" | sha256sum | trunc 8 -}}
+{{/* Upstream image: by digest when one is given (tag plus digest is refused by some pullers) */}}
+{{- define "openhands.upstreamImage" -}}
+{{- if .Values.image.digest -}}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.image.repository .Values.image.tag -}}
+{{- end -}}
 {{- end -}}
 
+{{/* Built image tag: upstream version, chart version, optional build.revision */}}
 {{- define "openhands.imageTag" -}}
-{{- printf "%s-%s" .Values.image.tag (include "openhands.buildHash" .) -}}
+{{- $tag := printf "%s-%s" .Values.image.tag (.Chart.Version | replace "+" "_") -}}
+{{- with .Values.build.revision }}{{ $tag = printf "%s-%v" $tag . }}{{ end -}}
+{{- $tag -}}
+{{- end -}}
+
+{{/* Name of the BuildConfig and its build context: one per image tag */}}
+{{- define "openhands.buildName" -}}
+{{- printf "%s-%s" (include "openhands.name" .) (include "openhands.imageTag" . | lower | replace "." "-" | replace "_" "-") -}}
 {{- end -}}
 
 {{- define "openhands.image" -}}
 {{- if not .Values.build.enabled -}}
-{{- printf "%s:%s" .Values.image.repository .Values.image.tag -}}
+{{- include "openhands.upstreamImage" . -}}
 {{- else if eq .Values.build.output.kind "DockerImage" -}}
 {{- printf "%s:%s" (required "build.output.name is required for DockerImage" .Values.build.output.name) (include "openhands.imageTag" .) -}}
 {{- else -}}
@@ -121,14 +133,31 @@ seccompProfile:
 {{- with .Values.llm.models -}}
 {{- $_ := set $llm "models" . -}}
 {{- end -}}
+{{- with .Values.llm.profileDefaults -}}
+{{- $_ := set $llm "profileDefaults" . -}}
+{{- end -}}
 {{- if .Values.llm.gatewayModels -}}
 {{- $_ := set $llm "gatewayModels" true -}}
+{{- end -}}
+{{- if and (not .Values.llm.model) .Values.llm.preferredModels -}}
+{{- $_ := set $llm "preferredModels" .Values.llm.preferredModels -}}
 {{- end -}}
 {{- end -}}
 {{- with .Values.llm.model -}}
 {{- $_ := set $llm "model" . -}}
 {{- end -}}
 {{- if $llm }}{{ toJson $llm }}{{ end -}}
+{{- end -}}
+
+{{/* condenser settings the seed script writes, in the agent-server's field names; its
+     token limit is each LLM's max_input_tokens (llm.profileDefaults) */}}
+{{- define "openhands.seedCondenser" -}}
+{{- $c := .Values.condenser -}}
+{{- if ge (int $c.keepFirst) (sub (div (int $c.maxSize) 2) 1) -}}
+{{- fail "condenser.keepFirst must be less than condenser.maxSize / 2 - 1" -}}
+{{- end -}}
+{{- $out := dict "condenser_kind" "llm_summarizing" "enabled" $c.enabled "max_size" (int $c.maxSize) "keep_first" (int $c.keepFirst) "max_tokens" nil -}}
+{{- toJson $out -}}
 {{- end -}}
 
 {{/* skill marketplaces the seed script registers, in the agent-server's field names */}}
@@ -152,9 +181,65 @@ seccompProfile:
 {{- $_ := set $servers .name $s -}}
 {{- end -}}
 {{- if .Values.kubernetesMcpServer.enabled -}}
-{{- $_ := set $servers "kubernetes" (dict "command" "/tools/kubernetes-mcp-server" "args" (list "--config" "/opt/openhands-scripts/kubernetes-mcp-server.toml" "--disable-multi-cluster") "transport" "stdio" "timeout" 60 "icon" "https://cdn.simpleicons.org/kubernetes" "passEnv" (list "KUBERNETES_SERVICE_HOST" "KUBERNETES_SERVICE_PORT")) -}}
+{{- $_ := set $servers "kubernetes" (dict "command" "/tools/kubernetes-mcp-server" "args" (list "--config" "/opt/openhands-scripts/kubernetes-mcp-server.toml" "--kubeconfig" "/opt/openhands-scripts/kubeconfig" "--disable-multi-cluster") "transport" "stdio" "timeout" 60 "icon" "https://cdn.simpleicons.org/kubernetes") -}}
 {{- end -}}
 {{- toJson $servers -}}
+{{- end -}}
+
+{{/* mcp as JSON; keys of the deprecated mcpDiscovery override it */}}
+{{- define "openhands.mcp" -}}
+{{- toJson (mergeOverwrite (deepCopy .Values.mcp) (deepCopy (.Values.mcpDiscovery | default dict))) -}}
+{{- end -}}
+
+{{/* names of mcp.servers, whose entries are a name or {name, url, auth} */}}
+{{- define "openhands.mcpServerNames" -}}
+{{- $names := list -}}
+{{- range (include "openhands.mcp" . | fromJson).servers -}}
+{{- if kindIs "string" . }}{{ $names = append $names . }}{{ else }}{{ $names = append $names .name }}{{ end -}}
+{{- end -}}
+{{- toJson $names -}}
+{{- end -}}
+
+{{/*
+mcp.servers entries with a url or an auth, for mcp-sync: name to {url, auth}, auth with
+the directory of the mounted vault secret and the file names; never a secret value
+*/}}
+{{- define "openhands.mcpServerSettings" -}}
+{{- $out := dict -}}
+{{- $vault := dict -}}
+{{- range .Values.vaultSecrets }}{{ $_ := set $vault .name . }}{{ end -}}
+{{- range (include "openhands.mcp" . | fromJson).servers -}}
+{{- if kindIs "map" . -}}
+{{- $s := dict -}}
+{{- with .url }}{{ $_ := set $s "url" . }}{{ end -}}
+{{- with .auth -}}
+{{- $v := index $vault (.secretRef | default "") -}}
+{{- if not $v }}{{ fail (printf "mcp.servers auth.secretRef %q is not a vaultSecrets name" (.secretRef | default "")) }}{{ end -}}
+{{- $format := .format | default "basic" -}}
+{{- if not (has $format (list "basic" "bearer" "raw")) }}{{ fail (printf "mcp.servers auth.format %q: basic, bearer or raw" $format) }}{{ end -}}
+{{- $keys := list (required "mcp.servers auth.tokenKey is required" .tokenKey) -}}
+{{- if eq $format "basic" }}{{ $keys = append $keys (required "mcp.servers auth.userKey is required with format basic" .userKey) }}{{ end -}}
+{{- range $keys }}{{ if not (hasKey $v.data .) }}{{ fail (printf "mcp.servers auth: key %s is not in vaultSecrets %s data" . $v.name) }}{{ end }}{{ end -}}
+{{- $a := dict "dir" (printf "/var/run/vault-secrets/%s" $v.name) "header" (.header | default "Authorization") "format" $format "token" .tokenKey -}}
+{{- if eq $format "basic" }}{{ $_ := set $a "user" .userKey }}{{ end -}}
+{{- with .namespace }}{{ $_ := set $a "namespace" . }}{{ end -}}
+{{- $_ := set $s "auth" $a -}}
+{{- end -}}
+{{- if $s }}{{ $_ := set $out (required "mcp.servers[].name is required" .name) $s }}{{ end -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $out -}}
+{{- end -}}
+
+{{/* vaultSecrets names an mcp.servers auth refers to: mounted into mcp-sync */}}
+{{- define "openhands.mcpAuthSecrets" -}}
+{{- $names := list -}}
+{{- range (include "openhands.mcp" . | fromJson).servers -}}
+{{- if and (kindIs "map" .) .auth -}}
+{{- $names = append $names .auth.secretRef -}}
+{{- end -}}
+{{- end -}}
+{{- toJson ($names | uniq) -}}
 {{- end -}}
 
 {{/* URL other agents reach the A2A shim on: the kagent agent's Service, else the shim's */}}

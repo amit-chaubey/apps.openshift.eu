@@ -36,6 +36,60 @@ rbacProxy:
   # Subjects allowed to call: [{kind: ServiceAccount, name, namespace}]
   callers: []
 
+# Token check in front of the server (an oauth2-proxy sidecar): every request but the health
+# paths needs a bearer JWT of auth.issuerUrl for one of auth.audiences; the Service port then
+# reaches the sidecar and the server listens on localhost only. Off: the server asks callers
+# for no credential, so only a gateway that authenticates callers may reach it
+auth:
+  enabled: false
+  # OpenID Connect issuer of the tokens (the iss claim). Empty with auth.enabled: every
+  # request but the health paths is refused (401)
+  issuerUrl: ""
+  # a token's aud claim must name one of these; empty: the release namespace. Each entry is
+  # a template, for example "{{ .Release.Namespace }}"
+  audiences: []
+  # a token's groups claim must name one of these (403 otherwise); empty: any group. Each
+  # entry is a template
+  allowedGroups: []
+  # address callers use for the server, the resource of its protected resource metadata
+  # (/.well-known/oauth-protected-resource, served without a token); a template. Empty: the
+  # Service inside the cluster
+  resourceUrl: ""
+  # claim that carries the groups of the caller
+  groupsClaim: groups
+  # localhost port of the server behind the sidecar
+  upstreamPort: 18000
+  # requests that pass without a token, method=path_regex or path_regex, for example the
+  # server's health path for its probes
+  skipAuthRoutes: []
+  # longest wait for the server's response headers; a tool call may take that long
+  upstreamTimeout: 3600s
+  # how often a streamed response is flushed; event streams are flushed at once
+  flushInterval: 100ms
+  # existing Secret with the keys cookie-secret and client-secret; empty: <name>-auth,
+  # written by the chart from the two values below
+  existingSecret: ""
+  # seed of the session cookie (16, 24 or 32 bytes); empty: generated once and kept. A
+  # GitOps tool that renders without cluster access must pass it
+  cookieSecret: ""
+  # client secret the proxy requires but never uses (bearer tokens only); empty: generated
+  # once and kept. A GitOps tool that renders without cluster access must pass it
+  clientSecret: ""
+  # further oauth2-proxy flags, for example --oidc-email-claim=sub
+  extraArgs: []
+  # oauth2-proxy image, published by the oauth2-proxy project
+  image:
+    repository: quay.io/oauth2-proxy/oauth2-proxy
+    tag: v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+    pullPolicy: IfNotPresent
+  # requests and limits of the sidecar
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
 service:
   annotations: {}
 

@@ -15,7 +15,7 @@ while IFS= read -r line; do
   fi
 done < "$(dirname "$0")/checks.txt"
 grep -v "^agent:x:$(id -u):" /etc/passwd > /tmp/passwd && cat /tmp/passwd > /etc/passwd && rm -f /tmp/passwd
-rm -rf /tmp/.krew /tmp/.cache /tmp/.config /tmp/.local
+rm -rf /tmp/.krew /tmp/.cache /tmp/.config /tmp/.local /tmp/.azure
 if [ -n "$failed" ]; then
   echo "tools that do not run:$failed" >&2
   exit 1

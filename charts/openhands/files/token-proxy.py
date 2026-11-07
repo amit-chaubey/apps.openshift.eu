@@ -14,13 +14,21 @@ is the realm (federated client authentication), kept until shortly before
 it expires. With AGENT_TOKEN_VIA_URL set as well, that first grant goes to the
 tenant's own realm, and its token is the client assertion at AGENT_TOKEN_URL:
 the agent's identity lives in the tenant realm, which the shared realm federates.
+
+With TARGETS_FILE set as well, a request to /_target/<id>[/<path>] goes to the URL that
+the file (a JSON object, id to URL, written by the agent's MCP sync) names for <id>, with
+the agent token. The proxy reads the file again when it changes and forwards to no other
+address: an unknown id gets 403. A target is https with the system trust store, or plain
+http to a Service of the cluster.
 """
 from __future__ import annotations
 
 import http.client
 import json
+import re
 import logging
 import os
+import socket
 import sys
 import threading
 import time
@@ -71,6 +79,7 @@ class Settings:
     agent_token_assertion_file: str = DEFAULT_ASSERTION_FILE
     agent_token_paths: tuple[str, ...] = ("/mcp",)
     agent_token_via_url: str = ""
+    targets_file: str = ""
 
     def validate(self) -> None:
         missing = [
@@ -92,6 +101,7 @@ class Settings:
             agent_token_assertion_file=os.environ.get("AGENT_TOKEN_ASSERTION_FILE", DEFAULT_ASSERTION_FILE).strip(),
             agent_token_paths=paths,
             agent_token_via_url=os.environ.get("AGENT_TOKEN_VIA_URL", "").strip(),
+            targets_file=os.environ.get("TARGETS_FILE", "").strip(),
         )
 
 
@@ -163,6 +173,47 @@ def agent_token_source(settings: Settings) -> AgentTokenSource:
     return AgentTokenSource(settings.agent_token_url, assertion)
 
 
+TARGET_PREFIX = "/_target/"
+TARGET_ID = re.compile(r"^[a-z0-9.-]{1,253}$")
+
+
+def target_allowed(url: str) -> bool:
+    """https anywhere, or plain http to a Service of the cluster."""
+    u = urllib.parse.urlsplit(url)
+    if not u.hostname:
+        return False
+    if u.scheme == "https":
+        return True
+    return u.scheme == "http" and (u.hostname.endswith(".svc") or u.hostname.endswith(".svc.cluster.local"))
+
+
+class Targets:
+    """The targets file, id to URL, read again when its modification time changes."""
+
+    def __init__(self, path: str) -> None:
+        self._path = path
+        self._lock = threading.Lock()
+        self._mtime = -1.0
+        self._targets: dict[str, str] = {}
+
+    def get(self, target: str) -> str | None:
+        with self._lock:
+            try:
+                mtime = os.stat(self._path).st_mtime
+            except OSError:
+                return None
+            if mtime != self._mtime:
+                try:
+                    with open(self._path, encoding="utf-8") as handle:
+                        loaded = json.load(handle)
+                except (OSError, ValueError):
+                    loaded = {}
+                self._targets = {k: v for k, v in loaded.items()
+                                 if isinstance(k, str) and isinstance(v, str)} if isinstance(loaded, dict) else {}
+                self._mtime = mtime
+            return self._targets.get(target)
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "token-proxy"
@@ -170,6 +221,7 @@ class Handler(BaseHTTPRequestHandler):
     settings: Settings
     tokens: TokenSource
     agent_token: AgentTokenSource | None
+    targets: Targets | None
 
     def _source(self) -> TokenSource | AgentTokenSource:
         path = self.path.split("?", 1)[0]
@@ -214,13 +266,29 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, b"ok", "text/plain")
             return
         body = self._read_body()
+        upstream = urllib.parse.urlsplit(self.settings.upstream)
+        path = self.path
+        source: TokenSource | AgentTokenSource = self._source()
+        if self.path.startswith(TARGET_PREFIX):
+            # a registered target: only with the agent token, only to its own URL
+            rest = self.path[len(TARGET_PREFIX):]
+            target, _, tail = rest.partition("/")
+            target, _, query = target.partition("?")
+            url = self.targets.get(target) if (self.targets and self.agent_token and TARGET_ID.match(target)) else None
+            if not url or not target_allowed(url):
+                self._error(403, "unknown target")
+                return
+            upstream = urllib.parse.urlsplit(url)
+            path = "/" + tail if tail else ""
+            if query:
+                path += "?" + query
+            source = self.agent_token
         try:
-            token = self._source().token()
+            token = source.token()
         except TokenError as err:
             logging.error("%s", err)
             self._error(502, str(err))
             return
-        upstream = urllib.parse.urlsplit(self.settings.upstream)
         headers = {
             name: value
             for name, value in self.headers.items()
@@ -232,11 +300,19 @@ class Handler(BaseHTTPRequestHandler):
             headers["Content-Length"] = str(len(body))
         conn = _connect(upstream, UPSTREAM_TIMEOUT)
         try:
-            conn.request(self.command, (upstream.path.rstrip("/") + self.path), body=body or None, headers=headers)
+            target_path = (upstream.path.rstrip("/") + path) or "/"
+            if upstream.query and "?" not in path:
+                target_path += "?" + upstream.query
+            conn.request(self.command, target_path, body=body or None, headers=headers)
+            sock = conn.sock
             resp = conn.getresponse()
+            if resp.getheader("Content-Type", "").startswith("text/event-stream"):
+                # an MCP or model stream may stay silent for long: keepalive, no read timeout
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                sock.settimeout(None)
             self._relay(resp)
         except (OSError, ValueError, http.client.HTTPException) as err:
-            logging.error("upstream request failed: %s", type(err).__name__)
+            logging.error("upstream request failed: %s %s %s", type(err).__name__, self.command, self.path.split("?", 1)[0])
             if not self.wfile.closed and not getattr(self, "_started", False):
                 self._error(502, "upstream unreachable")
             self.close_connection = True
@@ -296,6 +372,7 @@ def build_server(settings: Settings, port: int | None = None) -> ThreadingHTTPSe
         "settings": settings,
         "tokens": TokenSource(settings),
         "agent_token": agent_token_source(settings) if settings.agent_token_url else None,
+        "targets": Targets(settings.targets_file) if settings.targets_file else None,
     })
     server = ThreadingHTTPServer(("127.0.0.1", settings.port if port is None else port), handler)
     server.daemon_threads = True

@@ -1,0 +1,121 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-slack.name" . }}
+  namespace: {{ include "mcp-slack.namespace" . }}
+  labels:
+    app: {{ include "mcp-slack.name" . }}
+    app.kubernetes.io/name: mcp-slack
+    app.kubernetes.io/component: server
+    {{- include "mcp-slack.commonLabels" . | nindent 4 }}
+    {{- include "mcp-slack.catalogLabels" . | nindent 4 }}
+  annotations:
+    app.openshift.io/custom-icon: https://avatars.githubusercontent.com/slackapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mcp-slack.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-slack.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+    spec:
+      # the server needs no Kubernetes API access
+      automountServiceAccountToken: false
+      containers:
+      - name: server
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+        - --transport
+        - http
+        env:
+        - name: HOME
+          value: /tmp
+        # users and channels cache
+        - name: XDG_CACHE_HOME
+          value: /tmp/cache
+        # with auth.enabled only the token check in the same pod reaches the server
+        - name: SLACK_MCP_HOST
+          value: {{ include "mcp-auth.serverHost" . }}
+        - name: SLACK_MCP_PORT
+          value: {{ include "mcp-auth.serverPort" (dict "root" . "port" .Values.port) | quote }}
+        - name: SLACK_MCP_CACHE_TTL
+          value: {{ .Values.slack.cacheTtl | quote }}
+        - name: SLACK_MCP_LOG_LEVEL
+          value: {{ .Values.slack.logLevel | quote }}
+        {{- with include "mcp-slack.addMessage" . }}
+        - name: SLACK_MCP_ADD_MESSAGE_TOOL
+          value: {{ . | quote }}
+        {{- end }}
+        {{- if .Values.slack.reactions }}
+        - name: SLACK_MCP_REACTION_TOOL
+          value: "true"
+        {{- end }}
+        - name: SLACK_MCP_ENABLED_TOOLS
+          value: {{ include "mcp-slack.enabledTools" . | quote }}
+        - name: {{ if eq .Values.slack.tokenType "user" }}SLACK_MCP_XOXP_TOKEN{{ else }}SLACK_MCP_XOXB_TOKEN{{ end }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "mcp-slack.tokenSecret" . }}
+              key: {{ .Values.slack.tokenKey }}
+        {{- if .Values.auth.enabled }}
+        # the server has no health path and listens on localhost: a TCP check from inside
+        readinessProbe:
+          exec:
+            command:
+            - nc
+            - -z
+            - 127.0.0.1
+            - {{ .Values.auth.upstreamPort | quote }}
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - nc
+            - -z
+            - 127.0.0.1
+            - {{ .Values.auth.upstreamPort | quote }}
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        {{- else }}
+        ports:
+        - name: mcp
+          containerPort: {{ .Values.port }}
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: mcp
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: mcp
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      {{- if .Values.auth.enabled }}
+      {{- include "mcp-auth.container" (dict "root" . "name" (include "mcp-slack.name" .) "port" .Values.port) | nindent 6 }}
+      {{- end }}
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      {{- with include "mcp-auth.volumes" (dict "root" . "name" (include "mcp-slack.name" .)) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+{{- end }}

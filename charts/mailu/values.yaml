@@ -45,13 +45,23 @@ mailService:
 dns:
   enabled: false
   ttl: 300
+  # with egressService.enabled the outgoing address is added as a:<its hostname>
   spf: v=spf1 mx -all
   dmarc: v=DMARC1; p=quarantine
+  # MX record of the mail domain, pointing at the first of upstream.hostnames
+  mx:
+    enabled: true
+    priority: 10
 
-# Second public address, used only as the source of outgoing mail
+# Second public address, used only as the source of outgoing mail. It never shares
+# an address: receiving servers judge a sender by it.
 egressService:
   enabled: false
+  # for example the address pool annotation of the load balancer
   annotations: {}
+  # name of the outgoing address; with dns.enabled it gets an A record, which a
+  # platform that writes reverse DNS from it also uses. Empty: outbound.<domain>
+  hostname: ""
 
 # Webmail and admin interface
 route:
@@ -73,6 +83,8 @@ networkPolicy:
 # ServiceMonitors, alert rules and the NetworkPolicy for the scraper
 monitoring:
   enabled: false
+  # alert rules next to the ServiceMonitors; false where the platform alerts centrally
+  alerts: true
   # label of the namespaces that may scrape
   namespaceLabels:
     network.openshift.io/policy-group: monitoring
@@ -93,8 +105,8 @@ imapsync:
   replicaCount: 1
   image:
     repository: gilleslamiral/imapsync
-    tag: latest
-    pullPolicy: Always
+    tag: "2.326"
+    pullPolicy: IfNotPresent
   nginx:
     image:
       repository: nginxinc/nginx-unprivileged
@@ -148,6 +160,29 @@ upstream:
   commonLabels:
     app: '{{ include "mailu.names.fullname" . }}'
     app.kubernetes.io/part-of: '{{ .Release.Name }}'
+  # icon and arrows per Deployment from topology below; empty on other objects
+  commonAnnotations:
+    app.openshift.io/vcs-uri: https://github.com/Mailu/Mailu
+    app.openshift.io/custom-icon: '{{ include "mailu-wrapper.topologyIcon" . }}'
+    app.openshift.io/connects-to: '{{ include "mailu-wrapper.topologyConnectsTo" . }}'
+  # console topology view: icon of each component and the components it depends on;
+  # redis is the cache StatefulSet <release>-redis-master
+  topology:
+    icon:
+      default: https://avatars.githubusercontent.com/Mailu
+      front: https://avatars.githubusercontent.com/nginx
+      webmail: https://avatars.githubusercontent.com/roundcube
+      dovecot: https://avatars.githubusercontent.com/dovecot
+      rspamd: https://avatars.githubusercontent.com/rspamd
+      tika: https://avatars.githubusercontent.com/apache
+    connectsTo:
+      front: [admin, webmail, postfix, dovecot]
+      webmail: [front]
+      admin: [redis]
+      postfix: [admin, rspamd, dovecot]
+      dovecot: [admin, tika]
+      rspamd: [redis, oletools, clamav]
+      fetchmail: [front, admin]
 
   domain: example.org
   hostnames:
@@ -239,14 +274,17 @@ upstream:
     extraEnvVars:
     - name: SUBNET
       value: '{{ .Values.subnet }}'
-    # the cluster DNS does not validate DNSSEC; skip that startup check
+    # the cluster DNS does not validate DNSSEC; skip that startup check. The start
+    # creates the database only while Redis answers, so it waits for Redis first
     initContainers:
     - name: patch-startup
       image: '{{ .Values.imageRegistry }}/{{ .Values.admin.image.repository }}:{{ default (include "mailu.version" .) .Values.admin.image.tag }}'
       command:
       - /bin/sh
       - -c
-      - cp /start.py /shared/start.py && sed -i '/test_DNS()/d' /shared/start.py
+      - >-
+        cp /start.py /shared/start.py && sed -i '/test_DNS()/d' /shared/start.py &&
+        until nc -z -w 3 {{ include "mailu.redis.serviceFqdn" . }} 6379; do echo waiting for redis; sleep 3; done
       resources:
         requests:
           cpu: 10m
@@ -343,6 +381,24 @@ upstream:
     updateStrategy:
       type: Recreate
     affinity: *followAdmin
+    # outlast a storage stall of the queue volume
+    startupProbe:
+      timeoutSeconds: 10
+    livenessProbe:
+      timeoutSeconds: 10
+      failureThreshold: 10
+    readinessProbe:
+      timeoutSeconds: 10
+    # postfix keeps master.pid and its lock in /queue/pid: per-pod memory, not the queue
+    # volume, so a lock on network storage never outlives a killed postfix (Mailu#4161)
+    extraVolumeMounts:
+    - name: queue-pid
+      mountPath: /queue/pid
+    extraVolumes:
+    - name: queue-pid
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Mi
     resources:
       requests:
         cpu: 50m
@@ -354,6 +410,14 @@ upstream:
   rspamd:
     containerSecurityContext: *root
     affinity: *followAdmin
+    # rspamd keeps its state on the mail volume; outlast a storage stall
+    startupProbe:
+      timeoutSeconds: 10
+    livenessProbe:
+      timeoutSeconds: 10
+      failureThreshold: 10
+    readinessProbe:
+      timeoutSeconds: 10
     # text, not a list: the DKIM key is mounted only with global.dkim.managed
     extraVolumes: |
       - name: override-d
@@ -414,6 +478,18 @@ upstream:
         cpu: "1"
         memory: 768Mi
 
+  # off by default; when on it shares the mail volume, so it follows admin
+  fetchmail:
+    containerSecurityContext: *root
+    affinity: *followAdmin
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
   oletools:
     containerSecurityContext: *root
     resources:
@@ -434,7 +510,13 @@ upstream:
         memory: 2Gi
 
   redis:
+    # workload metadata only: commonLabels would reach the pod template
+    commonAnnotations:
+      app.openshift.io/custom-icon: https://avatars.githubusercontent.com/redis
     master:
+      # an empty seLinuxOptions fails admission unless the renderer detects OpenShift
+      containerSecurityContext:
+        seLinuxOptions: null
       persistence:
         size: 1Gi
         storageClass: ""

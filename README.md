@@ -6,6 +6,10 @@ projects.
     helm repo add grncloud https://apps.openshift.eu
     helm search repo grncloud
 
+How to install and configure each chart, and the labels and annotations that change how
+the applications work together, are published at https://docs.openshift.eu, built from
+this repository by `mkdocs.yml` (`mkdocs build --strict`).
+
 ## What a chart may assume
 
 The charts target the GRN.CLOUD platform. They rely on what the platform provides:

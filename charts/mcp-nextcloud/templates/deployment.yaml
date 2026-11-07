@@ -1,0 +1,79 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-nextcloud.name" . }}
+  namespace: {{ include "mcp-nextcloud.namespace" . }}
+  labels:
+    app: {{ include "mcp-nextcloud.name" . }}
+    app.kubernetes.io/name: mcp-nextcloud
+    app.kubernetes.io/component: server
+    {{- include "mcp-nextcloud.commonLabels" . | nindent 4 }}
+    {{- include "mcp-nextcloud.catalogLabels" . | nindent 4 }}
+    app.openshift.io/runtime: python
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mcp-nextcloud.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-nextcloud.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+    spec:
+      # the server needs no Kubernetes API access
+      automountServiceAccountToken: false
+      containers:
+      - name: server
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+        - --transport
+        - streamable-http
+        - --port
+        - {{ .Values.port | quote }}
+        env:
+        - name: HOME
+          value: /tmp
+        - name: NEXTCLOUD_HOST
+          value: {{ .Values.nextcloud.url | quote }}
+        - name: MCP_DEPLOYMENT_MODE
+          value: {{ .Values.nextcloud.deploymentMode | quote }}
+        - name: NEXTCLOUD_MCP_BEARER_PASSTHROUGH
+          value: {{ .Values.nextcloud.bearerPassthrough | quote }}
+        # semantic search state in memory; nothing to keep across restarts
+        - name: QDRANT_LOCATION
+          value: ":memory:"
+        - name: INGEST_QUEUE
+          value: memory
+        {{- range $k, $v := .Values.env }}
+        - name: {{ $k }}
+          value: {{ $v | toString | quote }}
+        {{- end }}
+        ports:
+        - name: mcp
+          containerPort: {{ .Values.port }}
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: mcp
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+{{- end }}

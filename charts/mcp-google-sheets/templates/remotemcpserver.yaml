@@ -1,0 +1,32 @@
+{{- $name := include "mcp-google-sheets.name" . }}
+{{- $scopes := .Values.scopes }}
+{{- if .Values.write }}{{ $scopes = concat $scopes .Values.writeScopes | uniq }}{{ end }}
+{{- $d := .Values.mcp.labelDomain }}
+# each user logs in to the vendor in the agent UI; the agent keeps the tokens
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "mcp-google-sheets.namespace" . }}
+  labels:
+    app: {{ $name }}
+    app.kubernetes.io/name: mcp-google-sheets
+    app.kubernetes.io/component: server
+    {{- include "mcp-google-sheets.commonLabels" . | nindent 4 }}
+    {{ $d }}/server: {{ .Values.mcp.server }}
+    {{ $d }}/bundle: {{ .Values.mcp.bundle }}
+    {{ $d }}/category: {{ .Values.mcp.category }}
+    {{- if .Values.mcp.addon }}
+    {{ $d }}/addon: "true"
+    {{- end }}
+  annotations:
+    openhands.dev/auth: oauth2
+    openhands.dev/oauth-client: {{ include "mcp-google-sheets.clientSecret" . }}
+    openhands.dev/oauth-scopes: {{ join " " $scopes | quote }}
+    {{- with .Values.mcp.icon }}
+    openhands.dev/icon: {{ . }}
+    {{- end }}
+spec:
+  description: {{ .Values.mcp.description | quote }}
+  url: {{ .Values.url }}
+  protocol: STREAMABLE_HTTP

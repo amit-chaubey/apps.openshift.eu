@@ -1,0 +1,31 @@
+{{- if and .Values.enabled .Values.route.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "mcp-onlyoffice-live.name" . }}
+  namespace: {{ include "mcp-onlyoffice-live.namespace" . }}
+  labels:
+    app: {{ include "mcp-onlyoffice-live.name" . }}
+    app.kubernetes.io/name: mcp-onlyoffice-live
+    app.kubernetes.io/component: route
+    {{- include "mcp-onlyoffice-live.commonLabels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.route.host }}
+  host: {{ . }}
+  {{- end }}
+  path: /mcp
+  port:
+    targetPort: mcp
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: {{ include "mcp-onlyoffice-live.name" . }}
+    weight: 100
+  wildcardPolicy: None
+{{- end }}

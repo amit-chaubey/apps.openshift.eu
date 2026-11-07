@@ -5,12 +5,20 @@ Agent Canvas only draws a logo for an installed server whose URL equals a Librar
 entry, and its settings mapper drops the server's icon. Servers behind the token
 proxy never match. This keeps the icon in the mapper and lets the card fall back to
 it. Fails the build when the frontend no longer has the expected shape.
+
+The server marks /assets/ immutable, so a browser that cached an upstream bundle
+keeps it under its upstream name. Every patched bundle, and every bundle or page
+that names one of them, gets a new name and all references follow.
 """
+import base64
 import glob
+import hashlib
+import os
 import re
 import sys
 
 ASSETS = sys.argv[1] if len(sys.argv) > 1 else "/opt/agent-canvas/frontend/assets"
+PATCHED: list[str] = []
 
 
 def patch(pattern: str, fix, want: int) -> None:
@@ -22,7 +30,48 @@ def patch(pattern: str, fix, want: int) -> None:
     if count != want:
         sys.exit(f"patch-mcp-icons: {files[0]}: {count} changes, expected {want}")
     open(files[0], "w").write(out)
+    PATCHED.append(files[0])
     print(f"patch-mcp-icons: {files[0]}: {count} changes")
+
+
+def ref(name: str) -> re.Pattern:
+    return re.compile(rf"(?<![A-Za-z0-9_~.-]){re.escape(name)}(?![A-Za-z0-9_~-])")
+
+
+def rename(patched: list[str]) -> None:
+    """New names for the patched bundles and, transitively, every asset naming one."""
+    pages = sorted(glob.glob(f"{ASSETS}/*.js") + glob.glob(f"{ASSETS}/*.css") +
+                   glob.glob(f"{os.path.dirname(ASSETS)}/*.html"))
+    text = {p: open(p, encoding="utf-8").read() for p in pages}
+    seed = hashlib.sha256("".join(text[p] for p in sorted(patched)).encode()).digest()
+    moved = set(patched)
+    while True:
+        names = [os.path.basename(p) for p in moved]
+        more = {p for p in pages if p not in moved and p.startswith(ASSETS + "/")
+                and any(ref(n).search(text[p]) for n in names)}
+        if not more:
+            break
+        moved |= more
+    new = {}
+    for p in sorted(moved):
+        base = os.path.basename(p)
+        stem, ext = os.path.splitext(base)
+        tag = base64.urlsafe_b64encode(hashlib.sha256(seed + base.encode()).digest())[:8].decode()
+        new[base] = re.sub(r"-[A-Za-z0-9_-]{8}$", "", stem) + "-" + tag + ext
+    for p in pages:
+        out = text[p]
+        for old, name in new.items():
+            out = ref(old).sub(name, out)
+        if out != text[p]:
+            open(p, "w", encoding="utf-8").write(out)
+    for p in sorted(moved):
+        os.rename(p, os.path.join(ASSETS, new[os.path.basename(p)]))
+    final = glob.glob(f"{ASSETS}/*") + glob.glob(f"{os.path.dirname(ASSETS)}/*.html")
+    left = {n for f in final if f.endswith((".js", ".css", ".html"))
+            for n in new if ref(n).search(open(f, encoding="utf-8").read())}
+    if left:
+        sys.exit(f"patch-mcp-icons: old names still referenced: {sorted(left)}")
+    print(f"patch-mcp-icons: {len(new)} assets renamed")
 
 
 def mapper(src: str):
@@ -45,5 +94,7 @@ def card(src: str):
                    src, count=1)
 
 
-patch("mcp-installed-servers-*.js", mapper, 2)
-patch("mcp-[A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-].js", card, 1)
+if __name__ == "__main__":
+    patch("mcp-installed-servers-*.js", mapper, 2)
+    patch("mcp-[A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-][A-Za-z0-9_-].js", card, 1)
+    rename(PATCHED)

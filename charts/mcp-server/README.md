@@ -15,6 +15,18 @@ Choices:
 - `secretEnv` maps single keys of existing Secrets to variables, for example a ServiceAccount token Secret.
 - The default port 8000 is outside the ports a typical project default opens to everyone (80, 443, 8080, 8443).
 
+### Token check
+
+`auth.enabled` (default: false) puts the token check of the library chart `mcp-auth` in
+front of the server: an oauth2-proxy sidecar takes the Service port and the server listens
+on `127.0.0.1:auth.upstreamPort` (default: 18000) only. Every request needs a bearer
+JWT that `auth.issuerUrl` signed for one of `auth.audiences` (default: the release
+namespace), else 401; a token whose groups claim names none of `auth.allowedGroups` gets
+403. The caller's `Authorization` header reaches the server unchanged, streams pass as they
+come, and `/.well-known/oauth-protected-resource` names the issuer without a token (RFC
+9728). Without `auth.issuerUrl` every request but the health paths is refused. The README
+of `mcp-auth` lists every `auth.*` value. The server must then listen on `127.0.0.1:auth.upstreamPort` (set `args` or `env` accordingly). `auth.enabled` and `rbacProxy.enabled` exclude each other: both take the Service port. Use `rbacProxy` for callers with Kubernetes ServiceAccount tokens and `auth` for callers with OpenID Connect tokens.
+
 ## Install
 
 ```bash

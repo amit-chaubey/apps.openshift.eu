@@ -2,14 +2,6 @@
 {{- required "nextcloud.nextcloud.host is required" .Values.nextcloud.nextcloud.host -}}
 {{- end -}}
 
-{{- define "wrapper.onlyofficeHost" -}}
-{{- if .Values.onlyoffice.host -}}
-{{- .Values.onlyoffice.host -}}
-{{- else -}}
-{{- printf "office-%s" (include "wrapper.host" .) -}}
-{{- end -}}
-{{- end -}}
-
 {{/*
 Value of one Secret key, base64: the given value, else the value already in the
 cluster, else a new random one.
@@ -27,10 +19,6 @@ cluster, else a new random one.
 {{- define "wrapper.existingData" -}}
 {{- $found := lookup "v1" "Secret" .namespace .name -}}
 {{- if $found -}}{{- $found.data | toJson -}}{{- else -}}{}{{- end -}}
-{{- end -}}
-
-{{- define "wrapper.signalingHost" -}}
-{{- .Values.talk.signaling.host | default (printf "signaling-%s" (include "wrapper.host" .)) -}}
 {{- end -}}
 
 {{- define "wrapper.turnHost" -}}
@@ -76,12 +64,19 @@ app.kubernetes.io/instance: {{ . }}
 {{- $_ := set $a "haproxy.router.openshift.io/hsts_header" .root.Values.hsts.header -}}
 {{- end -}}
 {{- if $path -}}
-{{- $_ := set $a "haproxy.router.openshift.io/rewrite-target" "/" -}}
+{{- $_ := set $a "haproxy.router.openshift.io/rewrite-target" (.rewrite | default "/") -}}
+{{- end -}}
+{{- range $k, $v := .extra -}}
+{{- $_ := set $a $k $v -}}
 {{- end -}}
 {{- toYaml $a -}}
 {{- end -}}
 
-{{/* A Route on the Nextcloud host that serves one path from a Service; partOf is its group. */}}
+{{/*
+A Route on the Nextcloud host that serves one path from a Service; partOf is its group.
+Optional: service (default: name), rewrite (default: /), labels, annotations and headers
+(maps; headers are set on the request to the Service).
+*/}}
 {{- define "wrapper.pathRoute" -}}
 apiVersion: route.openshift.io/v1
 kind: Route
@@ -94,11 +89,26 @@ metadata:
     app.kubernetes.io/component: route
     app.kubernetes.io/part-of: {{ .partOf | quote }}
     {{- include "nextcloud.commonLabels" .root | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   annotations:
-    {{- include "wrapper.routeAnnotations" (dict "root" .root "path" true) | nindent 4 }}
+    {{- include "wrapper.routeAnnotations" (dict "root" .root "path" true "rewrite" .rewrite "extra" .annotations) | nindent 4 }}
 spec:
   host: {{ include "wrapper.host" .root }}
   path: {{ .path }}
+  {{- with .headers }}
+  httpHeaders:
+    actions:
+      request:
+      {{- range $name, $value := . }}
+      - name: {{ $name }}
+        action:
+          type: Set
+          set:
+            value: {{ $value | quote }}
+      {{- end }}
+  {{- end }}
   port:
     targetPort: {{ .port }}
   tls:
@@ -106,7 +116,7 @@ spec:
     insecureEdgeTerminationPolicy: Redirect
   to:
     kind: Service
-    name: {{ .name }}
+    name: {{ .service | default .name }}
     weight: 100
   wildcardPolicy: None
 {{- end -}}
@@ -206,4 +216,21 @@ metallb.io/loadBalancerIPs: {{ . | quote }}
 {{/* OpenID Connect login is set up: enabled, with a provider and a client */}}
 {{- define "wrapper.oidcActive" -}}
 {{- if and .Values.oidc.enabled .Values.oidc.discoveryUri .Values.oidc.clientId }}true{{ end -}}
+{{- end -}}
+
+{{/* Webmail logs in through the OpenID Connect provider: Mailu on the Nextcloud host, oidc or sso set up */}}
+{{- define "wrapper.mailLoginActive" -}}
+{{- if and .Values.mailu.enabled .Values.mailRoute.enabled .Values.mailRoute.sso.enabled (eq .Values.secrets.type "kubernetes") (or .Values.sso.enabled (include "wrapper.oidcActive" .)) }}true{{ end -}}
+{{- end -}}
+
+{{/* Users get a mailbox in the Mail app: switched on, with the mail server of this chart */}}
+{{- define "wrapper.mailActive" -}}
+{{- if and .Values.mail.enabled .Values.mailu.enabled }}true{{ end -}}
+{{- end -}}
+
+{{/* editFormats of the ONLYOFFICE connector: {"odt":true,...} from onlyoffice.editFormats */}}
+{{- define "wrapper.onlyofficeEditFormats" -}}
+{{- $f := dict -}}
+{{- range .Values.onlyoffice.editFormats }}{{ $_ := set $f (toString .) true }}{{ end -}}
+{{- toJson $f -}}
 {{- end -}}

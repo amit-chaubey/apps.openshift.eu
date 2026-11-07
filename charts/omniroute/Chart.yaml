@@ -19,3 +19,5 @@ maintainers:
 annotations:
   charts.openshift.io/name: OmniRoute
   charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/category: ai-gateway
+  apps.openshift.eu/vendor: diegosouzapw

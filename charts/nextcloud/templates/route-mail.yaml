@@ -1,0 +1,59 @@
+{{- if and .Values.mailu.enabled .Values.mailRoute.enabled }}
+{{- $front := printf "%s-front" (.Values.mailu.upstream.fullnameOverride | default "mailu") }}
+{{- /* Mailu front removes the /mail prefix itself (mail-prefix.conf): no rewrite */}}
+{{ include "wrapper.pathRoute" (dict "root" . "name" "mail" "partOf" "nextcloud-mail" "path" "/mail" "rewrite" "/mail" "port" "http" "service" $front) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $front }}-mail-prefix
+  labels:
+    app: nextcloud
+    app.kubernetes.io/name: nextcloud
+    app.kubernetes.io/component: mail
+    app.kubernetes.io/part-of: nextcloud-mail
+    {{- include "nextcloud.commonLabels" . | nindent 4 }}
+data:
+  # front strips /mail, serves itself on the root and adds /mail to links and redirects
+  mail-prefix.conf: |
+    set_real_ip_from 127.0.0.1;
+    location = /mail {
+      return 301 https://$host/mail/admin/;
+    }
+    location /mail/ {
+      rewrite ^/mail/inbox(.*)$ /webmail$1 break;
+      rewrite ^/mail/(.*)$ /$1 break;
+      proxy_pass http://127.0.0.1:80;
+      proxy_set_header Host $http_host;
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Accept-Encoding "";
+    # this server adds these again
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Permitted-Cross-Domain-Policies;
+    proxy_hide_header Referrer-Policy;
+    proxy_hide_header Strict-Transport-Security;
+      proxy_redirect ~^(https?://[^/]+)?/webmail(.*)$ $1/mail/inbox$2;
+      proxy_redirect ~^(https?://[^/]+)?/(.*)$ $1/mail/$2;
+      proxy_cookie_path ~^/webmail(.*)$ /mail/inbox$1;
+      proxy_cookie_path ~^/(.*)$ /mail/$1;
+      sub_filter_once off;
+      sub_filter_types text/css application/javascript application/json;
+      sub_filter 'href="/webmail' 'href="/mail/inbox';
+      # Roundcube's JavaScript calls comm_path; its Mailu button links ../../admin
+      sub_filter '"/webmail/' '"/mail/inbox/';
+      sub_filter '"../../admin"' '"/mail/admin/"';
+      # in a frame (Nextcloud) the admin turns on AdminLTE iframe-mode, which hides the sidebar
+      sub_filter '</head>' '<script>addEventListener("load",function(){setTimeout(function(){document.body.classList.remove("iframe-mode")})})</script></head>';
+      sub_filter 'src="/webmail' 'src="/mail/inbox';
+      sub_filter 'action="/webmail' 'action="/mail/inbox';
+      sub_filter 'href="/' 'href="/mail/';
+      sub_filter 'src="/' 'src="/mail/';
+      sub_filter 'action="/' 'action="/mail/';
+      sub_filter 'url(/' 'url(/mail/';
+      # the admin's JavaScript navigates to data-clicked and loads tables from data-static
+      sub_filter 'data-clicked="/' 'data-clicked="/mail/';
+      sub_filter 'data-static="/' 'data-static="/mail/';
+    }
+{{- end }}

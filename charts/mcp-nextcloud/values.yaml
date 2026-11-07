@@ -1,0 +1,72 @@
+# Team of the tenant the server serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the server belongs to; required with team
+tenant: ""
+
+# switch of this server when a parent chart includes it
+enabled: true
+
+# name of the server's objects. Empty: mcp-<mcp.server>, so the objects never collide with
+# those of Nextcloud in the same project
+nameOverride: ""
+
+# Nextcloud MCP server image: upstream cbcoutinho/nextcloud-mcp-server with the bearer
+# passthrough patch, published by the chart repository's maintainers
+image:
+  repository: ghcr.io/hoolia/nextcloud-mcp-server
+  tag: 0.201.2-bearer.2@sha256:aa92feede2e9bef952bf05d38e5488caea90d5ef12d54af3a56c655a9d953517
+  pullPolicy: IfNotPresent
+
+nextcloud:
+  # address of Nextcloud the server calls; the Service nextcloud of the nextcloud chart
+  url: http://nextcloud:8080
+  # multi_user_basic: every request carries its caller's credential, the server holds none
+  deploymentMode: multi_user_basic
+  # pass the caller's bearer token to Nextcloud, which validates it (user_oidc); a request
+  # without a credential gets 401
+  bearerPassthrough: true
+
+# extra plain environment variables of the server, name to value
+env: {}
+
+# container and Service port; not 80, 443, 8080 or 8443 (open to every project)
+port: 8000
+# path of the MCP endpoint
+path: /mcp
+
+mcp:
+  # Service port appProtocol an MCP gateway discovers; empty leaves it unset
+  appProtocol: agentgateway.dev/mcp
+  # prefix of the catalog labels
+  labelDomain: mcp.openshift.eu
+  # <labelDomain>/server, and the tool prefix on an MCP gateway (<server>_<tool>)
+  server: nextcloud
+  # <labelDomain>/bundle
+  bundle: nextcloud
+  # <labelDomain>/category
+  category: collaboration
+
+service:
+  # extra labels on the Service, for example the gateway's exposure label
+  labels: {}
+  annotations: {}
+
+# requests and limits of the server
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+networkPolicy:
+  enabled: true
+  # Namespaces (label selectors) that may call the server besides its own, e.g. the gateway's
+  # or the router's
+  ingressNamespaces: []
+  egress:
+    # The server reaches DNS and its own project (Nextcloud) only
+    enabled: true
+    dnsNamespace: openshift-dns
+    dnsPort: 5353

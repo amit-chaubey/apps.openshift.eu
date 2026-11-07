@@ -125,7 +125,7 @@ spec:
         - sh
         - -c
         - >-
-          sh /etc/opencode-agent/init.sh && cd "$REPO_DIR" &&
+          sh /etc/opencode-agent/init.sh && sh /etc/opencode-agent/mcp-headers.sh && cd "$REPO_DIR" &&
           exec flock -x /workspace/.opencode.lock
           sh -c 'sh /etc/opencode-agent/backup-db.sh && exec opencode serve --hostname 127.0.0.1 --port 4096'
         env:
@@ -187,6 +187,16 @@ spec:
         - name: git-token
           mountPath: /var/run/secrets/git
           readOnly: true
+        {{- end }}
+        {{- range .Values.vaultSecrets }}
+        - name: vault-{{ .name }}
+          mountPath: /var/run/vault-secrets/{{ .name }}
+          readOnly: true
+        {{- end }}
+        {{- if .Values.vaultSecrets }}
+        # mcp.servers credential headers, written at start by mcp-headers.sh
+        - name: mcp-headers
+          mountPath: /var/run/mcp-headers
         {{- end }}
         resources:
           {{- toYaml .Values.opencode.resources | nindent 10 }}
@@ -297,6 +307,10 @@ spec:
           value: {{ join "," .paths | quote }}
         {{- end }}
         {{- end }}
+        {{- if ne (include "opencode-agent.mcpTargets" .) "{}" }}
+        - name: TARGETS_FILE
+          value: /app/targets.json
+        {{- end }}
         # Listens on 127.0.0.1 only, so the probe runs inside the container
         readinessProbe:
           exec:
@@ -371,4 +385,19 @@ spec:
       - name: git-token
         secret:
           secretName: {{ $name }}-git-token
+      {{- end }}
+      {{- range .Values.vaultSecrets }}
+      # files readable by the pod's user through its fsGroup only
+      - name: vault-{{ .name }}
+        secret:
+          secretName: {{ $name }}-{{ .name }}
+          defaultMode: 0440
+          # the pod starts before the secret store answers; the header waits for a restart
+          optional: true
+      {{- end }}
+      {{- if .Values.vaultSecrets }}
+      - name: mcp-headers
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Mi
       {{- end }}

@@ -1,0 +1,8 @@
+# switch of this bundle when mcp-all includes it
+enabled: true
+
+# The servers; each takes the values of its chart. microsoft365: mcp-microsoft-365, which
+# needs route.host and the Entra app registration in secrets. enabled: false leaves a
+# server out
+microsoft365:
+  enabled: true

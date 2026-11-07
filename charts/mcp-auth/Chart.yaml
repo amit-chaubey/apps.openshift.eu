@@ -1,0 +1,25 @@
+apiVersion: v2
+name: mcp-auth
+description: Library chart with the token check of the MCP server charts, an oauth2-proxy sidecar that accepts OpenID Connect bearer tokens of one issuer for an audience and a group, and refuses every other request
+type: library
+version: 0.1.0
+appVersion: "7.15.5"
+home: https://apps.openshift.eu
+icon: https://raw.githubusercontent.com/oauth2-proxy/oauth2-proxy/v7.15.5/docs/static/img/logos/OAuth2_Proxy_icon.svg
+keywords:
+- mcp
+- library
+- oauth2-proxy
+- oidc
+- authentication
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+- https://github.com/oauth2-proxy/oauth2-proxy
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: MCP token check
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/category: security
+  apps.openshift.eu/vendor: oauth2-proxy

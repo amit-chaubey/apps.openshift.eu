@@ -14,6 +14,7 @@ metadata:
   name: nextcloud-turn
   annotations:
     app.openshift.io/vcs-uri: https://github.com/coturn/coturn
+    app.openshift.io/custom-icon: https://avatars.githubusercontent.com/coturn
   labels:
     app: nextcloud-turn
     app.kubernetes.io/name: nextcloud-turn
@@ -42,15 +43,20 @@ spec:
         {{- if $turn.externalIP }}
         - exec turnserver "$@" --external-ip={{ $turn.externalIP }}
         {{- else if $turn.public }}
-        # the public address is that of the DNS name; a change restarts coturn
+        # the public address is that of the DNS name; a change restarts coturn.
+        # Until the name resolves coturn runs without it, reachable in the cluster
         - |
           resolve() { getent ahostsv4 {{ $host }} | awk '{print $1; exit}'; }
           trap 'kill $pid 2>/dev/null; exit 0' TERM INT
           while true; do
             ip=$(resolve)
-            if [ -z "$ip" ]; then echo "waiting for {{ $host }}"; sleep 10; continue; fi
-            echo "external address $ip, pod address $POD_IP"
-            turnserver "$@" --external-ip=$ip/$POD_IP &
+            if [ -z "$ip" ]; then
+              echo "{{ $host }} does not resolve yet, starting without external address"
+              turnserver "$@" &
+            else
+              echo "external address $ip, pod address $POD_IP"
+              turnserver "$@" --external-ip=$ip/$POD_IP &
+            fi
             pid=$!
             while kill -0 $pid 2>/dev/null; do
               sleep 60 & wait $!

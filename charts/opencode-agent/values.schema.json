@@ -411,6 +411,119 @@
     "tenant": {
       "type": "string",
       "pattern": "^([a-z0-9]([a-z0-9-]*[a-z0-9])?)?$"
+    },
+    "vaultSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "data"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+          },
+          "item": {
+            "type": "string"
+          },
+          "storeKind": {
+            "enum": [
+              "",
+              "ClusterSecretStore",
+              "SecretStore"
+            ]
+          },
+          "storeName": {
+            "type": "string"
+          },
+          "refreshInterval": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+              "pattern": "^[-._a-zA-Z0-9]+$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "servers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$"
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^/"
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^https?://"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "auth": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "secretRef",
+                  "tokenKey"
+                ],
+                "properties": {
+                  "secretRef": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "header": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9-]+$"
+                  },
+                  "format": {
+                    "enum": [
+                      "basic",
+                      "bearer",
+                      "raw"
+                    ]
+                  },
+                  "userKey": {
+                    "type": "string"
+                  },
+                  "tokenKey": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "agentToken": {
+                "type": "boolean",
+                "description": "Send url through the token proxy with the agent's own token (tokenProxy.agentToken)"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

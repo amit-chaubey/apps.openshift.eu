@@ -1,0 +1,105 @@
+{{- if .Values.apiExporter.enabled }}
+{{- $e := .Values.apiExporter }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-api-exporter
+  labels:
+    app: gitlab
+    app.kubernetes.io/name: gitlab-api-exporter
+    app.kubernetes.io/component: metrics
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
+data:
+  exporter.py: |
+    {{- .Files.Get "files/gitlab-api-exporter.py" | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab-api-exporter
+  labels:
+    app: gitlab
+    app.kubernetes.io/name: gitlab-api-exporter
+    app.kubernetes.io/component: metrics
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
+    app.openshift.io/runtime: python
+  annotations:
+    app.openshift.io/connects-to: '[{"apiVersion":"apps.gitlab.com/v1beta1","kind":"GitLab","name":"gitlab"}]'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitlab-api-exporter
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gitlab-api-exporter
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        checksum/exporter: {{ .Files.Get "files/gitlab-api-exporter.py" | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - name: gitlab-api-exporter
+        image: {{ $e.image }}
+        command: ["python3", "-P", "/opt/gitlab-api-exporter/exporter.py"]
+        env:
+        - name: GITLAB_URL
+          value: http://gitlab-webservice-default:8181
+        - name: GITLAB_INSTANCE
+          value: {{ $e.instance | default .Values.route.hostname | default "gitlab" | quote }}
+        - name: MERGE_DAYS
+          value: {{ $e.mergeDays | quote }}
+        - name: INTERVAL_SECONDS
+          value: {{ $e.intervalSeconds | quote }}
+        - name: GITLAB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: gitlab-credentials
+              key: api-exporter-token
+        ports:
+        - name: api-metrics
+          containerPort: 9169
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: api-metrics
+        resources:
+          {{- toYaml $e.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: exporter
+          mountPath: /opt/gitlab-api-exporter
+          readOnly: true
+      volumes:
+      - name: exporter
+        configMap:
+          name: gitlab-api-exporter
+{{- if $e.podMonitor }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: gitlab-api-exporter
+  labels:
+    app: gitlab
+    app.kubernetes.io/name: gitlab-api-exporter
+    {{- include "gitlab.commonLabels" $ | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitlab-api-exporter
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  podMetricsEndpoints:
+  - port: api-metrics
+    path: /metrics
+    interval: 60s
+{{- end }}
+{{- end }}

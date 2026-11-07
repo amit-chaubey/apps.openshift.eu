@@ -1,0 +1,36 @@
+{{- /*
+Routes of the MCP servers on the Nextcloud host, at /mcp/<server>; the certificate of the
+host, which the Route nextcloud carries, covers them
+*/ -}}
+{{- if .Values.mcp.route.enabled }}
+{{- $r := .Values.mcp.route }}
+{{- $ann := merge (deepCopy ($r.annotations | default dict)) (dict "haproxy.router.openshift.io/timeout" $r.timeout) }}
+{{- $servers := list }}
+{{- with index .Values "mcp-nextcloud" }}
+{{- if .enabled }}
+{{- $s := (.mcp | default dict).server | default "nextcloud" }}
+{{- $servers = append $servers (dict "server" $s "service" (.nameOverride | default (printf "mcp-%s" $s)) "rewrite" "/mcp") }}
+{{- end }}
+{{- end }}
+{{- with index .Values "mcp-officeagent" }}
+{{- if and $.Values.onlyoffice.enabled .enabled }}
+{{- $s := (.mcp | default dict).server | default "officeagent" }}
+{{- $servers = append $servers (dict "server" $s "service" (.nameOverride | default $s) "rewrite" "/" "metadata" (and .auth.enabled .auth.issuerUrl)) }}
+{{- end }}
+{{- end }}
+{{- with index .Values "mcp-onlyoffice-live" }}
+{{- if and $.Values.onlyoffice.enabled .enabled }}
+{{- $s := (.mcp | default dict).server | default "office-live" }}
+{{- $servers = append $servers (dict "server" $s "service" (.nameOverride | default $s) "rewrite" "/mcp") }}
+{{- end }}
+{{- end }}
+{{- range $servers }}
+---
+{{ include "wrapper.pathRoute" (dict "root" $ "name" (printf "mcp-%s" .server) "service" .service "partOf" "nextcloud" "path" (printf "/mcp/%s" .server) "port" "mcp" "rewrite" .rewrite "labels" $r.labels "annotations" $ann) }}
+{{- if .metadata }}
+---
+# protected resource metadata (RFC 9728) of the server at its well-known address
+{{ include "wrapper.pathRoute" (dict "root" $ "name" (printf "mcp-%s-metadata" .server) "service" .service "partOf" "nextcloud" "path" (printf "/.well-known/oauth-protected-resource/mcp/%s" .server) "port" "mcp" "rewrite" "/.well-known/oauth-protected-resource" "labels" $r.labels "annotations" $ann) }}
+{{- end }}
+{{- end }}
+{{- end }}

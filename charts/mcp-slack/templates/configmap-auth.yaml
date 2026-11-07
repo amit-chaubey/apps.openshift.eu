@@ -1,0 +1,15 @@
+{{- if and .Values.enabled .Values.auth.enabled .Values.auth.issuerUrl }}
+# Protected resource metadata (RFC 9728) of the token check: the issuer of the tokens it takes
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mcp-slack.name" . }}-auth
+  namespace: {{ include "mcp-slack.namespace" . }}
+  labels:
+    app: {{ include "mcp-slack.name" . }}
+    app.kubernetes.io/name: mcp-slack
+    app.kubernetes.io/component: server
+    {{- include "mcp-slack.commonLabels" . | nindent 4 }}
+data:
+  {{- include "mcp-auth.metadataData" (dict "root" . "name" (include "mcp-slack.name" .) "namespace" (include "mcp-slack.namespace" .) "port" .Values.port "path" "/mcp") | nindent 2 }}
+{{- end }}

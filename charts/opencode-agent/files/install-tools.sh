@@ -226,6 +226,23 @@ apk add --no-cache nodejs npm
 npm install --global --no-fund --no-audit --omit=dev @bitwarden/cli@latest
 npm cache clean --force
 
+# Office suite and cloud CLIs at pinned releases; each user logs in on its own.
+# gws, Google Workspace CLI: static musl release, checked against its digest
+GWS=0.22.5
+GWS_SHA256=4db473dde4b1ab872e4ff35d769b0d4af1f1a6441a605e79d5cf8ada9c87e920
+fetch "$(gh_release googleworkspace/cli "v$GWS" google-workspace-cli-x86_64-unknown-linux-musl.tar.gz)" gws.tgz
+echo "$GWS_SHA256  gws.tgz" | sha256sum -c -
+untar gws.tgz ./gws
+# m365, CLI for Microsoft 365
+npm install --global --no-fund --no-audit --omit=dev @pnp/cli-microsoft365@11.11.0
+npm cache clean --force
+# az, Azure CLI, installed with pip as Microsoft documents: it pins beta SDKs
+python3 -m venv /opt/azure-cli
+/opt/azure-cli/bin/pip install --no-cache-dir azure-cli==2.91.0
+ln -sf /opt/azure-cli/bin/az "$BIN/az"
+chmod -R a+rX /opt/azure-cli
+# aws (AWS CLI v2) is the Alpine package above
+
 
 # ssh and git need a passwd entry; init.sh adds one for the arbitrary UID
 chmod g=u /etc/passwd

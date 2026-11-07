@@ -82,6 +82,10 @@ check full "env('rclone')['RCLONE_CONFIG_S3_NO_CHECK_BUCKET'] == 'true'"
 check full "{e['valueFrom']['secretKeyRef']['name'] for e in ctr('rclone')['env'] if 'valueFrom' in e and 'secretKeyRef' in e['valueFrom']} == {'t-guacamole-recordings'}"
 check full "{e['valueFrom']['configMapKeyRef']['name'] for e in ctr('rclone')['env'] if 'valueFrom' in e and 'configMapKeyRef' in e['valueFrom']} == {'t-guacamole-recordings'}"
 check full "obj('ObjectBucketClaim', 't-guacamole-recordings')['spec']['storageClassName'] == 'objects'"
+# the in-cluster endpoint is signed by the service CA; the system roots stay
+check full "env('rclone')['SSL_CERT_DIR'] == '/etc/rclone/ca'"
+check full "'bucket-ca' in mounts('rclone') and 'bucket-ca' not in mounts('guacamole')"
+check full "[v['configMap'] for v in pod()['volumes'] if v['name'] == 'bucket-ca'] == [{'name': 'openshift-service-ca.crt', 'optional': True}]"
 check full "env('guacamole')['OPENID_ENABLED'] == 'true'"
 check full "env('guacamole')['OPENID_USERNAME_CLAIM_TYPE'] == 'preferred_username'"
 check full "env('guacamole')['OPENID_ISSUER'] == 'https://login.example.com/realms/x'"
@@ -92,7 +96,7 @@ check full "env('guacamole')['OPENID_JWKS_ENDPOINT'] == 'https://login.example.c
 # the issuer first: no login form, straight to the identity provider
 check full "env('guacamole')['EXTENSION_PRIORITY'] == 'openid'"
 check full "obj('Route')['spec']['host'] == 'desk.example.com' and obj('Route')['metadata']['annotations']['cert-manager.io/issuer-kind'] == 'ClusterIssuer'"
-for p in "('disable-copy', 'true')" "('disable-paste', 'true')" "('recording-include-keys', 'false')" "('color-depth', '24')" "('hostname', 'kiosk')" "('port', '5900')" "('recording-path', '\${HISTORY_PATH}/\${HISTORY_UUID}')" "('create-recording-path', 'true')" "('password', :'secret_0_0')"; do
+for p in "('disable-copy', 'true')" "('disable-paste', 'true')" "('recording-include-keys', 'false')" "('color-depth', '24')" "('hostname', 'kiosk')" "('port', '5900')" "('recording-path', '\${HISTORY_PATH}/\${HISTORY_UUID}')" "('create-recording-path', 'true')" "('recording-name', '\${GUAC_DATE}-\${GUAC_TIME}')" "('password', :'secret_0_0')"; do
   check "full parameter $p" "\"$p\" in sql()"
 done
 check full "\"\\\\set secret_0_0 \`cat /secrets/vncPassword\`\" in sql()"
@@ -101,6 +105,9 @@ check full "\"'READ'\" in sql() and 'DELETE FROM guacamole_system_permission' in
 check full "\"connection_name = 'desk'\" in sql()"
 check full "all(d['kind'] in $NAMESPACED for d in docs)"
 hasnt full "kind: Namespace"
+
+OUT=$(render $FULL --set recording.s3.caConfigMap=)
+check "no bucket ca" "'SSL_CERT_DIR' not in env('rclone') and 'bucket-ca' not in [v['name'] for v in pod()['volumes']]"
 
 # an explicit endpoint wins over the Keycloak default
 OUT=$(render $FULL --set oidc.authorizationEndpoint=https://idp.example.com/auth --set oidc.jwksEndpoint=https://idp.example.com/jwks --set oidc.primary=false)

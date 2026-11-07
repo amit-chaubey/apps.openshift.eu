@@ -21,3 +21,5 @@ maintainers:
 annotations:
   charts.openshift.io/name: Qdrant
   charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/category: database
+  apps.openshift.eu/vendor: Qdrant

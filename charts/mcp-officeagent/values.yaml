@@ -1,0 +1,169 @@
+# Team of the tenant the server serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the server belongs to; required with team
+tenant: ""
+
+# switch of this server when a bundle chart includes it
+enabled: true
+
+# name of the server's objects and of the server on an MCP gateway (tools <name>_*).
+# Empty: mcp.server
+nameOverride: ""
+
+# OfficeAgent.NET MCP server image, published by the upstream project
+image:
+  repository: ghcr.io/ilia-sokolov/officeagent-mcp
+  tag: 1.2.0@sha256:fea62b6608902a0b1cd4cb75fa538a47ccfb7489036dd124e2c89380b5bde134
+  pullPolicy: IfNotPresent
+
+officeagent:
+  # in-memory connection "session": import_document_content puts a document in,
+  # export_document_content takes the result out; documents last as long as the pod
+  session:
+    enabled: true
+    # total bytes the session connection holds at once
+    maximumTotalBytes: 104857600
+  # create_document, the template tools and merge_documents
+  allowCreation: true
+  # register_document, open_document, edit_document and the other tools that address a file
+  # of the documents connection by its path
+  allowRegistration: true
+  # create_document_content, inspect_document_content and edit_document_content, which carry
+  # the whole document as base64 in every call
+  allowInlineContent: false
+  # refuse a plan without the snapshot eTag of its inspect, so a retry cannot apply twice
+  requirePlanSnapshot: false
+  # list every tool parameter as required (OpenAI strict function calling)
+  strictToolSchemas: true
+  # calculate workbook formulas on save
+  calculateFormulas: false
+
+# filesystem connection: a folder the server keeps documents in across restarts
+documents:
+  enabled: true
+  # connection id agents address these documents under
+  connectionId: documents
+  allowedExtensions:
+  - .docx
+  - .pptx
+  - .xlsx
+  - .png
+  - .jpg
+  - .jpeg
+  - .gif
+  - .svg
+  # Tracked or Direct, for an operation without a mode; a deck refuses Tracked, so Direct
+  # serves both and a Word edit asks for Tracked itself
+  defaultChangeMode: Direct
+  # size cap per document
+  maximumBytes: 104857600
+  persistence:
+    # false: an emptyDir, documents last as long as the pod
+    enabled: true
+    # existing claim to use instead of the chart's own
+    existingClaim: ""
+    size: 1Gi
+    # empty: the cluster's default StorageClass
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    # extra annotations on the chart's claim, for example to keep it when a GitOps tool
+    # deletes the release
+    annotations: {}
+
+# container port of the server; not 80, 443, 8080 or 8443 (open to every project)
+port: 13080
+
+# user ID of the server; empty lets OpenShift assign one. On Kubernetes without such an
+# assignment set the image's app user 1654
+runAsUser: null
+
+mcp:
+  # Service port appProtocol an MCP gateway discovers; empty leaves it unset
+  appProtocol: agentgateway.dev/mcp
+  # prefix of the catalog labels
+  labelDomain: mcp.openshift.eu
+  # <labelDomain>/server
+  server: officeagent
+  # <labelDomain>/bundle
+  bundle: officeagent
+  # <labelDomain>/category
+  category: documents
+
+service:
+  # extra labels on the Service, for example the gateway's exposure label
+  labels: {}
+  annotations: {}
+
+# requests and limits of the server
+resources:
+  requests:
+    cpu: 20m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+# Token check in front of the server (an oauth2-proxy sidecar): every request but the health
+# paths needs a bearer JWT of auth.issuerUrl for one of auth.audiences; the Service port then
+# reaches the sidecar and the server listens on localhost only. Off: the server asks callers
+# for no credential, so only a gateway that authenticates callers may reach it
+auth:
+  enabled: false
+  # OpenID Connect issuer of the tokens (the iss claim). Empty with auth.enabled: every
+  # request but the health paths is refused (401)
+  issuerUrl: ""
+  # a token's aud claim must name one of these; empty: the release namespace. Each entry is
+  # a template, for example "{{ .Release.Namespace }}"
+  audiences: []
+  # a token's groups claim must name one of these (403 otherwise); empty: any group. Each
+  # entry is a template
+  allowedGroups: []
+  # address callers use for the server, the resource of its protected resource metadata
+  # (/.well-known/oauth-protected-resource, served without a token); a template. Empty: the
+  # Service inside the cluster
+  resourceUrl: ""
+  # claim that carries the groups of the caller
+  groupsClaim: groups
+  # localhost port of the server behind the sidecar
+  upstreamPort: 13081
+  # requests that pass without a token, method=path_regex or path_regex, for example the
+  # server's health path for its probes
+  skipAuthRoutes: []
+  # longest wait for the server's response headers; a tool call may take that long
+  upstreamTimeout: 3600s
+  # how often a streamed response is flushed; event streams are flushed at once
+  flushInterval: 100ms
+  # existing Secret with the keys cookie-secret and client-secret; empty: <name>-auth,
+  # written by the chart from the two values below
+  existingSecret: ""
+  # seed of the session cookie (16, 24 or 32 bytes); empty: generated once and kept. A
+  # GitOps tool that renders without cluster access must pass it
+  cookieSecret: ""
+  # client secret the proxy requires but never uses (bearer tokens only); empty: generated
+  # once and kept. A GitOps tool that renders without cluster access must pass it
+  clientSecret: ""
+  # further oauth2-proxy flags, for example --oidc-email-claim=sub
+  extraArgs: []
+  # oauth2-proxy image, published by the oauth2-proxy project
+  image:
+    repository: quay.io/oauth2-proxy/oauth2-proxy
+    tag: v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+    pullPolicy: IfNotPresent
+  # requests and limits of the sidecar
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+networkPolicy:
+  enabled: true
+  # Namespaces (label selectors) that may call the server besides its own, e.g. the gateway's
+  ingressNamespaces: []
+  egress:
+    # The server calls nothing outside its pod: egress to DNS only
+    enabled: true
+    dnsNamespace: openshift-dns
+    dnsPort: 5353

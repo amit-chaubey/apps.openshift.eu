@@ -13,6 +13,10 @@
           "type": "string",
           "minLength": 1
         },
+        "digest": {
+          "type": "string",
+          "pattern": "^(sha256:[0-9a-f]{64})?$"
+        },
         "pullPolicy": {
           "type": "string",
           "enum": [
@@ -28,6 +32,25 @@
       "properties": {
         "enabled": {
           "type": "boolean"
+        },
+        "revision": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "pattern": "^[A-Za-z0-9_.-]*$"
+        },
+        "wait": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 60
+            }
+          }
         },
         "output": {
           "type": "object",
@@ -68,7 +91,9 @@
                 "enum": [
                   "uv",
                   "npm",
-                  "pip"
+                  "pip",
+                  "venv",
+                  "tarball"
                 ]
               },
               "command": {
@@ -147,6 +172,44 @@
         },
         "uiSecretName": {
           "type": "string"
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "github",
+                  "gitlab"
+                ]
+              },
+              "host": {
+                "type": "string",
+                "pattern": "^$|^[a-z0-9.-]+(:[0-9]+)?$"
+              },
+              "secretName": {
+                "type": "string",
+                "pattern": "^$|^[A-Za-z0-9_]+$"
+              }
+            }
+          }
+        },
+        "repositoriesDir": {
+          "type": "string",
+          "pattern": "^$|^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$"
+        },
+        "repositories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^https://[^@\\s]+$"
+          }
         }
       }
     },
@@ -257,7 +320,103 @@
         }
       }
     },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "interval": {
+          "type": "integer",
+          "minimum": 10
+        },
+        "labelSelector": {
+          "type": "string"
+        },
+        "labelDomain": {
+          "type": "string"
+        },
+        "bundles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "servers": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https?://"
+                  },
+                  "auth": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "secretRef",
+                      "tokenKey"
+                    ],
+                    "properties": {
+                      "secretRef": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "header": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9-]+$"
+                      },
+                      "format": {
+                        "enum": [
+                          "basic",
+                          "bearer",
+                          "raw"
+                        ]
+                      },
+                      "userKey": {
+                        "type": "string"
+                      },
+                      "tokenKey": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "namespace": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "resources": {
+          "type": "object"
+        },
+        "clusterRole": {
+          "type": "string"
+        }
+      }
+    },
     "mcpDiscovery": {
+      "description": "Deprecated former name of mcp; its keys override mcp",
       "type": "object",
       "properties": {
         "enabled": {
@@ -269,6 +428,23 @@
         },
         "labelSelector": {
           "type": "string"
+        },
+        "labelDomain": {
+          "type": "string"
+        },
+        "bundles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "servers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "resources": {
           "type": "object"
@@ -362,6 +538,69 @@
     "tenant": {
       "type": "string",
       "pattern": "^([a-z0-9]([a-z0-9-]*[a-z0-9])?)?$"
+    },
+    "condenser": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxSize": {
+          "type": "integer",
+          "minimum": 20
+        },
+        "keepFirst": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "vaultSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "data"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+          },
+          "item": {
+            "type": "string"
+          },
+          "storeKind": {
+            "enum": [
+              "",
+              "ClusterSecretStore",
+              "SecretStore"
+            ]
+          },
+          "storeName": {
+            "type": "string"
+          },
+          "refreshInterval": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+              "pattern": "^[-._a-zA-Z0-9]+$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "agent": {
+            "type": "boolean"
+          }
+        }
+      }
     }
   }
 }

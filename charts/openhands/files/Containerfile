@@ -16,7 +16,8 @@ RUN set -eu; mkdir -p /export/bin; \
     done
 {{- end }}
 
-FROM {{ .Values.image.repository }}:{{ .Values.image.tag }}
+# agent-canvas {{ .Values.image.tag }}
+FROM {{ include "openhands.upstreamImage" . }}
 USER root
 {{- if .Values.build.toolsImage }}
 COPY --from=tools /export/bin/ /usr/local/bin/

@@ -59,7 +59,9 @@ spec:
         - name: NC_DOMAIN
           value: {{ include "wrapper.host" . | quote }}
         - name: HPB_DOMAIN
-          value: {{ include "wrapper.signalingHost" . | quote }}
+          value: {{ include "wrapper.host" . | quote }}
+        - name: HPB_PATH
+          value: /talk/signaling
         - name: HPB_PROTOCOL
           value: https
         - name: TZ
@@ -128,5 +130,5 @@ spec:
   selector:
     {{- include "wrapper.labels" "nextcloud-talk-recording" | nindent 4 }}
 ---
-{{ include "wrapper.pathRoute" (dict "root" . "name" "nextcloud-talk-recording" "partOf" "nextcloud-talk" "path" "/apps/talk/recording" "port" "recording") }}
+{{ include "wrapper.pathRoute" (dict "root" . "name" "nextcloud-talk-recording" "partOf" "nextcloud-talk" "path" "/talk/recording" "port" "recording") }}
 {{- end }}

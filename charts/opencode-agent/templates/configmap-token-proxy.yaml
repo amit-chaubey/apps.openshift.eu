@@ -13,3 +13,8 @@ data:
 {{ .Files.Get "files/token-proxy.py" | indent 4 }}
   ui-proxy.py: |
 {{ .Files.Get "files/ui-proxy.py" | indent 4 }}
+  {{- $targets := include "opencode-agent.mcpTargets" . }}
+  {{- if ne $targets "{}" }}
+  # mcp.servers with agentToken: the only URLs the proxy sends the agent token to
+  targets.json: {{ $targets | quote }}
+  {{- end }}

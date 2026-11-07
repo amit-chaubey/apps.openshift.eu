@@ -1,4 +1,13 @@
 {{- if .Values.egressService.enabled }}
+{{- $annotations := deepCopy .Values.egressService.annotations }}
+{{- if .Values.dns.enabled }}
+{{- $host := include "mailu-wrapper.egressHostname" . }}
+{{- $_ := set $annotations "external-dns.alpha.kubernetes.io/hostname" $host }}
+{{- $_ := set $annotations "external-dns.kubernetes.io/hostname" $host }}
+{{- $_ := set $annotations "external-dns.alpha.kubernetes.io/ttl" (toString .Values.dns.ttl) }}
+{{- $_ := set $annotations "external-dns.kubernetes.io/ttl" (toString .Values.dns.ttl) }}
+{{- end }}
+# never shared: receiving servers judge outgoing mail by this address and its name
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,12 +17,12 @@ metadata:
     app.kubernetes.io/name: {{ $.Values.upstream.nameOverride | quote }}
     app.kubernetes.io/component: mail
     {{- include "mailu.commonLabels" $ | nindent 4 }}
-  {{- with merge (deepCopy .Values.egressService.annotations) (include "mailu-wrapper.publicAddress" . | fromYaml) }}
+  {{- with $annotations }}
   annotations: {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   type: LoadBalancer
-  externalTrafficPolicy: {{ include "mailu-wrapper.trafficPolicy" (dict "root" . "policy" "Local") }}
+  externalTrafficPolicy: Local
   selector: {{- include "mailu-wrapper.selector" (dict "context" . "component" "postfix") | nindent 4 }}
   ports:
   # a Service needs a port; nothing listens on it

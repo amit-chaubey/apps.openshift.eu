@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "global": {"type": "object"},
+    "team": {"type": "string"},
+    "tenant": {"type": "string"},
+    "enabled": {"type": "boolean"},
+    "nameOverride": {"type": "string", "maxLength": 63},
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string", "minLength": 1},
+        "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "nextcloud": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {"type": "string", "pattern": "^https?://[^\\s]+$"},
+        "deploymentMode": {"type": "string", "minLength": 1},
+        "bearerPassthrough": {"type": "boolean"}
+      }
+    },
+    "env": {"type": "object", "additionalProperties": {"type": ["string", "number", "boolean"]}},
+    "port": {"type": "integer", "minimum": 1024, "maximum": 65535, "not": {"enum": [8080, 8443]}},
+    "path": {"type": "string", "pattern": "^/"},
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "appProtocol": {"type": "string"},
+        "labelDomain": {"type": "string", "minLength": 1},
+        "server": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"},
+        "bundle": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"},
+        "category": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"}
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "labels": {"type": "object"},
+        "annotations": {"type": "object"}
+      }
+    },
+    "resources": {"type": "object"},
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "ingressNamespaces": {"type": "array", "items": {"type": "object"}},
+        "egress": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "dnsNamespace": {"type": "string"},
+            "dnsPort": {"type": "integer"}
+          }
+        }
+      }
+    }
+  }
+}

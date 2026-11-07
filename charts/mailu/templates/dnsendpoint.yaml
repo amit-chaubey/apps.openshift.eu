@@ -1,5 +1,12 @@
 {{- if .Values.dns.enabled }}
 {{- $domain := .Values.upstream.domain }}
+{{- $spf := .Values.dns.spf }}
+{{- if .Values.egressService.enabled }}
+{{- $egress := printf "a:%s" (include "mailu-wrapper.egressHostname" .) }}
+{{- if not (contains $egress $spf) }}
+{{- $spf = replace "v=spf1" (printf "v=spf1 %s" $egress) $spf }}
+{{- end }}
+{{- end }}
 # TXT targets carry their own quotes: the DNS provider stores them that way
 apiVersion: externaldns.k8s.io/v1alpha1
 kind: DNSEndpoint
@@ -12,11 +19,19 @@ metadata:
     {{- include "mailu.commonLabels" $ | nindent 4 }}
 spec:
   endpoints:
+  {{- if .Values.dns.mx.enabled }}
+  # external-dns writes an MX target as "<priority> <host>"
+  - dnsName: {{ $domain }}
+    recordType: MX
+    recordTTL: {{ .Values.dns.ttl }}
+    targets:
+    - {{ printf "%d %s" (int .Values.dns.mx.priority) (first .Values.upstream.hostnames) | quote }}
+  {{- end }}
   - dnsName: {{ $domain }}
     recordType: TXT
     recordTTL: {{ .Values.dns.ttl }}
     targets:
-    - {{ printf "%q" .Values.dns.spf | quote }}
+    - {{ printf "%q" $spf | quote }}
   - dnsName: {{ printf "_dmarc.%s" $domain }}
     recordType: TXT
     recordTTL: {{ .Values.dns.ttl }}

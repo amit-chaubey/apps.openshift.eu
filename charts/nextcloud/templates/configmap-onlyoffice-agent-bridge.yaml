@@ -1,0 +1,17 @@
+{{- if and .Values.onlyoffice.enabled .Values.onlyoffice.agentBridge.enabled }}
+# ONLYOFFICE plugin agent-bridge, served from the Document Server's sdkjs-plugins folder:
+# the live editing MCP server edits through it; in a person's editor it stays idle
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: onlyoffice-agent-bridge
+  labels:
+    app: onlyoffice
+    app.kubernetes.io/name: onlyoffice
+    app.kubernetes.io/instance: onlyoffice
+    app.kubernetes.io/component: office
+    app.kubernetes.io/part-of: nextcloud-office
+    {{- include "nextcloud.commonLabels" $ | nindent 4 }}
+data:
+  {{- (.Files.Glob "files/onlyoffice-agent-bridge/*").AsConfig | nindent 2 }}
+{{- end }}

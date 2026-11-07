@@ -20,8 +20,14 @@ shortly before it expires. Response bodies stream through, so model answers (SSE
 | `AGENT_TOKEN_URL` | empty: off | Token endpoint of the OpenID Connect provider |
 | `AGENT_TOKEN_ASSERTION_FILE` | `/var/run/secrets/agent-token/token` | Projected token whose audience is the provider |
 | `AGENT_TOKEN_PATHS` | `/mcp` | Comma list of path prefixes that carry the agent token |
+| `TARGETS_FILE` | empty: off | JSON object, id to URL: `/_target/<id>[/<path>]` goes to that URL with the agent token |
 
 `GET /healthz` answers 200 while the ServiceAccount token is readable.
+
+A request under `/_target/` reaches only a URL that `TARGETS_FILE` names (the agent's MCP
+sync writes it), never an address taken from the request; an unknown id gets 403. A
+target is https, verified against the system trust store, or plain http to a cluster
+Service (`*.svc`, `*.svc.cluster.local`).
 
 ## Build
 

@@ -6,6 +6,7 @@ on:
     paths:
     - charts/**
     - release-notes/**
+    - ci/catalog.py
 # two releases at once would race on gh-pages
 concurrency:
   group: release
@@ -51,3 +52,6 @@ jobs:
           v=$(awk '/^version:/{print $2}' "$c/Chart.yaml")
           gh release view "$n-$v" >/dev/null 2>&1 || ci/release.sh "$n"
         done
+    # category, vendor and type of every chart for the website, without a release
+    - name: Publish catalog.json
+      run: ci/publish-catalog.sh

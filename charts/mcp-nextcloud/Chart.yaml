@@ -1,0 +1,30 @@
+apiVersion: v2
+name: mcp-nextcloud
+description: Nextcloud MCP server (cbcoutinho nextcloud-mcp-server) for the agents of a project; files, notes, calendar, contacts, deck, tables and talk of one Nextcloud, as the calling account, with the caller's own bearer token passed to Nextcloud
+type: application
+version: 0.1.0
+appVersion: "0.201.2"
+home: https://apps.openshift.eu
+icon: https://raw.githubusercontent.com/nextcloud/promo/master/nextcloud-icon.svg
+keywords:
+- ai
+- mcp
+- mcp-server
+- nextcloud
+- files
+- calendar
+- contacts
+- notes
+sources:
+- https://github.com/hoolia/apps.openshift.eu
+- https://github.com/cbcoutinho/nextcloud-mcp-server
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Nextcloud MCP server
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/vendor: cbcoutinho
+  mcp.openshift.eu/server: nextcloud
+  mcp.openshift.eu/bundle: nextcloud
+  mcp.openshift.eu/category: collaboration

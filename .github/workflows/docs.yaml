@@ -1,0 +1,21 @@
+name: Documentation site
+on:
+  pull_request:
+  push:
+    branches:
+    - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install MkDocs
+      run: pip install -r requirements-docs.txt
+    - name: Test the page generator
+      run: python3 -m unittest ci/test_docs_gen.py
+    # the hook ci/docs_gen.py generates the chart pages; strict fails on a broken link
+    - name: Build the site
+      run: mkdocs build --strict

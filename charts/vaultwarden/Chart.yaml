@@ -20,3 +20,5 @@ maintainers:
 annotations:
   charts.openshift.io/name: Vaultwarden
   charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/category: security
+  apps.openshift.eu/vendor: Vaultwarden

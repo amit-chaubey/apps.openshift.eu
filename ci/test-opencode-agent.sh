@@ -298,4 +298,38 @@ env -i PATH="$PATH" XDG_DATA_HOME="$T/data" OPENCODE_DB_BACKUP_DIR="$T/bk" sh "$
 grep -qx db "$T"/bk/opencode.db.*[Z] || { echo "FAIL backup: a later start replaced the copy"; fail=1; }
 rm -rf "$T"
 
+# vaultSecrets and mcp.servers: credentials from the vault as files, a header per server
+VS=(--set secrets.externalSecret.storeName=vault-test --set gateway.upstream=https://api.example.com
+  --set 'vaultSecrets[0].name=jira' --set 'vaultSecrets[0].item=atlassian-team'
+  --set 'vaultSecrets[0].data.JIRA_USERNAME=login.username' --set 'vaultSecrets[0].data.JIRA_API_TOKEN=login.password'
+  --set 'mcp.servers[0].name=atlassian' --set 'mcp.servers[0].path=/mcp/acme/atlassian'
+  --set 'mcp.servers[0].auth.secretRef=jira' --set 'mcp.servers[0].auth.header=X-Atlassian-Authorization'
+  --set 'mcp.servers[0].auth.userKey=JIRA_USERNAME' --set 'mcp.servers[0].auth.tokenKey=JIRA_API_TOKEN'
+  --set 'mcp.servers[1].name=plain' --set 'mcp.servers[1].url=https://mcp.example.com/mcp')
+OUT=$(render "${BASE[@]}" "${VS[@]}")
+check "vault externalsecret" '[(d["secretKey"], d["remoteRef"]["key"], d["remoteRef"]["property"], d["remoteRef"]["nullBytePolicy"]) for d in obj("ExternalSecret", "sam-agent-jira")["spec"]["data"]] == [("JIRA_API_TOKEN", "atlassian-team", "login.password", "Ignore"), ("JIRA_USERNAME", "atlassian-team", "login.username", "Ignore")]'
+check "vault mount" 'vol("vault-jira")["secret"] == {"secretName": "sam-agent-jira", "defaultMode": 0o440, "optional": True} and {"name": "vault-jira", "mountPath": "/var/run/vault-secrets/jira", "readOnly": True} in ctr("opencode")["volumeMounts"]'
+check "vault not in env" 'not any("valueFrom" in e and "sam-agent-jira" in json.dumps(e) for c in [byo()] + byo()["extraContainers"] for e in c.get("env", []))'
+check "headers in memory" 'vol("mcp-headers")["emptyDir"]["medium"] == "Memory"'
+check "mcp entry" 'json.loads(cfg()["opencode.json"])["mcp"]["atlassian"] == {"type": "remote", "url": "http://127.0.0.1:8099/mcp/acme/atlassian", "enabled": True, "headers": {"X-Atlassian-Authorization": "{file:/var/run/mcp-headers/atlassian}"}}'
+check "mcp entry by url" 'json.loads(cfg()["opencode.json"])["mcp"]["plain"] == {"type": "remote", "url": "https://mcp.example.com/mcp", "enabled": True}'
+check "headers before start" '"sh /etc/opencode-agent/mcp-headers.sh" in ctr("opencode")["command"][-1]'
+T=$(mktemp -d)
+echo "$OUT" | python3 -c '
+import sys, yaml
+for d in yaml.safe_load_all(sys.stdin):
+    if isinstance(d, dict) and d.get("kind") == "ConfigMap" and d["metadata"]["name"].endswith("-opencode"):
+        print(d["data"]["mcp-headers.sh"], end="")' | sed "s#/var/run/#$T/#g" > "$T/mcp-headers.sh"
+mkdir -p "$T/vault-secrets/jira" "$T/mcp-headers"
+printf 'agent@example.com' > "$T/vault-secrets/jira/JIRA_USERNAME"
+printf 'secret-token' > "$T/vault-secrets/jira/JIRA_API_TOKEN"
+sh "$T/mcp-headers.sh" || { echo "FAIL mcp-headers: run"; fail=1; }
+[ "$(cat "$T/mcp-headers/atlassian")" = "Basic $(printf 'agent@example.com:secret-token' | base64 | tr -d '\n')" ] || { echo "FAIL mcp-headers: basic header"; fail=1; }
+[ "$(stat -c %a "$T/mcp-headers/atlassian")" = 600 ] || { echo "FAIL mcp-headers: header file mode"; fail=1; }
+rm -rf "$T"
+OUT=$(render "${BASE[@]}" "${VS[@]}" --set 'mcp.servers[0].auth.header=Authorization')
+has "authorization through the proxy" "the token proxy sets Authorization to the agent token"
+OUT=$(render "${BASE[@]}" "${VS[@]}" --set 'mcp.servers[0].auth.secretRef=nope')
+has "unknown secretRef" 'auth.secretRef "nope" is not a vaultSecrets name'
+
 [ $fail = 0 ] && echo "RESULT PASS" || { echo "RESULT FAIL"; exit 1; }

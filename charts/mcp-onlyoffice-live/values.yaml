@@ -1,0 +1,114 @@
+# Team of the tenant the server serves: the chart puts every object into <tenant>-<team>, a
+# namespace the team already has. Empty: the release namespace
+team: ""
+# Tenant the server belongs to; required with team
+tenant: ""
+
+# switch of this server when another chart includes it
+enabled: true
+
+# name of the server's objects and of the server on an MCP gateway (tools <name>_*).
+# Empty: mcp.server
+nameOverride: ""
+
+# server image, built from images/mcp-onlyoffice-live of the chart repository
+image:
+  repository: ghcr.io/hoolia/mcp-onlyoffice-live
+  tag: 0.2.0@sha256:8d6adb1694f88b71529a69927114d60393e1288c4ff45679345e24536ec25fb6
+  pullPolicy: IfNotPresent
+
+nextcloud:
+  # base URL of the Nextcloud the server opens documents in; the default is the Service of
+  # the nextcloud chart in the same project
+  url: http://nextcloud:8080
+  # origin the server's browser opens editor pages on, when url is an internal address:
+  # Nextcloud builds the editor link from the host it is called on. Empty: that link
+  publicUrl: ""
+  # publicUrl from a ConfigMap of the project instead, {name: <ConfigMap>, key: <key>}, for
+  # a chart that includes this one and knows the address
+  publicUrlFrom: {}
+  # Direct Editing editor id of the ONLYOFFICE app
+  editorId: onlyoffice
+
+# Whose Nextcloud account the server uses. passthrough: the caller's own Authorization
+# header (a bearer token Nextcloud accepts, or Basic with the caller's app password).
+# shared: callers without an Authorization header use the account in existingSecret
+credentials:
+  mode: passthrough
+  # with mode shared: Secret with the keys user and password (an app password)
+  existingSecret: ""
+
+sessions:
+  # documents open at once across all callers; each needs 300 to 600 MiB
+  max: 4
+  # documents open at once per Nextcloud account
+  maxPerUser: 2
+  # a session unused this long is closed
+  idleTimeoutSeconds: 900
+  # time the editor and the agent-bridge plugin get to load
+  openTimeoutSeconds: 120
+
+# pause between words when an agent asks for typing
+typingDelayMs: 120
+# offer the view tool, a screenshot of the agent's editor window
+screenshots: true
+# offer the run tool, a script of the ONLYOFFICE Office API in the agent's editor
+scripts: true
+
+# container port of the server; not 80, 443, 8080 or 8443 (open to every project)
+port: 13081
+
+# user ID of the server; empty lets OpenShift assign one. On Kubernetes without such an
+# assignment set 1001, the image's user
+runAsUser: null
+
+mcp:
+  # Service port appProtocol an MCP gateway discovers; empty leaves it unset
+  appProtocol: agentgateway.dev/mcp
+  # prefix of the catalog labels
+  labelDomain: mcp.openshift.eu
+  # <labelDomain>/server
+  server: office-live
+  # <labelDomain>/bundle
+  bundle: office-live
+  # <labelDomain>/category
+  category: documents
+
+service:
+  # extra labels on the Service, for example the gateway's exposure label
+  labels: {}
+  annotations: {}
+
+# Route to the server, for an MCP gateway in another cluster that passes the caller's token
+route:
+  enabled: false
+  # empty: the cluster assigns a hostname
+  host: ""
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+    # an open document keeps a tool call waiting while the editor loads
+    haproxy.router.openshift.io/timeout: 300s
+
+# requests and limits of the server; Chromium needs the memory
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 3Gi
+
+networkPolicy:
+  enabled: true
+  # Namespaces (label selectors) that may call the server besides its own, e.g. the gateway's
+  ingressNamespaces: []
+  egress:
+    # The server reaches DNS, the pods of its own project (Nextcloud) and web ports anywhere
+    # (the public addresses of Nextcloud and of the Document Server its browser loads)
+    enabled: true
+    dnsNamespace: openshift-dns
+    dnsPort: 5353
+    webPorts:
+    - 80
+    - 443

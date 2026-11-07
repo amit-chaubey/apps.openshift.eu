@@ -1,0 +1,48 @@
+# switch of this bundle when mcp-all includes it
+enabled: true
+
+# One OAuth client of a Google Cloud project for every server of the bundle: type Web
+# application, "Use this client for an AI-powered agent", one redirect URI per agent
+# (https://<agent route host>/mcp-oauth/callback). The chart writes it as the Secret
+# <release>-google-oauth-client
+secrets:
+  # kubernetes: the Secret from clientId and clientSecret (empty: no Secret, and agents
+  # skip the servers until one exists). externalSecret: from a secret store
+  type: kubernetes
+  clientId: ""
+  clientSecret: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # vault item with the client id as username and the client secret as password.
+    # Empty: <release>-google-oauth-client
+    item: ""
+
+# The servers; each takes the values of its chart (mcp-gmail, mcp-google-drive, ...), for
+# example write: true for write scopes. enabled: false leaves a server out
+gmail:
+  enabled: true
+  oauthClient:
+    create: false
+    secretSuffix: google-oauth-client
+googleDrive:
+  enabled: true
+  oauthClient:
+    create: false
+    secretSuffix: google-oauth-client
+googleDocs:
+  enabled: true
+  oauthClient:
+    create: false
+    secretSuffix: google-oauth-client
+googleSheets:
+  enabled: true
+  oauthClient:
+    create: false
+    secretSuffix: google-oauth-client
+googleCalendar:
+  enabled: true
+  oauthClient:
+    create: false
+    secretSuffix: google-oauth-client

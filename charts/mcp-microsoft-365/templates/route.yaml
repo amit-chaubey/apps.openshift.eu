@@ -1,0 +1,29 @@
+# agents and their users' browsers reach the server and its OAuth login here; every MCP
+# call needs a Microsoft token
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "mcp-microsoft-365.name" . }}
+  namespace: {{ include "mcp-microsoft-365.namespace" . }}
+  labels:
+    app: {{ include "mcp-microsoft-365.name" . }}
+    app.kubernetes.io/name: mcp-microsoft-365
+    app.kubernetes.io/component: route
+    {{- include "mcp-microsoft-365.commonLabels" . | nindent 4 }}
+    {{- with .Values.route.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  host: {{ .Values.route.host }}
+  to:
+    kind: Service
+    name: {{ include "mcp-microsoft-365.name" . }}
+  port:
+    targetPort: mcp
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

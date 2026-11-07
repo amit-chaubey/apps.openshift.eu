@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mcp-playwright.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+  annotations:
+    app.openshift.io/custom-icon: https://playwright.dev/img/playwright-logo.svg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mcp-playwright.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-playwright.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      # The browser needs no Kubernetes API access
+      automountServiceAccountToken: false
+      containers:
+      - name: playwright
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+        - --headless
+        - --browser={{ .Values.browser }}
+        # The pod is the sandbox; Chromium's own needs privileges the pod lacks
+        - --no-sandbox
+        # A fresh in-memory profile per MCP session; sessions share nothing
+        - --isolated
+        # with auth.enabled only the token check in the same pod reaches the server
+        - --port={{ include "mcp-auth.serverPort" (dict "root" . "port" .Values.port) }}
+        - --host={{ include "mcp-auth.serverHost" . }}
+        # Callers arrive with the Service name or a gateway host as Host
+        - --allowed-hosts=*
+        - --output-dir=/tmp/output
+        {{- range .Values.extraArgs }}
+        - {{ . }}
+        {{- end }}
+        env:
+        - name: HOME
+          value: /tmp
+        {{- if .Values.auth.enabled }}
+        # the server has no health path and listens on localhost: a TCP check from inside
+        readinessProbe:
+          exec:
+            command:
+            - node
+            - -e
+            - require('net').connect({{ .Values.auth.upstreamPort }}, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - node
+            - -e
+            - require('net').connect({{ .Values.auth.upstreamPort }}, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        {{- else }}
+        ports:
+        - name: mcp
+          containerPort: {{ .Values.port }}
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: mcp
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: mcp
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: shm
+          mountPath: /dev/shm
+      {{- if .Values.auth.enabled }}
+      {{- include "mcp-auth.container" (dict "root" . "name" .Release.Name "port" .Values.port) | nindent 6 }}
+      {{- end }}
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      {{- with include "mcp-auth.volumes" (dict "root" . "name" .Release.Name) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      # Chromium needs more shared memory than the 64Mi default
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi

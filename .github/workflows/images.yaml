@@ -1,0 +1,115 @@
+name: Images
+on:
+  pull_request:
+    paths:
+    - images/mcp-onlyoffice-live/**
+    - images/nextcloud-mcp-server/**
+    - .github/workflows/images.yaml
+  push:
+    branches:
+    - main
+    paths:
+    - images/mcp-onlyoffice-live/**
+    - images/nextcloud-mcp-server/**
+    - .github/workflows/images.yaml
+# two pushes of one image at once would race on its tag
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  mcp-onlyoffice-live:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-onlyoffice-live
+      CONTEXT: images/mcp-onlyoffice-live
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "24"
+    - name: Test the server
+      working-directory: ${{ env.CONTEXT }}
+      run: |
+        npm ci --ignore-scripts
+        npm test
+    - name: Version
+      id: v
+      run: echo "version=$(jq -r .version "$CONTEXT/package.json")" >> "$GITHUB_OUTPUT"
+    - uses: docker/setup-buildx-action@v3
+    - name: Log in to the registry
+      if: github.event_name == 'push'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    # a released version is never rebuilt: a change to the image raises package.json version
+    - name: Check that the version is new
+      id: new
+      if: github.event_name == 'push'
+      run: |
+        if docker manifest inspect "$IMAGE:${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
+          echo "push=false" >> "$GITHUB_OUTPUT"; echo "$IMAGE:${{ steps.v.outputs.version }} exists"
+        else
+          echo "push=true" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Build, and push a new version from main
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ env.CONTEXT }}
+        file: ${{ env.CONTEXT }}/Containerfile
+        platforms: linux/amd64
+        push: ${{ steps.new.outputs.push == 'true' }}
+        tags: |
+          ${{ env.IMAGE }}:${{ steps.v.outputs.version }}
+        provenance: false
+    - name: Digest
+      if: steps.new.outputs.push == 'true'
+      run: docker buildx imagetools inspect "$IMAGE:${{ steps.v.outputs.version }}" --format '{{json .Manifest.Digest}}'
+  nextcloud-mcp-server:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/nextcloud-mcp-server
+      CONTEXT: images/nextcloud-mcp-server
+    steps:
+    - uses: actions/checkout@v4
+    - name: Version
+      id: v
+      run: echo "version=$(tr -d '[:space:]' < "$CONTEXT/VERSION")" >> "$GITHUB_OUTPUT"
+    - uses: docker/setup-buildx-action@v3
+    - name: Log in to the registry
+      if: github.event_name == 'push'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    # a released version is never rebuilt: a change to the image raises VERSION
+    - name: Check that the version is new
+      id: new
+      if: github.event_name == 'push'
+      run: |
+        if docker manifest inspect "$IMAGE:${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
+          echo "push=false" >> "$GITHUB_OUTPUT"; echo "$IMAGE:${{ steps.v.outputs.version }} exists"
+        else
+          echo "push=true" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Build, and push a new version from main
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ env.CONTEXT }}
+        file: ${{ env.CONTEXT }}/Containerfile
+        platforms: linux/amd64
+        push: ${{ steps.new.outputs.push == 'true' }}
+        tags: |
+          ${{ env.IMAGE }}:${{ steps.v.outputs.version }}
+        provenance: false
+    - name: Digest
+      if: steps.new.outputs.push == 'true'
+      run: docker buildx imagetools inspect "$IMAGE:${{ steps.v.outputs.version }}" --format '{{json .Manifest.Digest}}'

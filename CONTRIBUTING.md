@@ -20,7 +20,8 @@ It needs `helm` and Python 3 with PyYAML. `gitleaks` is used when it is installe
   host path, no host network, no capability besides `NET_BIND_SERVICE`. A container that
   needs a fixed user id sets `runAsUser` on that container only.
 - A chart holds no name of a platform, cluster, company or tenant, no domain name and no
-  storage class name. Those are values with a neutral default.
+  storage class name. Those are values with a neutral default. The one shared domain
+  is `mcp.openshift.eu`, the neutral prefix of the MCP catalog labels and annotations.
 
 ### Values
 
@@ -73,6 +74,8 @@ Every object a chart renders from its own templates carries these labels in
 - `ci/check.sh` fails when an object lacks one of the five labels.
 - The number of an `argocd.argoproj.io/sync-wave` annotation is a quoted literal in the
   template, not a value.
+- A label or annotation that changes how a chart or an agent behaves is documented in
+  `docs/conventions/`, in the same pull request that introduces it.
 - Labels that select pods are fixed for the life of a release. A selector, the labels of a
   pod template and the labels of a volume claim template never change between two versions
   of a chart: a selector cannot be changed on upgrade, and a changed pod template restarts
@@ -97,6 +100,10 @@ Every object a chart renders from its own templates carries these labels in
 - `Chart.yaml` has `apiVersion: v2`, a `description`, a `version` in semantic versioning
   and an `appVersion`. A change to a chart raises its `version`: patch for a fix, minor for
   a new value or feature, major for a change that needs an action from the user.
+- `Chart.yaml` has the annotations `apps.openshift.eu/category` and
+  `apps.openshift.eu/vendor` for the chart website; an MCP chart may take its category from
+  `mcp.openshift.eu/category`. A change to these two alone raises no `version`: the website
+  reads them from `main`. See `docs/conventions/chart-catalog.md`.
 - A named template is prefixed with the chart name, or with `wrapper.` in a chart that
   wraps a dependency, so it cannot collide with a template of a subchart. The label helper
   always carries the chart name; a chart with a dependency checks that no packaged subchart
@@ -106,6 +113,22 @@ Every object a chart renders from its own templates carries these labels in
 - A template indents with two spaces and uses `nindent` with `include`, not `template`.
 - `README.md` of a chart has exactly the sections Purpose, Install and Delivery
   instructions.
+
+### MCP catalog
+
+- An MCP server chart is named `mcp-<server>`, a bundle of them `mcp-bundle-<bundle>`;
+  `mcp-all` holds every bundle as a switch. A bundle depends on its server charts with
+  `repository: file://../mcp-<server>`, an alias in camelCase and
+  `condition: <alias>.enabled`.
+- The `RemoteMCPServer` of a server chart carries the labels `mcp.openshift.eu/server`,
+  `mcp.openshift.eu/bundle` and `mcp.openshift.eu/category`, and
+  `mcp.openshift.eu/addon: "true"` when agents opt in to it. A server whose users log in
+  with OAuth carries `openhands.dev/auth: oauth2`, `openhands.dev/oauth-scopes`
+  (read-only by default, write scopes behind a value) and, for a pre-registered client,
+  `openhands.dev/oauth-client`.
+- `Chart.yaml` repeats them as annotations (`mcp.openshift.eu/server`, `/bundle`,
+  `/category`, `/auth`) and as keywords (`mcp`, `mcp-server` or `mcp-bundle`, the
+  bundle and the category), which the website and the console catalog filter on.
 
 ### Release notes
 
@@ -132,6 +155,9 @@ Every object a chart renders from its own templates carries these labels in
   images the chart renders, made by `ci/sbom.py` with syft) to the GitHub Release. An image
   built in the cluster's own registry cannot be scanned from outside; the SBOM lists it as
   `unscanned`.
+- A chart whose `Chart.yaml` carries the annotation `mcp.openshift.eu/server` is an MCP
+  server chart: the release also attaches `<chart>-<version>.server.json` in the MCP
+  Registry format (github.com/modelcontextprotocol/registry), made by `ci/server_json.py`.
 
 ### Upgrades
 
@@ -139,20 +165,35 @@ Every object a chart renders from its own templates carries these labels in
   generated secret and restarts no pod unless the change is about that pod.
 - A value is not renamed or removed without a major version.
 
-## Preferred
+## Topology view
 
-These make a chart read well in the OpenShift console. They go on the workload's own
-metadata, never on a pod template, each as a literal line in the template.
+Every workload (Deployment, StatefulSet, DaemonSet) draws in the topology view of the
+OpenShift console with an icon, in its group, with an arrow to each component it depends
+on. The keys go on the workload's own metadata, never on a pod template, each as a literal
+line in the template.
 
-| Key | Kind | Value |
-|---|---|---|
-| `app.openshift.io/runtime` | label | Name of a console icon: `nodejs`, `python`, `java`, `golang`, `php`, `redis`, `postgresql` |
-| `app.openshift.io/vcs-uri` | annotation | Source repository of the component |
-| `app.openshift.io/connects-to` | annotation | JSON list of `{"apiVersion", "kind", "name"}`: the components this one depends on |
+| Key | Kind | Required | Value |
+|---|---|---|---|
+| `app.openshift.io/runtime` | label | this or `custom-icon` | Name of a console icon: `nodejs`, `python`, `java`, `golang`, `php`, `redis`, `postgresql`, `mariadb`, `openshift` |
+| `app.openshift.io/custom-icon` | annotation | this or `runtime` | URL of the product logo, for a product without a console icon |
+| `app.openshift.io/connects-to` | annotation | when the workload depends on another | JSON list of `{"apiVersion", "kind", "name"}`: the components this one depends on |
+| `app.openshift.io/vcs-uri` | annotation | no | Source repository of the component |
 
+- `ci/check.sh` fails when a workload of the chart's own templates has neither
+  `app.openshift.io/runtime` nor `app.openshift.io/custom-icon`.
+- A workload of a subchart gets the keys through the subchart's values for workload
+  metadata (`commonAnnotations`, `deploymentAnnotations` and the like). When the subchart
+  offers only one value for all its workloads, render it per workload from `.Template.Name`
+  (chart `mailu`, helpers `mailu-wrapper.topology*`). A subchart that offers only pod
+  labels stays without: a pod label restarts the pod.
+- A StatefulSet that an operator builds carries no keys: the operator's metadata field
+  also reaches the volume claim template.
 - An arrow goes from one component to another: the application to its database, its cache
   or its object storage, a worker to its queue. It does not go from a Service to its
-  Deployment.
+  Deployment. An arrow to a workload that does not exist is ignored, so a chart may point
+  at an optional component.
+
+## Preferred
 - `app.kubernetes.io/part-of` draws one box per group in the topology view. A chart with
   many workloads uses a few groups; a small chart uses one.
 - A NetworkPolicy admits only what the application needs between its own components.

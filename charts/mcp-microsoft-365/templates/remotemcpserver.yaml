@@ -1,0 +1,29 @@
+{{- $name := include "mcp-microsoft-365.name" . }}
+{{- $d := .Values.mcp.labelDomain }}
+# each user logs in to Microsoft in the agent UI; the agent registers itself at the server
+# (dynamic client registration) and keeps the tokens
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "mcp-microsoft-365.namespace" . }}
+  labels:
+    app: {{ $name }}
+    app.kubernetes.io/name: mcp-microsoft-365
+    app.kubernetes.io/component: server
+    {{- include "mcp-microsoft-365.commonLabels" . | nindent 4 }}
+    {{ $d }}/server: {{ .Values.mcp.server }}
+    {{ $d }}/bundle: {{ .Values.mcp.bundle }}
+    {{ $d }}/category: {{ .Values.mcp.category }}
+    {{- if .Values.mcp.addon }}
+    {{ $d }}/addon: "true"
+    {{- end }}
+  annotations:
+    openhands.dev/auth: oauth2
+    {{- with .Values.mcp.icon }}
+    openhands.dev/icon: {{ . }}
+    {{- end }}
+spec:
+  description: {{ .Values.mcp.description | quote }}
+  url: https://{{ .Values.route.host }}/mcp
+  protocol: STREAMABLE_HTTP

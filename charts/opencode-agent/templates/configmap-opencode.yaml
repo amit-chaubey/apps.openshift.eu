@@ -14,6 +14,9 @@
     "command" (list "/tools/kubernetes-mcp-server" "--config" "/etc/opencode-agent/kubernetes-mcp-server.toml" "--disable-multi-cluster")
   ))
 -}}
+{{- range $k, $v := include "opencode-agent.mcpServers" . | fromJson }}
+{{- $_ := set $config.mcp $k $v }}
+{{- end }}
 {{- with .Values.opencode.disabledProviders }}
 {{- $_ := set $config "disabled_providers" . }}
 {{- end }}
@@ -63,5 +66,31 @@ data:
     {{- end }}
   init.sh: |
 {{ .Files.Get "files/init.sh" | indent 4 }}
+  # Writes each mcp.servers credential header from the vault secret files into memory
+  mcp-headers.sh: |
+    set -eu
+    umask 077
+    d=/var/run/mcp-headers
+    {{- range .Values.mcp.servers }}
+    {{- $name := .name }}
+    {{- with .auth }}
+    {{- $dir := printf "/var/run/vault-secrets/%s" .secretRef }}
+    {{- $format := .format | default "basic" }}
+    # {{ $name }}
+    t={{ $dir }}/{{ .tokenKey }}
+    {{- if eq $format "basic" }}
+    u={{ $dir }}/{{ .userKey }}
+    if [ -s "$t" ] && [ -s "$u" ]; then
+      printf 'Basic %s' "$(printf '%s:%s' "$(cat "$u")" "$(cat "$t")" | base64 | tr -d '\n')" > "$d/.tmp"
+    {{- else }}
+    if [ -s "$t" ]; then
+      printf '{{ ternary "Bearer " "" (eq $format "bearer") }}%s' "$(cat "$t")" > "$d/.tmp"
+    {{- end }}
+      mv "$d/.tmp" "$d/{{ $name }}"
+    else
+      echo "mcp-headers: no credential files for {{ $name }} yet" >&2
+    fi
+    {{- end }}
+    {{- end }}
   backup-db.sh: |
 {{ .Files.Get "files/backup-db.sh" | indent 4 }}

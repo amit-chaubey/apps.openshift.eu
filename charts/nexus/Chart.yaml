@@ -19,3 +19,5 @@ maintainers:
 annotations:
   charts.openshift.io/name: Nexus Repository
   charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/category: devops
+  apps.openshift.eu/vendor: Sonatype
