@@ -185,9 +185,39 @@ networkPolicy:
   # example an integration in another namespace
   webIngressFrom: []
 
-# integration with Odoo (bridge and side panel): not part of this version, must stay false
+# Odoo tickets and leads as conversations; staff replies go back to Odoo. See the README
 odoo:
   enabled: false
+  # https address of Odoo; required
+  url: ""
+  # Odoo database; empty: the server's only database
+  database: ""
+  # API inbox of helpdesk.ticket; created when missing
+  ticketInbox: Support
+  # API inbox of crm.lead; created when missing. Empty: leads are not mirrored
+  leadInbox: Sales
+  # a resolved conversation moves its ticket to the folded stage of this name (else to the
+  # team's first folded stage)
+  solvedStage: Solved
+  bridge:
+    image: registry.access.redhat.com/ubi9/python-312-minimal:9.8-1793637445
+    resources:
+      requests:
+        cpu: 10m
+        memory: 48Mi
+      limits:
+        cpu: 500m
+        memory: 192Mi
+
+# metrics of the Odoo bridge for the namespace's monitoring
+monitoring:
+  # a ServiceMonitor, and the scraping namespaces may reach the bridge's metrics port
+  enabled: false
+  # alert rules next to the ServiceMonitor; false where the platform alerts centrally
+  alerts: true
+  # label of the namespaces that may scrape
+  namespaceLabels:
+    network.openshift.io/policy-group: monitoring
 
 # AI drafts as private notes: not part of this version, must stay false
 draftAgent:
@@ -309,6 +339,16 @@ secrets:
   # secret Chatwoot signs the agent bot's webhooks with, with agentBot.enabled; empty:
   # generated
   agentBotWebhookSecret: ""
+  # API key of the Odoo user the bridge works as, with odoo.enabled; required
+  odooApiKey: ""
+  # secret Odoo signs its events with (the bridge secret of the Odoo module), with
+  # odoo.enabled; empty: generated, then give Odoo the same value
+  odooEventSecret: ""
+  # access token of the bridge's Chatwoot agent, with odoo.enabled; empty: generated
+  odooBridgeToken: ""
+  # secret Chatwoot signs the API inboxes' webhooks with, with odoo.enabled; empty:
+  # generated
+  odooInboxSecret: ""
   externalSecret:
     storeKind: ClusterSecretStore
     storeName: ""
@@ -323,3 +363,7 @@ secrets:
       cookie-secret: chatwoot-oauth-cookie
       bot-token: chatwoot-agent-bot-token
       webhook-secret: chatwoot-agent-bot-webhook
+      odoo-api-key: chatwoot-odoo-api-key
+      odoo-event-secret: chatwoot-odoo-event-secret
+      odoo-bridge-token: chatwoot-odoo-bridge-token
+      odoo-inbox-secret: chatwoot-odoo-inbox-secret

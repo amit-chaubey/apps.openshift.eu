@@ -103,7 +103,8 @@
         "webIngressFrom": {"type": "array", "items": {"type": "object"}}
       }
     },
-    "odoo": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "Reserved for a later version; must stay false"}}},
+    "monitoring": {"type": "object", "title": "Monitoring", "properties": {"enabled": {"type": "boolean", "title": "ServiceMonitor of the Odoo bridge"}, "alerts": {"type": "boolean", "title": "Alert rules of the Odoo bridge"}, "namespaceLabels": {"type": "object", "additionalProperties": {"type": "string"}}}},
+    "odoo": {"type": "object", "title": "Odoo bridge", "properties": {"enabled": {"type": "boolean", "title": "Mirror Odoo tickets and leads", "description": "Odoo tickets and leads as conversations in Chatwoot API inboxes; needs route.hostname"}, "url": {"type": "string", "title": "Odoo address", "pattern": "^(https://.*)?$"}, "database": {"type": "string", "title": "Odoo database"}, "ticketInbox": {"type": "string", "title": "Inbox of tickets"}, "leadInbox": {"type": "string", "title": "Inbox of leads", "description": "Empty: leads are not mirrored"}, "solvedStage": {"type": "string", "title": "Stage of a resolved ticket"}, "bridge": {"type": "object", "properties": {"image": {"type": "string"}, "resources": {"type": "object"}}}}},
     "draftAgent": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "Reserved for a later version; must stay false"}}},
     "agent": {
       "type": "object",
@@ -154,7 +155,7 @@
         "oauthClientSecret": {"type": "string"},
         "oauthCookieSecret": {"type": "string", "description": "16, 24 or 32 characters", "pattern": "^(.{16}|.{24}|.{32})?$"},
         "agentBotToken": {"type": "string", "description": "Leave empty to generate one; at least 32 characters"},
-        "agentBotWebhookSecret": {"type": "string", "description": "Leave empty to generate one; at least 32 characters"}
+        "agentBotWebhookSecret": {"type": "string", "description": "Leave empty to generate one; at least 32 characters"}, "odooApiKey": {"type": "string", "description": "API key of the Odoo user the bridge works as; required with odoo.enabled"}, "odooEventSecret": {"type": "string", "description": "Leave empty to generate one, then give Odoo the same value; at least 32 characters", "pattern": "^(.{32,})?$"}, "odooBridgeToken": {"type": "string", "description": "Leave empty to generate one; at least 32 characters", "pattern": "^(.{32,})?$"}, "odooInboxSecret": {"type": "string", "description": "Leave empty to generate one; at least 32 characters", "pattern": "^(.{32,})?$"}
       }
     }
   }

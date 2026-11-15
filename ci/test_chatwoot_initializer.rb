@@ -71,6 +71,24 @@ class AgentBotWebhookTest < Minitest::Test
   end
 end
 
+class OdooBridgeWebhookTest < Minitest::Test
+  BRIDGE = 'http://chatwoot-odoo-bridge:8080/'
+
+  def test_private_address_for_the_odoo_bridge_only
+    env = ENV.to_h
+    ENV['SMTP_ADDRESS'] = 'smtp.example.com'
+    ENV.delete('CHART_AGENT_BOT_URL')
+    ENV['CHART_ODOO_BRIDGE_URL'] = BRIDGE
+    Rails.application.config.prepared = []
+    load INITIALIZER
+    Rails.application.config.prepared.first.call
+    assert Webhooks::Trigger.new("#{BRIDGE}chatwoot/webhook").execute
+    refute Webhooks::Trigger.new('http://10.0.0.1/webhook').execute
+  ensure
+    ENV.replace(env)
+  end
+end
+
 class SessionHoursTest < Minitest::Test
   CHATWOOT_DEFAULT = 2 * 30 * 24 * 3600
 

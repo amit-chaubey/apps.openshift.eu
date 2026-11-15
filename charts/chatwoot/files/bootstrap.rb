@@ -10,6 +10,9 @@
 #   that token and gives it the account
 # - with CHATWOOT_AGENT_BOT_TOKEN: keeps the Agent Bot with that access token, webhook
 #   secret and URL, connected to exactly the inboxes named in CHATWOOT_AGENT_BOT_INBOXES
+# - with CHATWOOT_ODOO_BRIDGE_TOKEN: keeps the Odoo bridge's agent with that access token,
+#   the API inboxes named in CHATWOOT_ODOO_INBOXES with their webhooks to the bridge, signed
+#   with CHATWOOT_ODOO_INBOX_SECRET, and the conversation attributes odoo_ref and odoo_url
 # - with CHATWOOT_AGENT_PANEL_PATH: keeps the Dashboard App of the agent panel at that path
 #   of FRONTEND_URL
 # It prints no credential.
@@ -93,6 +96,50 @@ else
   end
   missing = wanted - ['*'] - account.inboxes.pluck(:name)
   puts "agent bot #{bot.name}: no inbox named #{missing.join(', ')}" if missing.any?
+end
+
+odoo_token = ENV.fetch('CHATWOOT_ODOO_BRIDGE_TOKEN', '')
+if odoo_token.empty?
+  puts 'no odoo bridge token: odoo bridge not set up'
+else
+  secret = ENV.fetch('CHATWOOT_ODOO_INBOX_SECRET')
+  abort 'odoo bridge token or inbox secret shorter than 32 characters' if odoo_token.length < 32 || secret.length < 32
+  # the bridge's own agent; under .invalid no login at the OIDC provider can match it
+  user = User.find_or_initialize_by(email: ENV.fetch('CHATWOOT_ODOO_BRIDGE_EMAIL'))
+  if user.new_record?
+    user.name = 'Odoo'
+    user.password = "#{SecureRandom.base64(48)}-Aa1"
+    user.confirmed_at = Time.current
+    user.save!
+    puts "odoo bridge user #{user.id} created"
+  end
+  AccountUser.find_or_create_by!(account: account, user: user) { |member| member.role = :agent }
+  access = user.access_token || user.create_access_token
+  access.reload
+  access.update!(token: odoo_token) unless ActiveSupport::SecurityUtils.secure_compare(access.token.to_s, odoo_token)
+  url = ENV.fetch('CHATWOOT_ODOO_WEBHOOK_URL')
+  ENV.fetch('CHATWOOT_ODOO_INBOXES').split(',').map(&:strip).reject(&:empty?).each do |name|
+    inbox = account.inboxes.find_by(name: name)
+    if inbox.nil?
+      inbox = account.inboxes.create!(name: name, channel: Channel::Api.create!(account: account, webhook_url: url))
+      puts "odoo inbox #{name}: created"
+    end
+    abort "inbox #{name} is a #{inbox.channel_type}, the odoo bridge needs an API inbox" unless inbox.channel_type == 'Channel::Api'
+    channel = inbox.channel
+    channel.webhook_url = url
+    channel.secret = secret unless ActiveSupport::SecurityUtils.secure_compare(channel.secret.to_s, secret)
+    channel.save! if channel.changed?
+    InboxMember.find_or_create_by!(inbox: inbox, user: user)
+    puts "odoo inbox #{name} (#{inbox.id}): webhooks to the bridge"
+  end
+  # shown in the conversation sidebar; the bridge keys every conversation on odoo_ref
+  { 'odoo_ref' => ['Odoo record', :text], 'odoo_url' => ['Odoo', :link] }.each do |key, (label, type)|
+    definition = CustomAttributeDefinition.find_or_initialize_by(account: account, attribute_key: key,
+                                                                 attribute_model: :conversation_attribute)
+    definition.attribute_display_name = label
+    definition.attribute_display_type = type
+    definition.save! if definition.changed?
+  end
 end
 
 panel_path = ENV.fetch('CHATWOOT_AGENT_PANEL_PATH', '')

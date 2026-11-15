@@ -16,8 +16,25 @@ identity provider can deliver to or verify, so no login of a person can match it
 
 {{/* Stops a render whose values cannot work. */}}
 {{- define "wrapper.validate" -}}
-{{- if or .Values.odoo.enabled .Values.draftAgent.enabled }}
-{{- fail "odoo.enabled and draftAgent.enabled are reserved for a later chart version" }}
+{{- if .Values.draftAgent.enabled }}
+{{- fail "draftAgent.enabled is reserved for a later chart version" }}
+{{- end }}
+{{- if .Values.odoo.enabled }}
+{{- if .Values.agentBridge.standalone.enabled }}
+{{- fail "odoo.enabled and agentBridge.standalone.enabled exclude each other" }}
+{{- end }}
+{{- if not .Values.route.hostname }}
+{{- fail "route.hostname is required with odoo.enabled: Odoo posts its events to that host" }}
+{{- end }}
+{{- if not (hasPrefix "https://" .Values.odoo.url) }}
+{{- fail "odoo.url, an https address, is required with odoo.enabled" }}
+{{- end }}
+{{- if not .Values.odoo.ticketInbox }}
+{{- fail "odoo.ticketInbox is required with odoo.enabled" }}
+{{- end }}
+{{- if eq .Values.odoo.ticketInbox .Values.odoo.leadInbox }}
+{{- fail "odoo.ticketInbox and odoo.leadInbox must differ" }}
+{{- end }}
 {{- end }}
 {{- $b := .Values.agentBridge }}
 {{- if and $b.remoteUrl (not (hasPrefix "https://" $b.remoteUrl)) }}
@@ -288,6 +305,11 @@ serviceAccountName: chatwoot-route
 # the chart initializer lets webhooks to this address alone reach a private address
 - name: CHART_AGENT_BOT_URL
   value: {{ include "wrapper.agentBotUrl" . }}
+{{- end }}
+{{- if .Values.odoo.enabled }}
+# and to the Odoo bridge's webhook port
+- name: CHART_ODOO_BRIDGE_URL
+  value: http://chatwoot-odoo-bridge:8080/
 {{- end }}
 {{- with .Values.extraEnv }}
 {{ toYaml . }}

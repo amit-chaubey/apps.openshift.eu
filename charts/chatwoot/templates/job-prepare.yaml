@@ -98,6 +98,24 @@ spec:
               name: chatwoot-agent-bot
               key: webhook-secret
         {{- end }}
+        {{- if .Values.odoo.enabled }}
+        - name: CHATWOOT_ODOO_BRIDGE_EMAIL
+          value: odoo-bridge@chatwoot.invalid
+        - name: CHATWOOT_ODOO_WEBHOOK_URL
+          value: http://chatwoot-odoo-bridge:8080/chatwoot/webhook
+        - name: CHATWOOT_ODOO_INBOXES
+          value: {{ join "," (compact (list .Values.odoo.ticketInbox .Values.odoo.leadInbox)) | quote }}
+        - name: CHATWOOT_ODOO_BRIDGE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: chatwoot-odoo-bridge
+              key: odoo-bridge-token
+        - name: CHATWOOT_ODOO_INBOX_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: chatwoot-odoo-bridge
+              key: odoo-inbox-secret
+        {{- end }}
         {{- if .Values.copilotPanel.enabled }}
         - name: CHATWOOT_AGENT_PANEL_TITLE
           value: {{ .Values.copilotPanel.title | quote }}

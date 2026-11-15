@@ -27,10 +27,11 @@ if ENV.key?('CHATWOOT_SESSION_HOURS')
   DeviseTokenAuth.token_lifespan = Integer(hours, 10).hours
 end
 
-unless ENV['CHART_AGENT_BOT_URL'].to_s.empty?
-  # Chatwoot refuses webhooks to private addresses (SafeFetch). The agent bot's bridge is a
-  # Service of this release: allow a private address for a webhook to its address only
-  bridge = ENV['CHART_AGENT_BOT_URL']
+bridges = ENV.values_at('CHART_AGENT_BOT_URL', 'CHART_ODOO_BRIDGE_URL').map(&:to_s).reject(&:empty?)
+unless bridges.empty?
+  # Chatwoot refuses webhooks to private addresses (SafeFetch). The agent bot's bridge and
+  # the Odoo bridge are Services of this release: allow a private address for a webhook to
+  # their addresses only
   Rails.application.config.to_prepare do
     SafeFetch.singleton_class.prepend(Module.new do
       def allow_private_network?
@@ -41,7 +42,7 @@ unless ENV['CHART_AGENT_BOT_URL'].to_s.empty?
       private
 
       define_method(:perform_request) do
-        return super() unless @url.to_s.start_with?(bridge)
+        return super() unless bridges.any? { |bridge| @url.to_s.start_with?(bridge) }
 
         Thread.current[:chart_agent_bot_webhook] = true
         begin

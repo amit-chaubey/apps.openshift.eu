@@ -27,6 +27,10 @@ data:
   login_bridge.py: |
     {{- .Files.Get "files/login_bridge.py" | nindent 4 }}
   {{- end }}
+  {{- if .Values.odoo.enabled }}
+  odoo_bridge.py: |
+    {{- .Files.Get "files/odoo_bridge.py" | nindent 4 }}
+  {{- end }}
   {{- end }}
   {{- if include "wrapper.agentBridge" . }}
   agent_bot.py: |

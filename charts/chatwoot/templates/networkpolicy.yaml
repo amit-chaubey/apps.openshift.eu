@@ -41,6 +41,12 @@ spec:
         matchLabels:
           app.kubernetes.io/name: chatwoot-agent-bridge
     {{- end }}
+    {{- if .Values.odoo.enabled }}
+    # the Odoo bridge writes conversations and messages through the API
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: chatwoot-odoo-bridge
+    {{- end }}
     {{- with .Values.networkPolicy.webIngressFrom }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -70,6 +76,50 @@ spec:
     - podSelector:
         matchLabels:
           app.kubernetes.io/name: chatwoot-worker
+{{- end }}
+{{- if .Values.odoo.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chatwoot-odoo-bridge
+  labels:
+    app: chatwoot-odoo-bridge
+    app.kubernetes.io/name: chatwoot-odoo-bridge
+    app.kubernetes.io/component: network
+    {{- include "chatwoot.commonLabels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: chatwoot-odoo-bridge
+  policyTypes:
+  - Ingress
+  ingress:
+  # the API inboxes' webhooks, sent by the worker; each one is also signed
+  - ports:
+    - protocol: TCP
+      port: 8080
+    from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: chatwoot-worker
+  # Odoo's events through the router; each one is signed
+  - ports:
+    - protocol: TCP
+      port: 8081
+    from:
+    - namespaceSelector:
+        matchLabels:
+          policy-group.network.openshift.io/ingress: ""
+  {{- if .Values.monitoring.enabled }}
+  # /metrics; a webhook from there still needs its signature
+  - ports:
+    - protocol: TCP
+      port: 8080
+    from:
+    - namespaceSelector:
+        matchLabels: {{- toYaml .Values.monitoring.namespaceLabels | nindent 10 }}
+  {{- end }}
 {{- end }}
 {{- if .Values.sso.enabled }}
 ---

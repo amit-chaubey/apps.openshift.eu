@@ -141,7 +141,12 @@ OUT=$(render "${SSO[@]}" --set secrets.type=externalSecret --set secrets.externa
 check "external secrets" 'not objs("Secret") and sorted(e["metadata"]["name"] for e in objs("ExternalSecret")) == ["chatwoot-credentials", "chatwoot-oauth", "chatwoot-platform"] and all(d["remoteRef"]["conversionStrategy"] == "Default" and d["remoteRef"]["decodingStrategy"] == "None" and d["remoteRef"]["metadataPolicy"] == "None" for e in objs("ExternalSecret") for d in e["spec"]["data"])'
 
 # --- values that cannot work
-fails "reserved odoo" "reserved for a later chart version" --set odoo.enabled=true
+ODOO=(--set odoo.enabled=true --set odoo.url=https://odoo.example.org --set route.hostname=support.example.org)
+fails "odoo without hostname" "route.hostname is required with odoo.enabled" --set odoo.enabled=true --set odoo.url=https://odoo.example.org --set secrets.odooApiKey=k
+fails "odoo without key" "odoo-api-key of Secret chatwoot-odoo has no value" "${ODOO[@]}"
+fails "odoo over http" "/odoo/url" "${ODOO[@]}" --set odoo.url=http://odoo.example.org --set secrets.odooApiKey=k
+fails "odoo one inbox for both" "must differ" "${ODOO[@]}" --set secrets.odooApiKey=k --set odoo.leadInbox=Support
+fails "odoo and standalone" "exclude" "${ODOO[@]}" --set secrets.odooApiKey=k --set agentBridge.standalone.enabled=true --set agentBot.enabled=true --set agent.url=https://a.example.com/ --set agentBridge.standalone.chatwootUrl=https://cw.example.com
 fails "reserved draft agent" "reserved for a later chart version" --set draftAgent.enabled=true
 fails "bucket without class" "storageClassName is required" --set attachments.storage=objectBucketClaim
 fails "unknown storage" "value must be one of 'volume', 'objectBucketClaim'" --set attachments.storage=s3
@@ -160,6 +165,27 @@ check "session of 25 hours" 'env("chatwoot-web", "web")["CHATWOOT_SESSION_HOURS"
 for bad in boss@example.com admin@chatwoot.invalid.example.com "x@invalid" "a b@x.invalid"; do
   fails "deliverable admin email $bad" "reserved domain .invalid" --set "account.adminEmail=$bad"
 done
+
+# --- odoo bridge
+OUT=$(render)
+check "no odoo bridge by default" 'not obj("Deployment", "chatwoot-odoo-bridge") and not obj("Secret", "chatwoot-odoo") and "CHART_ODOO_BRIDGE_URL" not in env("chatwoot-worker", "worker") and "odoo_bridge.py" not in obj("ConfigMap", "chatwoot-scripts")["data"]'
+OUT=$(render "${ODOO[@]}" --set secrets.odooApiKey=k)
+check "odoo bridge one pod at a time" 'obj("Deployment", "chatwoot-odoo-bridge")["spec"]["strategy"] == {"type": "Recreate"}'
+check "odoo bridge env" 'env("chatwoot-odoo-bridge", "odoo-bridge")["ODOO_URL"] == "https://odoo.example.org" and env("chatwoot-odoo-bridge", "odoo-bridge")["PUBLIC_URL"] == "https://support.example.org" and env("chatwoot-odoo-bridge", "odoo-bridge")["TICKET_INBOX"] == "Support"'
+check "odoo inboxes set up by the job" 'env("chatwoot-prepare-1", "prepare")["CHATWOOT_ODOO_WEBHOOK_URL"] == "http://chatwoot-odoo-bridge:8080/chatwoot/webhook" and env("chatwoot-prepare-1", "prepare")["CHATWOOT_ODOO_INBOXES"] == "Support,Sales"'
+check "odoo key to the bridge only" '"chatwoot-odoo" in refs(pod("chatwoot-odoo-bridge")) and all("chatwoot-odoo\"" not in refs(pod(n)) for n in ("chatwoot-web", "chatwoot-worker", "chatwoot-gate", "chatwoot-prepare-1"))'
+check "odoo private webhook" 'all(env(n, c)["CHART_ODOO_BRIDGE_URL"] == "http://chatwoot-odoo-bridge:8080/" for n, c in (("chatwoot-web", "web"), ("chatwoot-worker", "worker")))'
+check "odoo events route" 'obj("Route", "chatwoot-odoo-bridge")["spec"]["path"] == "/odoo/events" and obj("Route", "chatwoot-odoo-bridge")["spec"]["port"]["targetPort"] == "events" and obj("Route", "chatwoot-odoo-bridge")["spec"]["host"] == "support.example.org"'
+check "odoo webhooks from the worker, events from the router" 'obj("NetworkPolicy", "chatwoot-odoo-bridge")["spec"]["ingress"][0]["from"] == [{"podSelector": {"matchLabels": {"app.kubernetes.io/name": "chatwoot-worker"}}}] and obj("NetworkPolicy", "chatwoot-odoo-bridge")["spec"]["ingress"][1]["ports"] == [{"protocol": "TCP", "port": 8081}]'
+check "odoo bridge reaches web" '{"podSelector": {"matchLabels": {"app.kubernetes.io/name": "chatwoot-odoo-bridge"}}} in obj("NetworkPolicy", "chatwoot-web")["spec"]["ingress"][0]["from"]'
+OUT=$(render "${ODOO[@]}" --set secrets.type=externalSecret --set secrets.externalSecret.storeName=vault)
+check "odoo secrets from a store" 'obj("ExternalSecret", "chatwoot-odoo")["spec"]["data"][0]["remoteRef"]["key"] == "chatwoot-odoo-api-key" and obj("ExternalSecret", "chatwoot-odoo-bridge")'
+check "no monitoring by default" 'not objs("ServiceMonitor") and not objs("PrometheusRule")'
+OUT=$(render "${ODOO[@]}" --set secrets.odooApiKey=k --set monitoring.enabled=true)
+check "odoo bridge monitored" 'obj("ServiceMonitor", "chatwoot-odoo-bridge")["spec"]["endpoints"] == [{"port": "webhook", "path": "/metrics", "scheme": "http"}] and len(obj("PrometheusRule", "chatwoot-odoo-bridge")["spec"]["groups"][0]["rules"]) == 3'
+check "monitoring reaches the metrics port only" 'obj("NetworkPolicy", "chatwoot-odoo-bridge")["spec"]["ingress"][2] == {"ports": [{"protocol": "TCP", "port": 8080}], "from": [{"namespaceSelector": {"matchLabels": {"network.openshift.io/policy-group": "monitoring"}}}]}'
+OUT=$(render "${ODOO[@]}" --set secrets.odooApiKey=k --set monitoring.enabled=true --set monitoring.alerts=false)
+check "alerts can stay central" 'obj("ServiceMonitor", "chatwoot-odoo-bridge") and not objs("PrometheusRule")'
 
 # --- agent bot and panel
 AGENT=(--set agent.url=https://agents.example.com/a2a/acme --set agent.auth.type=clientAssertion
