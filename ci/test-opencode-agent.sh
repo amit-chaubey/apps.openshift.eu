@@ -146,6 +146,20 @@ check "no placement by default" '"nodeSelector" not in byo() and "affinity" not 
 OUT=$(render "${BASE[@]}" --set-json 'opencode.npmScopes={"@example":"https://npm.example.com/repo/"}')
 check npmrc 'cfg()["npmrc"].strip() == "@example:registry=https://npm.example.com/repo/"'
 
+# plugin options: catalog names a person switches on, after opencode.plugins, each once
+OUT=$(render "${BASE[@]}")
+check "no plugins by default" 'json.loads(cfg()["opencode.json"])["plugin"] == []'
+OUT=$(render "${BASE[@]}" --set-json 'opencode.plugins=["@example/base@1.0.0"]' --set-json 'opencode.pluginOptions=[]')
+check "empty options keep plugins" 'json.loads(cfg()["opencode.json"])["plugin"] == ["@example/base@1.0.0"]'
+OUT=$(render "${BASE[@]}" --set-json 'opencode.plugins=["@example/base@1.0.0"]' --set-json 'opencode.pluginOptions=["opencode-handoff","opencode-dynamic-context-pruning","opencode-handoff"]')
+check "plugin options" 'json.loads(cfg()["opencode.json"])["plugin"] == ["@example/base@1.0.0", "opencode-handoff@0.7.0", "@tarquinen/opencode-dcp@3.2.0"]'
+OUT=$(render "${BASE[@]}" --set-json 'opencode.pluginCatalog={"mine":"@example/mine@2.0.0"}' --set-json 'opencode.pluginOptions=["mine"]')
+check "catalog entry from values" 'json.loads(cfg()["opencode.json"])["plugin"] == ["@example/mine@2.0.0"]'
+OUT=$(render "${BASE[@]}" --set-json 'opencode.pluginOptions=["nope"]')
+has "unknown plugin option" 'opencode.pluginOptions: "nope" is not in opencode.pluginCatalog'
+OUT=$(render "${BASE[@]}" --set-json 'opencode.pluginCatalog={"mine":"@example/mine"}' --set-json 'opencode.pluginOptions=["mine"]')
+has "unpinned catalog entry" 'opencode.pluginCatalog: "mine" is not pinned to one version'
+
 # RollingUpdate with a single-attach volume stalls every rollout
 for m in ReadWriteOnce ReadWriteOncePod; do
   if ERR=$(helm template t "$C" --namespace test "${BASE[@]}" --set storage.accessMode=$m 2>&1 >/dev/null); then

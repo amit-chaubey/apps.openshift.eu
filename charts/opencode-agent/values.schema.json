@@ -249,6 +249,18 @@
             "type": "string"
           }
         },
+        "pluginCatalog": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "pluginOptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "npmScopes": {
           "type": "object",
           "additionalProperties": {

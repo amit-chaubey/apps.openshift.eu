@@ -122,6 +122,12 @@ opencode:
   image: ""
   # npm plugins OpenCode installs on start, for example a model provider plugin
   plugins: []
+  # plugins a person switches on by name: name to one pinned npm version
+  pluginCatalog:
+    opencode-dynamic-context-pruning: "@tarquinen/opencode-dcp@3.2.0"
+    opencode-handoff: opencode-handoff@0.7.0
+  # names of pluginCatalog entries installed after plugins
+  pluginOptions: []
   # "@scope": <registry URL> for those installs, written to ~/.npmrc
   npmScopes: {}
   # extra environment for the opencode container (name: value)

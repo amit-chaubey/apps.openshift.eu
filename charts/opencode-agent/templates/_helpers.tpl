@@ -239,6 +239,19 @@ header value is a {file:} reference to what mcp-headers.sh writes, never the cre
 {{- toJson $out -}}
 {{- end -}}
 
+{{/* opencode.plugins, then the catalog spec of each opencode.pluginOptions name, each once */}}
+{{- define "opencode-agent.plugins" -}}
+{{- $out := list -}}
+{{- range .Values.opencode.plugins }}{{ $out = append $out . }}{{ end -}}
+{{- range .Values.opencode.pluginOptions -}}
+{{- $spec := index $.Values.opencode.pluginCatalog . -}}
+{{- if not $spec }}{{ fail (printf "opencode.pluginOptions: %q is not in opencode.pluginCatalog" .) }}{{ end -}}
+{{- if not (regexMatch "^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$" $spec) }}{{ fail (printf "opencode.pluginCatalog: %q is not pinned to one version (%s)" . $spec) }}{{ end -}}
+{{- $out = append $out $spec -}}
+{{- end -}}
+{{- toJson (uniq $out) -}}
+{{- end -}}
+
 {{/* token proxy target id of an mcp.servers entry with agentToken: <namespace>.<name> */}}
 {{- define "opencode-agent.mcpTargetId" -}}
 {{- $root := index . 0 -}}{{- $s := index . 1 -}}

@@ -7,7 +7,7 @@
   "worktree" (dict "directory" "/workspace/.worktrees")
   "watcher" (dict "ignore" (list "**/node_modules/**" "**/.git/**" "**/.venv/**" "**/dist/**" "**/build/**" "**/.next/**"))
   "instructions" (list "/etc/opencode-agent/instructions.md")
-  "plugin" .Values.opencode.plugins
+  "plugin" (include "opencode-agent.plugins" . | fromJsonArray)
   "mcp" (dict "kubernetes" (dict
     "type" "local"
     "enabled" true
