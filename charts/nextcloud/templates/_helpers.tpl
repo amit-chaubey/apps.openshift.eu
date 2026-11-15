@@ -218,14 +218,22 @@ metallb.io/loadBalancerIPs: {{ . | quote }}
 {{- if and .Values.oidc.enabled .Values.oidc.discoveryUri .Values.oidc.clientId }}true{{ end -}}
 {{- end -}}
 
+{{/* The mail server runs: mailu.enabled and a mail domain. An empty mailu.upstream.domain
+means no mail: nothing of this chart refers to Mailu then. The Mailu subchart itself follows
+mailu.enabled only (a Helm condition reads a boolean), so mailu.enabled without a domain stops
+the render with a message (validate.yaml) */}}
+{{- define "wrapper.mailuActive" -}}
+{{- if and .Values.mailu.enabled (trim (toString (.Values.mailu.upstream.domain | default ""))) }}true{{ end -}}
+{{- end -}}
+
 {{/* Webmail logs in through the OpenID Connect provider: Mailu on the Nextcloud host, oidc or sso set up */}}
 {{- define "wrapper.mailLoginActive" -}}
-{{- if and .Values.mailu.enabled .Values.mailRoute.enabled .Values.mailRoute.sso.enabled (eq .Values.secrets.type "kubernetes") (or .Values.sso.enabled (include "wrapper.oidcActive" .)) }}true{{ end -}}
+{{- if and (include "wrapper.mailuActive" .) .Values.mailRoute.enabled .Values.mailRoute.sso.enabled (eq .Values.secrets.type "kubernetes") (or .Values.sso.enabled (include "wrapper.oidcActive" .)) }}true{{ end -}}
 {{- end -}}
 
 {{/* Users get a mailbox in the Mail app: switched on, with the mail server of this chart */}}
 {{- define "wrapper.mailActive" -}}
-{{- if and .Values.mail.enabled .Values.mailu.enabled }}true{{ end -}}
+{{- if and .Values.mail.enabled (include "wrapper.mailuActive" .) }}true{{ end -}}
 {{- end -}}
 
 {{/* editFormats of the ONLYOFFICE connector: {"odt":true,...} from onlyoffice.editFormats */}}

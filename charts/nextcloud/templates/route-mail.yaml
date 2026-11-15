@@ -1,4 +1,4 @@
-{{- if and .Values.mailu.enabled .Values.mailRoute.enabled }}
+{{- if and (include "wrapper.mailuActive" .) .Values.mailRoute.enabled }}
 {{- $front := printf "%s-front" (.Values.mailu.upstream.fullnameOverride | default "mailu") }}
 {{- /* Mailu front removes the /mail prefix itself (mail-prefix.conf): no rewrite */}}
 {{ include "wrapper.pathRoute" (dict "root" . "name" "mail" "partOf" "nextcloud-mail" "path" "/mail" "rewrite" "/mail" "port" "http" "service" $front) }}

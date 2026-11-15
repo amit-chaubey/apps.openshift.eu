@@ -41,8 +41,8 @@ password:
 | `secrets.adminPassword` | empty | Password of the first administrator. Empty: generated. |
 | `secrets.generator.enabled` | `false` | The External Secrets Operator makes the credentials Secrets and generates their empty passwords once. |
 | `global.publicAddress.shared` | `false` | Share one public address between the public Services of the project. See Delivery instructions. |
-| `mailu.enabled` | `true` | Run a Mailu mail server in the same project. Its values are those of the `mailu` chart, under `mailu`. |
-| `mailu.upstream.domain` | `example.org` | Mail domain of the mail server, normally the domain of the users' login email addresses. Set it. |
+| `mailu.enabled` | `true` | Run a Mailu mail server in the same project. Its values are those of the `mailu` chart, under `mailu`. `false`: no mail server, no mail Route and no Mail app setup. `true` needs `mailu.upstream.domain`. |
+| `mailu.upstream.domain` | `example.org` | Mail domain of the mail server, normally the domain of the users' login email addresses. Empty: nothing of this chart refers to Mailu; with `mailu.enabled` `true` the render stops with a message, so set `mailu.enabled` `false` with it. |
 | `mailu.upstream.initialAccount.domain` | `example.org` | Domain of the first mail admin account, `admin@<domain>`. Same value as the mail domain. |
 | `mailu.upstream.hostnames` | `[mail.example.org]` | Hostnames of the mail server; the first one is its name towards other mail servers and the target of the MX record. Set it to `mail.<mail domain>`. |
 | `mail.enabled` | `true` | With `mailu.enabled`: install the Mail app and give every user with an address in a mail domain a mailbox with that address, see Mail for every user. |
