@@ -2,7 +2,7 @@ apiVersion: v2
 name: oh-my-openagent
 description: OmO, the oh-my-openagent coding agent, in a browser terminal behind a login, with its home directory on a volume and models from an OpenAI-compatible gateway
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: 5.1.70
 home: https://apps.openshift.eu
 icon: https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/v5.1.70/.github/assets/omo-icon-light.svg

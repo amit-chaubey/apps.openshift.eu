@@ -60,4 +60,14 @@ check "prebuilt image" '"BuildConfig" not in kinds and ctr("terminal")["image"] 
 OUT=$(render --set builds.enabled=false)
 echo "$OUT" | grep -q "terminal.image is required" || { echo "FAIL no image without builds"; fail=1; }
 
+# start.sh sets the MCP identity key back to 0600 after the kubelet's fsGroup change,
+# and creates nothing when OmO has not written the key yet
+keylines=$(grep -E '^key=|"\$key"' "$C/files/start.sh")
+T=$(mktemp -d)
+mkdir -p "$T/.omo/agent"
+HOME=$T bash -euc "$keylines" && [ ! -e "$T/.omo/agent/config-identity.key" ] || { echo "FAIL key step without a key"; fail=1; }
+install -m 0660 /dev/null "$T/.omo/agent/config-identity.key"
+HOME=$T bash -euc "$keylines" && [ "$(stat -c %a "$T/.omo/agent/config-identity.key")" = 600 ] || { echo "FAIL identity key mode not reset to 0600"; fail=1; }
+rm -rf "$T"
+
 [ $fail = 0 ] && echo "PASS oh-my-openagent" || exit 1

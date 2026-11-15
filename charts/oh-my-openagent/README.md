@@ -17,7 +17,7 @@ On every start the container also writes:
 - `~/.omo/agent/models.json`: the gateway as one OpenAI-compatible provider named `gateway.provider` with `gateway.models`.
 - `~/.omo/omo.jsonc`: telemetry and the device service off, `model_profile` pinned to `<gateway.provider>/<gateway.defaultModel>`, merged with `omo.config`.
 
-`~/.omo/agent/settings.json` (default provider and model) is written on the first start only, so choices made in OmO survive a restart. The environment turns off usage reports and update checks.
+`~/.omo/agent/settings.json` (default provider and model) is written on the first start only, so choices made in OmO survive a restart. OmO's MCP identity key `~/.omo/agent/config-identity.key` is set back to mode 0600 on every start, as the volume's fsGroup change makes it group-writable. The environment turns off usage reports and update checks.
 
 The home directory (`/home/omo`) is the volume `<release>-home`: OmO, its sessions, memory and logins, and the work tree. It is kept when the release is removed.
 

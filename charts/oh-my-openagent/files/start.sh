@@ -34,6 +34,12 @@ install -m 0600 /etc/omo/models.json "$HOME/.omo/agent/models.json"
 install -m 0600 /etc/omo/omo.jsonc "$HOME/.omo/omo.jsonc"
 [ -e "$HOME/.omo/agent/settings.json" ] || install -m 0600 /etc/omo/settings.json "$HOME/.omo/agent/settings.json"
 
+# OmO creates its MCP identity key with mode 0600 and refuses a key with other modes. The
+# kubelet's fsGroup ownership change adds group rw to every file of the volume on each mount,
+# so the mode is set back here, after the mount and before OmO starts.
+key="$HOME/.omo/agent/config-identity.key"
+[ ! -f "$key" ] || [ -L "$key" ] || chmod 0600 "$key"
+
 [ -z "${GIT_USER_NAME:-}" ] || git config --global user.name "$GIT_USER_NAME"
 [ -z "${GIT_USER_EMAIL:-}" ] || git config --global user.email "$GIT_USER_EMAIL"
 
