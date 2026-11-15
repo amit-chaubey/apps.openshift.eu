@@ -388,6 +388,7 @@ backup:
 
 # Mail server in the same project; its values are those of the mailu chart
 mailu:
+  # false: no mail server. true needs mailu.upstream.domain; without it the render stops
   enabled: true
   # the chart's own Route has a host of its own; mailRoute serves Mailu on the Nextcloud host
   route:
@@ -398,7 +399,7 @@ mailu:
     front:
       # a chart upgrade reloads mail-prefix.conf; equals the chart version (templates/validate.yaml)
       podAnnotations:
-        chart-version: 0.18.0
+        chart-version: 0.19.0
       extraVolumes:
       - name: dovecot-override
         configMap:
@@ -602,7 +603,7 @@ nextcloud:
   # a chart upgrade restarts Nextcloud so its start-up setup runs again; equals the chart
   # version (templates/validate.yaml refuses a render where it does not)
   podAnnotations:
-    chart-version: 0.18.0
+    chart-version: 0.19.0
   nextcloud:
     host: nextcloud.example.org
     existingSecret:

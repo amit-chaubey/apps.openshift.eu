@@ -110,7 +110,7 @@ data:
     set_app whiteboard collabBackendUrl "https://{{ $host }}/whiteboard"
     set_secret whiteboard jwt_secret_key whiteboard-jwt-secret
     {{- end }}
-    {{- if and .Values.mailu.enabled .Values.mailRoute.enabled .Values.mailRoute.externalSites }}
+    {{- if and (include "wrapper.mailuActive" .) .Values.mailRoute.enabled .Values.mailRoute.externalSites }}
     {{- $mail := printf "https://%s/mail" $host }}
     {{- $inbox := printf "%s/inbox/" $mail }}
     {{- $login := include "wrapper.mailLoginActive" . }}
