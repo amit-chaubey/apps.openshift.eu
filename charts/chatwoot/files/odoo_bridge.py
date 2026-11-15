@@ -28,6 +28,7 @@ import hmac
 import html
 import http.server
 import json
+import email.utils
 import logging
 import os
 import re
@@ -52,8 +53,8 @@ MAX_PENDING = 500
 MAX_REQUESTS = 32
 # Odoo events running or queued; beyond that Odoo hears 503 and retries from its outbox
 MAX_EVENTS = 64
-# seconds a stopping pod spends telling staff about replies it could not send
-STOP_BUDGET = 10
+# seconds a stopping pod spends on notes and running work; terminationGracePeriodSeconds is 30
+STOP_BUDGET = 15
 INBOX_CACHE_SECONDS = 300
 ODOO_SOURCE = "odoo:mail.message:"
 CONVERSATION_PATH = re.compile(r"/conversations/(\d+)/?$")
@@ -189,6 +190,12 @@ def text_to_html(text):
     """A staff reply as Odoo mail HTML: escaped, one paragraph per block, line breaks kept."""
     blocks = [b for b in re.split(r"\n\s*\n", (text or "").strip()) if b.strip()]
     return "".join("<p>%s</p>" % html.escape(b.strip()).replace("\n", "<br>") for b in blocks)
+
+
+def bare_email(value):
+    """The address alone: a mailed-in lead keeps the whole From header ("Bob" <bob@example.org>)."""
+    address = email.utils.parseaddr(value or "")[1].strip()
+    return address if re.fullmatch(r"[^@\s]+@[^@\s]+", address) else None
 
 
 def clip(text):
@@ -394,9 +401,10 @@ class Bridge:
         self._pending_lock = threading.Lock()
         self._timers = {}  # Timer -> payload waiting for its retry
         self._dropped = []
+        self._queued = {}  # token -> payload of a webhook attempt not started yet
         self._stopping = False
         self._events = 0
-        for name, result in (("webhooks", "given_up"), ("webhooks", "dropped"), ("events", "error")):
+        for name, result in (("webhooks", "given_up"), ("events", "error")):
             self.metrics.seed(name, result=result)
 
     def lock(self, ref):
@@ -443,7 +451,7 @@ class Bridge:
             if cid:
                 return cid
             spec = MODELS[model]
-            email = (record.get(spec["email"]) or "").strip() or None
+            email = bare_email(record.get(spec["email"]))
             partner = record.get("partner_id")
             # without a partner the record itself names the contact, so a retry finds it again
             identifier = f"odoo:res.partner:{partner[0]}" if partner else f"odoo:{model}:{rid}"
@@ -564,7 +572,7 @@ class Bridge:
         if record.get("partner_id"):
             return record["partner_id"][0]
         spec = MODELS[model]
-        email = (record.get(spec["email"]) or "").strip()
+        email = bare_email(record.get(spec["email"]))
         if not email:
             return None
         name = (record.get(spec["name"]) or "").replace('"', "").replace("\\", "").strip()
@@ -693,16 +701,30 @@ class Bridge:
             if self._pending >= MAX_PENDING:
                 return False
             self._pending += 1
-        self.pool.submit(self._attempt, payload, 0)
+        self._submit(payload, 0)
         return True
+
+    def _submit(self, payload, attempt):
+        token = object()
+        with self._pending_lock:
+            self._queued[token] = payload
+        try:
+            self.pool.submit(self._attempt, payload, attempt, token)
+        except RuntimeError:  # the pool is shut down
+            with self._pending_lock:
+                self._queued.pop(token, None)
+            self._drop(payload)
 
     def _event_done(self, _future):
         with self._pending_lock:
             self._events -= 1
 
-    def _attempt(self, payload, attempt):
+    def _attempt(self, payload, attempt, token=None):
+        with self._pending_lock:
+            mine = self._queued.pop(token, None) is not None
         if self._stopping:
-            return self._drop(payload)
+            # without the token, stop() has already dropped this one
+            return self._drop(payload) if mine else None
         result = self._guarded("webhooks", self.handle_webhook, payload)
         if not isinstance(result, Exception):
             self._done()
@@ -727,16 +749,12 @@ class Bridge:
             mine = self._timers.pop(threading.current_thread(), None)
         if mine is None:
             return  # stop() took this one over
-        try:
-            self.pool.submit(self._attempt, payload, attempt)
-        except RuntimeError:  # the pool is shut down
-            self._drop(payload)
+        self._submit(payload, attempt)
 
     def _drop(self, payload):
         with self._pending_lock:
             self._pending -= 1
             self._dropped.append(payload)
-        self.metrics.inc("webhooks", result="dropped")
 
     def _done(self):
         with self._pending_lock:
@@ -762,17 +780,28 @@ class Bridge:
         Chatwoot already shows those replies as sent, so each gets a private note while the
         budget lasts.
         """
+        end = time.monotonic() + budget
         self._stopping = True
         with self._pending_lock:
             timers, self._timers = self._timers, {}
         for timer, payload in timers.items():
             timer.cancel()
             self._drop(payload)
-        # running work finishes; queued webhooks see _stopping and are dropped
-        self.pool.shutdown(wait=True)
+        # queued work never starts: an event already had its 503 and Odoo sends it again
+        self.pool.shutdown(wait=False, cancel_futures=True)
+        with self._pending_lock:
+            queued, self._queued = self._queued, {}
+        for payload in queued.values():
+            self._drop(payload)
+        dropped = self._tell_dropped(end)
+        # running work may still drop a reply; wait for it while the budget lasts
+        while (self.pending() or self._events) and time.monotonic() < end:
+            time.sleep(0.05)
+        return dropped + self._tell_dropped(end)
+
+    def _tell_dropped(self, end):
         with self._pending_lock:
             dropped, self._dropped = self._dropped, []
-        end = time.monotonic() + budget
         for payload in dropped:
             if time.monotonic() > end:
                 break
@@ -897,7 +926,7 @@ def main():
     stop.wait()
     for server in servers:
         server.shutdown()
-    # running events finish; an unfinished one is retried by Odoo
+    # an event not finished in time is retried by Odoo
     dropped = bridge.stop()
     if dropped:
         LOG.error("%d webhook(s) not delivered at shutdown: the replies were not sent", dropped)

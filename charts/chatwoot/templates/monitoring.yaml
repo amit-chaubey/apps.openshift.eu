@@ -42,19 +42,19 @@ spec:
         summary: The Chatwoot Odoo bridge is unreachable
         description: No metrics for 5m. Staff replies are not sent to customers and Odoo events wait in the Odoo outbox.
     - alert: ChatwootOdooBridgeReplyLost
-      expr: increase(chatwoot_odoo_bridge_webhooks_total{namespace="{{ $ns }}",result=~"given_up|dropped"}[1h]) > 0
+      expr: increase(chatwoot_odoo_bridge_webhooks_total{namespace="{{ $ns }}",result="given_up"}[1h]) > 0
       labels:
         severity: warning
       annotations:
         summary: A staff reply did not reach Odoo
-        description: The bridge gave up a webhook after its retries, or stopped while it waited; the conversation has a private note asking staff to send it again.
+        description: The bridge gave up a webhook after its retries; the conversation has a private note asking staff to send it again.
     - alert: ChatwootOdooBridgeEventsFailing
-      # Odoo retries an event up to 2 hours apart: three errors in 4 hours is one that keeps failing
+      # Odoo retries an event up to 2 hours apart: three errors in 4 hours, one event or several
       expr: increase(chatwoot_odoo_bridge_events_total{namespace="{{ $ns }}",result="error"}[4h]) > 2
       labels:
         severity: warning
       annotations:
         summary: Odoo events keep failing in the Chatwoot bridge
-        description: More than two Odoo events failed in 4 hours; they wait in the Odoo outbox, which retries up to 8 times over about 4 hours.
+        description: More than two Odoo event deliveries failed in 4 hours, from one event or several; they wait in the Odoo outbox, which retries up to 8 times over about 4 hours. The bridge log names the error.
 {{- end }}
 {{- end }}

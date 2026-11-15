@@ -175,7 +175,9 @@ class Fake(http.server.BaseHTTPRequestHandler):
             found = [c for c in cw["contacts"].values() if (c.get(cond["attribute_key"]) or "").lower() == value]
             return self._json(200, {"payload": found[:15]})
         if method == "POST" and path == "/contacts":
-            # email and identifier are unique in an account
+            # as Chatwoot: Devise.email_regexp, and email and identifier unique in an account
+            if body.get("email") and not re.fullmatch(r"[^@\s]+@[^@\s]+", body["email"]):
+                return self._json(422, {"message": "Email is invalid"})
             for c in cw["contacts"].values():
                 for k in ("email", "identifier"):
                     if body.get(k) and (c.get(k) or "").lower() == body[k].lower():
@@ -288,6 +290,7 @@ class BridgeTest(unittest.TestCase):
 
     def tearDown(self):
         self.bridge.stop(budget=0)
+        self.bridge.pool.shutdown(wait=True)
 
     # ------------------------------------------------------------ helpers
 
@@ -591,7 +594,6 @@ class BridgeTest(unittest.TestCase):
         self.assertTrue(self.chat(cid)[-1]["private"])
         self.assertIn("restarted before this reply reached Odoo", self.chat(cid)[-1]["content"])
         self.assertEqual(self.bridge.pending(), 0)
-        self.assertIn('chatwoot_odoo_bridge_webhooks_total{result="dropped"} 1', self.bridge.metrics.render())
 
     def test_stop_tells_staff_about_queued_replies(self):
         self.event("ticket.created")
@@ -607,10 +609,50 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(len(self.posts()) + dropped, 6)
         self.assertEqual(self.bridge.pending(), 0)
 
+    def test_stop_with_a_slow_odoo_tells_staff_first(self):
+        self.event("ticket.created")
+        cid = next(iter(self.conversations()))
+        self.bridge.retries = (30,)
+        self.state["odoo_fail"] = 1
+        self.bridge.accept_webhook(self.staff_reply(cid))
+        end = time.time() + 5
+        while not self.bridge._timers and time.time() < end:
+            time.sleep(0.02)
+        # Odoo hangs: events fill the workers and the queue behind them
+        self.state["odoo_delay"] = 2
+        event = {"event": "ticket.created", "model": "helpdesk.ticket", "id": 7}
+        for _ in range(10):
+            self.bridge.run("events", self.bridge.handle_event, event, 0.01)
+        started = time.monotonic()
+        self.assertEqual(self.bridge.stop(budget=1), 1)
+        self.assertLess(time.monotonic() - started, 3)
+        self.state["odoo_delay"] = 0
+        self.assertIn("restarted before this reply reached Odoo", self.chat(cid)[-1]["content"])
+
+    def test_attempt_already_dropped_by_stop_is_not_dropped_again(self):
+        payload = {"event": "message_created", "id": 1, "conversation": {"id": 1}}
+        with self.bridge._pending_lock:
+            self.bridge._pending += 1
+        self.bridge._stopping = True
+        self.bridge._drop(payload)  # stop() took it from the queue
+        self.bridge._attempt(payload, 0, object())  # the worker started it a moment later
+        self.assertEqual(self.bridge.pending(), 0)
+        self.assertEqual(len(self.bridge._dropped), 1)
+
+    def test_mailed_in_lead_with_a_display_name(self):
+        lead = self.state["odoo"]["crm.lead"][9]
+        lead["email_from"] = '"Bob Smith" <bob@example.org>'
+        self.assertEqual(self.event("lead.created", model="crm.lead", rid=9), "done")
+        conv = next(iter(self.conversations().values()))
+        self.assertEqual(self.state["chatwoot"]["contacts"][conv["contact_id"]]["email"], "bob@example.org")
+        self.bridge.handle_webhook(self.staff_reply(conv["id"]))
+        (call,) = [kw for model, method, kw in self.state["odoo_calls"] if method == "find_or_create"]
+        self.assertEqual(call["email"], '"Bob" <bob@example.org>')
+        self.assertEqual(len(self.posts()), 1)
+
     def test_alert_counters_exist_before_the_first_failure(self):
         text = self.bridge.metrics.render()
-        for line in ('webhooks_total{result="given_up"} 0', 'webhooks_total{result="dropped"} 0',
-                     'events_total{result="error"} 0'):
+        for line in ('webhooks_total{result="given_up"} 0', 'events_total{result="error"} 0'):
             self.assertIn("chatwoot_odoo_bridge_" + line, text)
 
     def test_events_beyond_the_bound_answer_busy(self):
@@ -698,7 +740,7 @@ class BridgeTest(unittest.TestCase):
         self.state["odoo_delay"] = 0.3
         body = json.dumps({"event": "ticket.created", "model": "helpdesk.ticket", "id": 7}).encode()
         self.assertEqual(self.post(ports["event"], "/odoo/events", body, self.signed_event(body))[0], 503)
-        self.bridge.stop(budget=0)
+        self.bridge.pool.shutdown(wait=True)
         self.assertEqual(len(self.conversations()), 1)
 
     def test_deleted_record_ends_the_retries(self):

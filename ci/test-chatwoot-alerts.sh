@@ -34,7 +34,7 @@ tests:
     - exp_labels: {severity: warning, namespace: test, result: given_up}
       exp_annotations:
         summary: A staff reply did not reach Odoo
-        description: The bridge gave up a webhook after its retries, or stopped while it waited; the conversation has a private note asking staff to send it again.
+        description: The bridge gave up a webhook after its retries; the conversation has a private note asking staff to send it again.
   - eval_time: 20m
     alertname: ChatwootOdooBridgeDown
 # a pod that is gone leaves no up series
@@ -77,7 +77,7 @@ tests:
     - exp_labels: {severity: warning, namespace: test, result: error}
       exp_annotations:
         summary: Odoo events keep failing in the Chatwoot bridge
-        description: More than two Odoo events failed in 4 hours; they wait in the Odoo outbox, which retries up to 8 times over about 4 hours.
+        description: More than two Odoo event deliveries failed in 4 hours, from one event or several; they wait in the Odoo outbox, which retries up to 8 times over about 4 hours. The bridge log names the error.
 # a healthy bridge alerts on nothing
 - interval: 1m
   input_series:
