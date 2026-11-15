@@ -1,0 +1,220 @@
+{{- $name := include "cloudroom.name" . }}
+{{- $uid := int .Values.uid }}
+{{- $h := .Values.harnesses }}
+{{- $gateway := not (empty .Values.gateway.upstream) }}
+{{- $securityContext := include "cloudroom.containerSecurityContext" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ $name }}
+    app.kubernetes.io/name: cloudroom
+    app.kubernetes.io/component: server
+    {{- include "cloudroom.commonLabels" . | nindent 4 }}
+  annotations:
+    app.openshift.io/custom-icon: https://www.cloudroom.dev/favicon.ico
+    app.openshift.io/vcs-uri: https://github.com/davidondrej/cloudroom
+spec:
+  replicas: 1
+  # one core per volume: the old pod stops before the new one starts
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "cloudroom.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cloudroom.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: {{ $uid }}
+        fsGroupChangePolicy: OnRootMismatch
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # the agents' processes get a grace period to save their history
+      terminationGracePeriodSeconds: 30
+      initContainers:
+      # folders of the volume that the core container mounts one by one
+      - name: volume
+        image: {{ include "cloudroom.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - sh
+        - -c
+        - mkdir -p /data/code /data/home /data/history /data/tmp /data/cache && chmod 0700 /data/code /data/home /data/history /data/tmp /data/cache
+        securityContext:
+          {{- $securityContext | nindent 10 }}
+          runAsUser: {{ $uid }}
+          runAsGroup: {{ $uid }}
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+      containers:
+      - name: core
+        image: {{ include "cloudroom.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - sh
+        - /etc/cloudroom-chart/start.sh
+        ports:
+        - name: http
+          containerPort: {{ .Values.port }}
+          protocol: TCP
+        env:
+        - name: CLOUDROOM_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "cloudroom.tokenSecret" . }}
+              key: token
+        - name: CLOUDROOM_LISTEN
+          value: "0.0.0.0:{{ .Values.port }}"
+        # the router terminates TLS; the network policy admits only the router
+        - name: CLOUDROOM_ALLOW_NON_LOOPBACK_HTTP
+          value: "1"
+        - name: CLOUDROOM_STORE
+          value: self-hosted
+        - name: CLOUDROOM_LOCAL_HISTORY
+          value: "1"
+        - name: CLOUDROOM_STORAGE_POLICY
+          value: /etc/cloudroom/storage.json
+        - name: CLOUDROOM_STATE_DIR
+          value: /var/lib/cloudroom/history
+        - name: CLOUDROOM_ACCOUNT_HOME
+          value: /home/cloudroom-agent
+        - name: CLOUDROOM_REPOSITORY
+          value: /code
+        - name: CLOUDROOM_HARNESS
+          value: {{ .Values.core.harness | quote }}
+        {{- if $h.codex.enabled }}
+        - name: CLOUDROOM_CODEX_BINARY
+          value: /usr/local/bin/codex
+        - name: CLOUDROOM_CODEX_HOME
+          value: /home/cloudroom-agent/.codex
+        - name: CLOUDROOM_CODEX_MODEL
+          value: {{ required "harnesses.codex.model is required with harnesses.codex.enabled" $h.codex.model | quote }}
+        {{- end }}
+        - name: HOME
+          value: /home/cloudroom-agent
+        - name: HARNESS_CLAUDE
+          value: {{ $h.claudeCode.enabled | quote }}
+        - name: HARNESS_OPENCODE
+          value: {{ $h.opencode.enabled | quote }}
+        - name: HARNESS_CODEX
+          value: {{ $h.codex.enabled | quote }}
+        - name: GATEWAY
+          value: {{ $gateway | quote }}
+        {{- range $k, $v := .Values.core.env }}
+        - name: {{ $k }}
+          value: {{ $v | quote }}
+        {{- end }}
+        # /v1/ready needs the token; curl reads it from stdin, not from its arguments
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - >-
+              printf 'header = "Authorization: Bearer %s"\n' "$CLOUDROOM_TOKEN"
+              | curl --config - -fsS -o /dev/null http://127.0.0.1:{{ .Values.port }}/v1/ready
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          timeoutSeconds: 5
+        securityContext:
+          {{- $securityContext | nindent 10 }}
+          runAsUser: {{ $uid }}
+          runAsGroup: {{ $uid }}
+        volumeMounts:
+        - name: chart
+          mountPath: /etc/cloudroom-chart
+          readOnly: true
+        # one volume: the core requires every agent path on the filesystem it watches
+        - name: data
+          mountPath: /code
+          subPath: code
+        - name: data
+          mountPath: /home/cloudroom-agent
+          subPath: home
+        - name: data
+          mountPath: /var/lib/cloudroom/history
+          subPath: history
+        - name: data
+          mountPath: /tmp
+          subPath: tmp
+        - name: data
+          mountPath: /var/cache/cloudroom/npm
+          subPath: cache
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+      {{- if $gateway }}
+      - name: token-proxy
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /app/token-proxy.py
+        env:
+        - name: TOKEN_FILE
+          value: /var/run/secrets/api-token/token
+        - name: UPSTREAM
+          value: {{ .Values.gateway.upstream | quote }}
+        - name: PORT
+          value: {{ .Values.tokenProxy.port | quote }}
+        # listens on 127.0.0.1 only, so the probe runs inside the container
+        readinessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - import urllib.request; urllib.request.urlopen("http://127.0.0.1:{{ .Values.tokenProxy.port }}/healthz", timeout=2)
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        securityContext:
+          {{- $securityContext | nindent 10 }}
+        volumeMounts:
+        - name: chart
+          mountPath: /app
+          readOnly: true
+        - name: api-token
+          mountPath: /var/run/secrets/api-token
+          readOnly: true
+        resources:
+          {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
+      {{- end }}
+      volumes:
+      - name: chart
+        configMap:
+          name: {{ $name }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ $name }}-data
+      {{- if $gateway }}
+      - name: api-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              {{- with include "cloudroom.audience" . }}
+              audience: {{ . }}
+              {{- end }}
+              expirationSeconds: 3600
+              path: token
+      {{- end }}

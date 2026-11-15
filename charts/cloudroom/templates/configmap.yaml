@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cloudroom.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "cloudroom.name" . }}
+    app.kubernetes.io/name: cloudroom
+    app.kubernetes.io/component: server
+    {{- include "cloudroom.commonLabels" . | nindent 4 }}
+data:
+  start.sh: |
+{{ .Files.Get "files/start.sh" | indent 4 }}
+  token-proxy.py: |
+{{ .Files.Get "files/token-proxy.py" | indent 4 }}
+  environment: |
+    {{- include "cloudroom.agentEnv" . | trim | nindent 4 }}
+  {{- if and .Values.gateway.upstream .Values.harnesses.opencode.enabled .Values.gateway.opencode.models }}
+  opencode.json: |
+    {{- include "cloudroom.opencodeConfig" . | nindent 4 }}
+  {{- end }}

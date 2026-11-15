@@ -1,0 +1,173 @@
+# Cloudroom core release the image is built from
+core:
+  version: 0.1.111
+  # sha256 of the release archive cloudroom-core-<version>-linux-x86_64.tar.gz; the build
+  # refuses another
+  sha256: 2773ce7550c0073409e90509e1f654292332d2e1e6413ec4d2312bed3afd60a7
+  # base URL of the core release archives
+  releaseUrl: https://github.com/davidondrej/cloudroom/releases/download
+  # harness of a session that names none: claude-code, opencode or codex
+  harness: claude-code
+  # extra environment of the core process (name: value), for example CLOUDROOM_INSTANCE
+  env: {}
+  # environment of every agent the core starts (name: value). The core starts agents
+  # with a clean environment and reads these from its state directory; the chart rewrites
+  # them at every start
+  agentEnv: {}
+
+# Harness CLIs installed in the image, each pinned to an npm version. A harness shows in
+# the app once its CLI and home folder exist
+harnesses:
+  claudeCode:
+    enabled: true
+    # npm @anthropic-ai/claude-code
+    version: 2.1.325
+  opencode:
+    enabled: true
+    # npm opencode-ai
+    version: 1.18.34
+  codex:
+    # Codex needs a ChatGPT login of its own (Connect Codex in the app)
+    enabled: false
+    # npm @openai/codex
+    version: 0.155.1
+    # model of a Codex session that names none; required with enabled
+    model: ""
+
+# OpenAI- and Anthropic-compatible model gateway. With upstream set, the token-proxy
+# sidecar adds the pod's ServiceAccount token (audience: the host of upstream) to every
+# call, Claude Code and OpenCode use the gateway, and no model key is stored
+gateway:
+  # for example https://api.example.com; empty: every harness uses its own login
+  upstream: ""
+  # audience of the ServiceAccount token. Empty: the host of upstream
+  audience: ""
+  # path of the Anthropic Messages API on upstream
+  anthropicPath: /anthropic
+  # path of the OpenAI API on upstream
+  openaiPath: /v1
+  claudeCode:
+    # gateway models Claude Code's aliases opus, sonnet and haiku resolve to. Empty:
+    # Claude Code's own names
+    opusModel: ""
+    sonnetModel: ""
+    haikuModel: ""
+  opencode:
+    # OpenCode provider of the gateway, written to a config file OPENCODE_CONFIG points to
+    providerId: gateway
+    # name of that provider in OpenCode's model list
+    providerName: Gateway
+    # gateway models OpenCode lists, for example vendor/model ids
+    models: []
+    # default OpenCode model, <providerId>/<model>. Empty: the first of models
+    defaultModel: ""
+
+secrets:
+  # kubernetes: the Secret from the value below. externalSecret: from a secret store
+  type: kubernetes
+  # bearer token of the core API, at least 32 visible characters. Empty: generated once
+  # and kept on upgrade. Under a GitOps tool pass it, or use externalSecret
+  token: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # vault items; the value is read from the item's password. Empty: <release>-token
+    items:
+      token: ""
+
+route:
+  # empty: OpenShift assigns a host under the default application domain
+  host: ""
+  # extra labels on the Route only, for example to pick a router shard
+  labels: {}
+  # event streams and terminals stay open; the router must not cut idle connections
+  timeout: 3600s
+  # used when a host is set; certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+# user id of the agent account; the core runs as it (container mode) and the image's
+# storage policy names it. A fixed id needs an SCC that allows it, such as anyuid
+uid: 1001
+
+# port of the core API in the pod
+port: 9840
+
+# core and agent container requests and limits; every agent runs in this container
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    cpu: "4"
+    memory: 8Gi
+
+storage:
+  # workspaces (/code), agent home, history and temporary files, one volume. The core
+  # pauses agents below 2 GB free
+  size: 20Gi
+  accessMode: ReadWriteOnce
+  # empty: the default storage class
+  className: ""
+
+builds:
+  # build the core image with the harness CLIs in the project
+  enabled: true
+  # registry of the cluster, where the build pushes and the pod pulls
+  registry: image-registry.openshift-image-registry.svc:5000
+  # base image with Node.js 24 at /usr/local/bin and apt
+  baseImage: docker.io/library/node:24.22.3-trixie-slim@sha256:af02d57b57719b9657a45199a79264a9437940cd55b3c7b3fc99615654f124a0
+  # Debian packages the agents may use
+  packages:
+  - bash
+  - ca-certificates
+  - curl
+  - git
+  - jq
+  - less
+  - make
+  - openssh-client
+  - procps
+  - python3
+  - python3-venv
+  - ripgrep
+  - unzip
+  # node labels for the build pod
+  nodeSelector: {}
+  # build pod requests and limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 4Gi
+
+image:
+  # prebuilt image, used when builds.enabled is false; it must follow the Dockerfile of
+  # the chart (storage policy, accounts, uid)
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+tokenProxy:
+  # image that runs the token proxy script
+  image: registry.access.redhat.com/ubi9/python-312-minimal
+  # loopback port the agents send model calls to
+  port: 8099
+  # token proxy requests and limits
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 256Mi
+
+networkPolicy:
+  # admit the core port from the router only
+  enabled: true
+
+# node labels and affinity of the pod
+nodeSelector: {}
+affinity: {}

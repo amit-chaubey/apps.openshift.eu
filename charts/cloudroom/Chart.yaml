@@ -1,0 +1,26 @@
+apiVersion: v2
+name: cloudroom
+description: Self-hosted Cloudroom core, which runs coding agents (Claude Code, OpenCode, Codex) behind one HTTP API for the Cloudroom desktop app
+type: application
+version: 0.1.0
+appVersion: 0.1.111
+home: https://apps.openshift.eu
+icon: https://www.cloudroom.dev/favicon.ico
+keywords:
+- ai
+- agent
+- coding-agent
+- cloudroom
+- claude-code
+- opencode
+sources:
+- https://github.com/davidondrej/cloudroom
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: Cloudroom
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/category: ai-agent
+  apps.openshift.eu/vendor: Cloudroom

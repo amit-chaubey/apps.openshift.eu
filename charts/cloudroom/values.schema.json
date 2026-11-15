@@ -1,0 +1,308 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "core": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "releaseUrl": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "harness": {
+          "type": "string",
+          "enum": [
+            "claude-code",
+            "opencode",
+            "codex"
+          ]
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "agentEnv": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "harnesses": {
+      "type": "object",
+      "properties": {
+        "claudeCode": {
+          "$ref": "#/definitions/harness"
+        },
+        "opencode": {
+          "$ref": "#/definitions/harness"
+        },
+        "codex": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/harness"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "properties": {
+        "upstream": {
+          "type": "string",
+          "pattern": "^(https?://.+)?$"
+        },
+        "audience": {
+          "type": "string"
+        },
+        "anthropicPath": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "openaiPath": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "claudeCode": {
+          "type": "object",
+          "properties": {
+            "opusModel": {
+              "type": "string"
+            },
+            "sonnetModel": {
+              "type": "string"
+            },
+            "haikuModel": {
+              "type": "string"
+            }
+          }
+        },
+        "opencode": {
+          "type": "object",
+          "properties": {
+            "providerId": {
+              "type": "string",
+              "pattern": "^[a-z0-9-]+$"
+            },
+            "providerName": {
+              "type": "string"
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "defaultModel": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "kubernetes",
+            "externalSecret"
+          ]
+        },
+        "token": {
+          "type": "string"
+        },
+        "externalSecret": {
+          "type": "object",
+          "properties": {
+            "storeKind": {
+              "type": "string",
+              "enum": [
+                "SecretStore",
+                "ClusterSecretStore"
+              ]
+            },
+            "storeName": {
+              "type": "string"
+            },
+            "refreshInterval": {
+              "type": "string"
+            },
+            "items": {
+              "type": "object",
+              "properties": {
+                "token": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "object"
+        },
+        "timeout": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object"
+        }
+      }
+    },
+    "uid": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 65535
+    },
+    "resources": {
+      "type": "object"
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accessMode": {
+          "type": "string",
+          "enum": [
+            "ReadWriteOnce",
+            "ReadWriteOncePod",
+            "ReadWriteMany"
+          ]
+        },
+        "className": {
+          "type": "string"
+        }
+      }
+    },
+    "builds": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "registry": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseImage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9.+-]*$"
+          }
+        },
+        "nodeSelector": {
+          "type": "object"
+        },
+        "resources": {
+          "type": "object"
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
+      }
+    },
+    "tokenProxy": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "resources": {
+          "type": "object"
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "nodeSelector": {
+      "type": "object"
+    },
+    "affinity": {
+      "type": "object"
+    }
+  },
+  "definitions": {
+    "harness": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        }
+      }
+    }
+  }
+}

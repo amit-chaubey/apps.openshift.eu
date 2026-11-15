@@ -1,0 +1,49 @@
+{{- if .Values.builds.enabled }}
+{{- $name := include "cloudroom.name" . }}
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ $name }}
+    app.kubernetes.io/name: cloudroom
+    app.kubernetes.io/component: build
+    {{- include "cloudroom.commonLabels" . | nindent 4 }}
+spec:
+  lookupPolicy:
+    local: false
+---
+# A changed Dockerfile gets a new BuildConfig and image tag, which ConfigChange builds
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: {{ $name }}-{{ include "cloudroom.dockerfile" . | sha256sum | trunc 8 }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ $name }}
+    app.kubernetes.io/name: cloudroom
+    app.kubernetes.io/component: build
+    {{- include "cloudroom.commonLabels" . | nindent 4 }}
+spec:
+  runPolicy: Serial
+  source:
+    type: Dockerfile
+    dockerfile: |
+      {{- include "cloudroom.dockerfile" . | nindent 6 }}
+  strategy:
+    type: Docker
+    dockerStrategy: {}
+  output:
+    to:
+      kind: ImageStreamTag
+      name: {{ $name }}:{{ include "cloudroom.imageTag" . }}
+  {{- with .Values.builds.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  triggers:
+  - type: ConfigChange
+  resources:
+    {{- toYaml .Values.builds.resources | nindent 4 }}
+{{- end }}
