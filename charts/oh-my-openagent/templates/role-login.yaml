@@ -1,0 +1,19 @@
+{{- if and .Values.oauth.allowedGroups (not .Values.oauth.loginClusterRole) }}
+# The login proxy admits a user only with this permission (SAR)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "oh-my-openagent.name" . }}-login
+  namespace: {{ include "oh-my-openagent.namespace" . }}
+  labels:
+    {{- include "oh-my-openagent.labels" (dict "root" . "component" "server") | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services/proxy
+  resourceNames:
+  - {{ include "oh-my-openagent.name" . }}
+  verbs:
+  - login
+{{- end }}

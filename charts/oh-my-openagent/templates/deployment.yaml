@@ -1,0 +1,253 @@
+{{- $name := include "oh-my-openagent.name" . -}}
+{{- $home := "/home/omo" -}}
+{{- $tokenProxy := include "oh-my-openagent.tokenProxy" . -}}
+{{- if and (eq .Values.gateway.auth "apiKey") (not .Values.gateway.upstream) }}{{ fail "gateway.upstream is required with gateway.auth apiKey" }}{{ end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "oh-my-openagent.namespace" . }}
+  labels:
+    {{- include "oh-my-openagent.labels" (dict "root" . "component" "server") | nindent 4 }}
+    app.openshift.io/runtime: nodejs
+spec:
+  # one pod owns the home volume
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "oh-my-openagent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oh-my-openagent.labels" (dict "root" . "component" "server") | nindent 8 }}
+      annotations:
+        # Mounted files are not reloaded in place; roll the pod when they change
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ $name }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      # OmO in tmux, served by ttyd on 127.0.0.1 only
+      - name: terminal
+        image: {{ include "oh-my-openagent.terminalImage" . }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - /etc/omo/start.sh
+        workingDir: {{ $home }}
+        env:
+        - name: HOME
+          value: {{ $home }}
+        - name: SHELL
+          value: /bin/bash
+        - name: OMO_PACKAGE
+          value: {{ .Values.omo.package | quote }}
+        - name: OMO_VERSION
+          value: {{ .Values.omo.version | quote }}
+        - name: OMO_REGISTRY
+          value: {{ .Values.omo.registry | quote }}
+        - name: OMO_WORKDIR
+          value: {{ .Values.omo.workdir | quote }}
+        - name: TERMINAL_PORT
+          value: {{ .Values.terminal.port | quote }}
+        - name: TERMINAL_FONT_SIZE
+          value: {{ .Values.terminal.fontSize | quote }}
+        - name: GIT_USER_NAME
+          value: {{ default .Release.Name .Values.person.name | quote }}
+        - name: GIT_USER_EMAIL
+          value: {{ .Values.person.email | quote }}
+        # No usage reports, update checks or device pairing leave the pod
+        - name: PI_SKIP_VERSION_CHECK
+          value: "1"
+        - name: PI_TELEMETRY
+          value: "0"
+        - name: OMO_SEND_ANONYMOUS_TELEMETRY
+          value: "0"
+        - name: OMO_DISABLE_POSTHOG
+          value: "1"
+        - name: OMO_DISABLE_TELEMETRY
+          value: "1"
+        - name: SENPI_RUNTIME
+          value: node
+        {{- if eq .Values.gateway.auth "apiKey" }}
+        - name: GATEWAY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-gateway-api-key
+              key: api-key
+        {{- end }}
+        {{- range $k, $v := .Values.omo.env }}
+        - name: {{ $k }}
+          value: {{ $v | toString | quote }}
+        {{- end }}
+        # The first start installs OmO from npm; ttyd listens once that is done
+        startupProbe:
+          exec:
+            command:
+            - curl
+            - -fsS
+            - -o
+            - /dev/null
+            - http://127.0.0.1:{{ .Values.terminal.port }}/
+          periodSeconds: 10
+          failureThreshold: 90
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - -fsS
+            - -o
+            - /dev/null
+            - http://127.0.0.1:{{ .Values.terminal.port }}/
+          periodSeconds: 10
+          timeoutSeconds: 3
+        volumeMounts:
+        - name: home
+          mountPath: {{ $home }}
+        - name: config
+          mountPath: /etc/omo
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        resources:
+          {{- toYaml .Values.terminal.resources | nindent 10 }}
+        securityContext:
+          {{- include "oh-my-openagent.containerSecurityContext" . | nindent 10 }}
+      # Login through the cluster OAuth server with the ServiceAccount as client
+      - name: oauth-proxy
+        image: {{ .Values.oauthProxy.image }}
+        imagePullPolicy: IfNotPresent
+        args:
+        - --provider=openshift
+        - --openshift-service-account={{ $name }}
+        - --http-address=0.0.0.0:{{ .Values.oauthProxy.port }}
+        - --https-address=
+        - --upstream=http://127.0.0.1:{{ .Values.terminal.port }}
+        - --upstream-timeout={{ .Values.route.timeout }}
+        {{- $owner := include "oh-my-openagent.ownerEmail" . }}
+        {{- if $owner }}
+        - --authenticated-emails-file=/etc/oauth-proxy/emails.txt
+        {{- end }}
+        # Without an email domain the openshift provider admits every email
+        - --email-domain=
+        {{- if or .Values.oauth.allowedGroups (not $owner) }}
+        # --openshift-group is accepted and ignored; the group check is this SAR.
+        # groups: verb login, granted by the login Role only; neither: get, project editors
+        - --openshift-sar={{ list (dict "namespace" (include "oh-my-openagent.namespace" .) "resource" "services/proxy" "resourceName" $name "verb" (ternary "login" "get" (not (empty .Values.oauth.allowedGroups)))) | toJson }}
+        {{- end }}
+        - --pass-basic-auth=false
+        - --cookie-name=_{{ $name | replace "-" "_" }}
+        - --cookie-secure=true
+        - --cookie-samesite=lax
+        - --skip-provider-button=true
+        env:
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-cookie-secret
+              key: cookie-secret
+        ports:
+        - name: http
+          containerPort: {{ .Values.oauthProxy.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: http
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: oauth-proxy-config
+          mountPath: /etc/oauth-proxy
+          readOnly: true
+        resources:
+          {{- toYaml .Values.oauthProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "oh-my-openagent.containerSecurityContext" . | nindent 10 }}
+      {{- if $tokenProxy }}
+      # Sends the pod's ServiceAccount token to the gateway; no key is stored
+      - name: token-proxy
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /app/token-proxy.py
+        env:
+        - name: TOKEN_FILE
+          value: /var/run/secrets/api-token/token
+        - name: UPSTREAM
+          value: {{ .Values.gateway.upstream | quote }}
+        - name: PORT
+          value: {{ .Values.tokenProxy.port | quote }}
+        # Listens on 127.0.0.1 only, so the probe runs inside the container
+        readinessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - import urllib.request; urllib.request.urlopen("http://127.0.0.1:{{ .Values.tokenProxy.port }}/healthz", timeout=2)
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        volumeMounts:
+        - name: token-proxy-code
+          mountPath: /app
+          readOnly: true
+        - name: api-token
+          mountPath: /var/run/secrets/api-token
+          readOnly: true
+        resources:
+          {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "oh-my-openagent.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
+      volumes:
+      - name: home
+        persistentVolumeClaim:
+          claimName: {{ $name }}-home
+      - name: config
+        configMap:
+          name: {{ $name }}
+      - name: tmp
+        emptyDir:
+          sizeLimit: 2Gi
+      - name: oauth-proxy-config
+        configMap:
+          name: {{ $name }}-oauth-proxy
+      {{- if $tokenProxy }}
+      - name: token-proxy-code
+        configMap:
+          name: {{ $name }}-token-proxy
+      # The pod's own credential for the gateway, renewed by the kubelet
+      - name: api-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              {{- with include "oh-my-openagent.audience" . }}
+              audience: {{ . }}
+              {{- end }}
+              expirationSeconds: 3600
+              path: token
+      {{- end }}

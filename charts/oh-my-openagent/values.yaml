@@ -1,0 +1,148 @@
+# team of the tenant the app serves: every object goes into <tenant>-<team>, a namespace the
+# team already has. Empty: the release namespace
+team: ""
+# tenant the app belongs to; required with team
+tenant: ""
+
+person:
+  # OpenShift user name (an email) of the person the agent works for; also the git email
+  email: ""
+  # git user name; empty: the release name
+  name: ""
+
+route:
+  # empty: OpenShift assigns a host under the default application domain
+  host: ""
+  # extra labels on the Route only, for example to pick a router shard
+  labels: {}
+  # the terminal is one long WebSocket; the router must not cut an idle one
+  timeout: 3600s
+  tunnelTimeout: 24h
+  # used when a host is set; certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+oauth:
+  # the only OpenShift user admitted; empty: person.email. Both empty: allowedGroups, else every
+  # user who may edit the project
+  ownerEmail: ""
+  # OpenShift groups admitted; the chart grants them the verb login on the terminal Service
+  allowedGroups: []
+  # ClusterRole holding the verb login on services/proxy; groups are bound to it instead of to
+  # the chart's own Role (an installer that may not grant login itself needs this)
+  loginClusterRole: ""
+
+oauthProxy:
+  # OpenShift keeps this image stream tag on the oauth-proxy of the running release
+  image: image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4
+  port: 4180
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+secrets:
+  # kubernetes: Secrets from the values below. externalSecret: from a secret store
+  type: kubernetes
+  # login cookie secret. Empty: generated once and kept on upgrade. A value that is not 16, 24
+  # or 32 characters long is hashed to 32
+  cookieSecret: ""
+  # key of the model gateway, used with gateway.auth apiKey only
+  gatewayApiKey: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # one vault item per secret; the value is read from the item's password.
+    # Empty name: <release>-<cookie-secret, gateway-api-key>
+    items:
+      cookieSecret: ""
+      gatewayApiKey: ""
+
+gateway:
+  # OpenAI-compatible model gateway, origin only. Required for a working agent
+  upstream: ""
+  # path of the OpenAI API below upstream
+  path: /v1
+  # serviceAccountToken: a token proxy in the pod sends the ServiceAccount token, no stored key.
+  # apiKey: OmO sends secrets.gatewayApiKey
+  auth: serviceAccountToken
+  # audience of the ServiceAccount token; empty: the host of upstream
+  audience: ""
+  # provider name in OmO; models are "<provider>/<model id>"
+  provider: gateway
+  # models of the gateway OmO may use: a model id, or {id, name, contextWindow, maxTokens,
+  # reasoning, input}
+  models: []
+  # model a new session starts on; empty: the first of models
+  defaultModel: ""
+
+tokenProxy:
+  image: registry.access.redhat.com/ubi9/python-312-minimal:9.8-1793637445
+  port: 8099
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+omo:
+  # npm package and version installed into the home directory on start; the image holds no OmO
+  package: omo-ai
+  version: 5.1.70
+  # npm registry the package and its dependencies come from
+  registry: https://registry.npmjs.org/
+  # merged over the generated ~/.omo/omo.jsonc (OmO's configuration), rewritten on every start
+  config: {}
+  # merged over the generated ~/.omo/agent/settings.json, written on the first start only
+  settings: {}
+  # extra environment for the terminal (name: value)
+  env: {}
+  # directory the terminal opens in, below HOME
+  workdir: work
+
+terminal:
+  # image with node 24, ttyd, tmux, git, ripgrep and fd. Empty: the image builds.enabled makes
+  image: ""
+  port: 7681
+  fontSize: 14
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 8Gi
+
+builds:
+  # build the terminal image in the project from files/Containerfile
+  enabled: true
+  # replaces the FROM of files/Containerfile
+  baseImage: registry.access.redhat.com/ubi10/nodejs-24:10.3-1793905945
+  # registry the pod pulls the built image from
+  registry: image-registry.openshift-image-registry.svc:5000
+  nodeSelector: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 2Gi
+
+storage:
+  # the home directory: OmO, its sessions, memory and logins, the work tree. Kept when the
+  # release is removed
+  size: 10Gi
+  accessMode: ReadWriteOnce
+  className: ""
+
+networkPolicy:
+  # admit only the login proxy port from outside the pod
+  enabled: true
+
+nodeSelector: {}
+affinity: {}
+tolerations: []

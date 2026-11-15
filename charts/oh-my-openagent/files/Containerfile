@@ -1,0 +1,46 @@
+# x86_64 only: ttyd, ripgrep and fd are the x86_64 release binaries.
+# Terminal image of the oh-my-openagent chart: node 24, a browser terminal and the tools
+# OmO calls. OmO itself is not in the image; the pod installs the pinned version from npm
+# into its home directory on start.
+FROM registry.access.redhat.com/ubi10/nodejs-24:10.3-1793905945
+
+ARG TTYD_VERSION=1.7.7
+ARG TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
+ARG RIPGREP_VERSION=15.2.0
+ARG RIPGREP_SHA256=33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c
+ARG FD_VERSION=10.5.0
+ARG FD_SHA256=761c72dc8e120d85b22292063be8a796e2eeb20eb3e4f38b8fa2343ccf3514a7
+# tmux is not in the UBI repositories; the CentOS Stream 10 build of the RHEL 10 package.
+# The mirror keeps a few builds only: a removed one fails the build, pin the next one then
+ARG TMUX_RPM=tmux-3.3a-14.20230918gitb202a2f.el10.x86_64.rpm
+ARG TMUX_SHA256=d743e90302f2cff76e4ab89788412c83303c91c16df845b4c3a17f4dd170756d
+
+USER 0
+RUN set -eux; \
+    curl -fsSLo /tmp/tmux.rpm "https://mirror.stream.centos.org/10-stream/BaseOS/x86_64/os/Packages/${TMUX_RPM}"; \
+    echo "${TMUX_SHA256}  /tmp/tmux.rpm" | sha256sum -c -; \
+    dnf install -y --setopt=install_weak_deps=0 /tmp/tmux.rpm git-core less procps-ng jq unzip which \
+      vim-minimal nano openssh-clients; \
+    dnf clean all; rm -rf /var/cache/dnf /tmp/tmux.rpm; \
+    curl -fsSLo /usr/local/bin/ttyd \
+      "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64"; \
+    echo "${TTYD_SHA256}  /usr/local/bin/ttyd" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/ttyd; \
+    curl -fsSLo /tmp/rg.tgz \
+      "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/ripgrep-${RIPGREP_VERSION}-x86_64-unknown-linux-musl.tar.gz"; \
+    echo "${RIPGREP_SHA256}  /tmp/rg.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/rg.tgz -C /tmp; \
+    install -m 0755 "/tmp/ripgrep-${RIPGREP_VERSION}-x86_64-unknown-linux-musl/rg" /usr/local/bin/rg; \
+    curl -fsSLo /tmp/fd.tgz \
+      "https://github.com/sharkdp/fd/releases/download/v${FD_VERSION}/fd-v${FD_VERSION}-x86_64-unknown-linux-musl.tar.gz"; \
+    echo "${FD_SHA256}  /tmp/fd.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/fd.tgz -C /tmp; \
+    install -m 0755 "/tmp/fd-v${FD_VERSION}-x86_64-unknown-linux-musl/fd" /usr/local/bin/fd; \
+    rm -rf /tmp/rg.tgz /tmp/fd.tgz /tmp/ripgrep-* /tmp/fd-v*; \
+    # ssh and git need a passwd entry; start.sh adds one for the arbitrary UID
+    chmod g=u /etc/passwd; \
+    tmux -V; ttyd --version; rg --version; fd --version; node --version
+
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false \
+    TERM=xterm-256color LANG=C.UTF-8
+USER 1001

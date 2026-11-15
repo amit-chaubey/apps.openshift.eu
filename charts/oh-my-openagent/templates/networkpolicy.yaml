@@ -1,0 +1,28 @@
+{{- if .Values.networkPolicy.enabled }}
+# Only the router reaches the pod, on the login proxy port
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "oh-my-openagent.name" . }}
+  namespace: {{ include "oh-my-openagent.namespace" . }}
+  labels:
+    {{- include "oh-my-openagent.labels" (dict "root" . "component" "server") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "oh-my-openagent.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: {{ .Values.oauthProxy.port }}
+    from:
+    - namespaceSelector:
+        matchLabels:
+          policy-group.network.openshift.io/ingress: ""
+    # a HostNetwork router sends from the node network
+    - namespaceSelector:
+        matchLabels:
+          policy-group.network.openshift.io/host-network: ""
+{{- end }}

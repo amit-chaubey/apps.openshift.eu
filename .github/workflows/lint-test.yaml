@@ -46,6 +46,8 @@ jobs:
       run: ci/test-openwebui.sh
     - name: Test hermes chart
       run: ci/test-hermes.sh
+    - name: Test oh-my-openagent chart
+      run: ci/test-oh-my-openagent.sh
     - name: Test hermes private skill repositories
       run: python3 -m unittest ci/test_hermes_seed_config.py
     - name: Test chatwoot chart

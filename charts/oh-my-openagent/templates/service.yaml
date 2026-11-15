@@ -1,0 +1,16 @@
+# The login proxy in front of the terminal
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oh-my-openagent.name" . }}
+  namespace: {{ include "oh-my-openagent.namespace" . }}
+  labels:
+    {{- include "oh-my-openagent.labels" (dict "root" . "component" "server") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "oh-my-openagent.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: http
+    port: {{ .Values.oauthProxy.port }}
+    targetPort: http

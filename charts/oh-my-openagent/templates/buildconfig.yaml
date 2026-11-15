@@ -1,0 +1,46 @@
+{{- if and .Values.builds.enabled (not .Values.terminal.image) }}
+{{- $name := printf "%s-terminal" (include "oh-my-openagent.name" .) }}
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "oh-my-openagent.namespace" . }}
+  labels:
+    {{- include "oh-my-openagent.labels" (dict "root" . "component" "build") | nindent 4 }}
+spec:
+  lookupPolicy:
+    local: true
+---
+# The terminal image from files/Containerfile; the name hash makes ConfigChange rebuild on change
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: {{ $name }}-{{ include "oh-my-openagent.buildHash" . }}
+  namespace: {{ include "oh-my-openagent.namespace" . }}
+  labels:
+    {{- include "oh-my-openagent.labels" (dict "root" . "component" "build") | nindent 4 }}
+spec:
+  runPolicy: Serial
+  source:
+    type: Dockerfile
+    dockerfile: |
+      {{- .Files.Get "files/Containerfile" | nindent 6 }}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      from:
+        kind: DockerImage
+        name: {{ .Values.builds.baseImage }}
+  output:
+    to:
+      kind: ImageStreamTag
+      name: {{ $name }}:{{ include "oh-my-openagent.buildHash" . }}
+  {{- with .Values.builds.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  triggers:
+  - type: ConfigChange
+  resources:
+    {{- toYaml .Values.builds.resources | nindent 4 }}
+{{- end }}

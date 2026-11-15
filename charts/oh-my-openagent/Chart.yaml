@@ -1,0 +1,27 @@
+apiVersion: v2
+name: oh-my-openagent
+description: OmO, the oh-my-openagent coding agent, in a browser terminal behind a login, with its home directory on a volume and models from an OpenAI-compatible gateway
+type: application
+version: 0.1.0
+appVersion: 5.1.70
+home: https://apps.openshift.eu
+icon: https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/v5.1.70/.github/assets/omo-icon-light.svg
+keywords:
+- ai
+- agent
+- coding-agent
+- oh-my-openagent
+- omo
+- terminal
+sources:
+- https://github.com/code-yeongyu/oh-my-openagent
+- https://github.com/tsl0922/ttyd
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: oh-my-openagent
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/category: ai-agent
+  apps.openshift.eu/vendor: Sisyphus Labs

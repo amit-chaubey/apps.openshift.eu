@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "team": { "type": "string" },
+    "tenant": { "type": "string" },
+    "person": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "route": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string" },
+        "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "timeout": { "type": "string" },
+        "tunnelTimeout": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "oauth": {
+      "type": "object",
+      "properties": {
+        "ownerEmail": { "type": "string" },
+        "allowedGroups": { "type": "array", "items": { "type": "string" } },
+        "loginClusterRole": { "type": "string" }
+      }
+    },
+    "oauthProxy": {
+      "type": "object",
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer" },
+        "resources": { "type": "object" }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["kubernetes", "externalSecret"] },
+        "cookieSecret": { "type": "string" },
+        "gatewayApiKey": { "type": "string" },
+        "externalSecret": {
+          "type": "object",
+          "properties": {
+            "storeKind": { "enum": ["SecretStore", "ClusterSecretStore"] },
+            "storeName": { "type": "string" },
+            "refreshInterval": { "type": "string" },
+            "items": {
+              "type": "object",
+              "properties": {
+                "cookieSecret": { "type": "string" },
+                "gatewayApiKey": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "properties": {
+        "upstream": { "type": "string", "pattern": "^(https?://[^/]+)?$" },
+        "path": { "type": "string", "pattern": "^/" },
+        "auth": { "enum": ["serviceAccountToken", "apiKey"] },
+        "audience": { "type": "string" },
+        "provider": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "models": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "string", "minLength": 1 },
+              {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "name": { "type": "string" },
+                  "contextWindow": { "type": "integer" },
+                  "maxTokens": { "type": "integer" },
+                  "reasoning": { "type": "boolean" },
+                  "input": { "type": "array", "items": { "enum": ["text", "image"] } }
+                }
+              }
+            ]
+          }
+        },
+        "defaultModel": { "type": "string" }
+      }
+    },
+    "tokenProxy": {
+      "type": "object",
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer" },
+        "resources": { "type": "object" }
+      }
+    },
+    "omo": {
+      "type": "object",
+      "properties": {
+        "package": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.-]+)?$" },
+        "registry": { "type": "string", "pattern": "^https?://" },
+        "config": { "type": "object" },
+        "settings": { "type": "object" },
+        "env": { "type": "object" },
+        "workdir": { "type": "string", "pattern": "^[^/]", "not": { "pattern": "(^|/)\\.\\.(/|$)" } }
+      }
+    },
+    "terminal": {
+      "type": "object",
+      "properties": {
+        "image": { "type": "string" },
+        "port": { "type": "integer" },
+        "fontSize": { "type": "integer" },
+        "resources": { "type": "object" }
+      }
+    },
+    "builds": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "baseImage": { "type": "string", "minLength": 1 },
+        "registry": { "type": "string", "minLength": 1 },
+        "nodeSelector": { "type": "object" },
+        "resources": { "type": "object" }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "size": { "type": "string" },
+        "accessMode": { "enum": ["ReadWriteOnce", "ReadWriteMany", "ReadWriteOncePod"] },
+        "className": { "type": "string" }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "nodeSelector": { "type": "object" },
+    "affinity": { "type": "object" },
+    "tolerations": { "type": "array" }
+  }
+}

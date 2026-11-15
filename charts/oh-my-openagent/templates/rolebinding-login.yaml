@@ -1,0 +1,22 @@
+{{- if .Values.oauth.allowedGroups }}
+# Members of these OpenShift groups pass the login proxy's group check
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  {{- $clusterRole := .Values.oauth.loginClusterRole }}
+  # roleRef is immutable: a ClusterRole binding has its own name
+  name: {{ include "oh-my-openagent.name" . }}-{{ ternary "app-login" "login" (not (empty $clusterRole)) }}
+  namespace: {{ include "oh-my-openagent.namespace" . }}
+  labels:
+    {{- include "oh-my-openagent.labels" (dict "root" . "component" "server") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: {{ ternary "ClusterRole" "Role" (not (empty $clusterRole)) }}
+  name: {{ default (printf "%s-login" (include "oh-my-openagent.name" .)) $clusterRole }}
+subjects:
+{{- range .Values.oauth.allowedGroups }}
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: {{ . }}
+{{- end }}
+{{- end }}

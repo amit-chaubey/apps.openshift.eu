@@ -1,0 +1,46 @@
+# Start scripts and the configuration OmO gets in HOME
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "oh-my-openagent.name" . }}
+  namespace: {{ include "oh-my-openagent.namespace" . }}
+  labels:
+    {{- include "oh-my-openagent.labels" (dict "root" . "component" "server") | nindent 4 }}
+data:
+  start.sh: |
+{{ .Files.Get "files/start.sh" | indent 4 }}
+  session.sh: |
+{{ .Files.Get "files/session.sh" | indent 4 }}
+  models.json: |
+{{ include "oh-my-openagent.modelsJson" . | indent 4 }}
+  omo.jsonc: |
+{{ include "oh-my-openagent.omoJson" . | indent 4 }}
+  settings.json: |
+{{ include "oh-my-openagent.settingsJson" . | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "oh-my-openagent.name" . }}-oauth-proxy
+  namespace: {{ include "oh-my-openagent.namespace" . }}
+  labels:
+    {{- include "oh-my-openagent.labels" (dict "root" . "component" "server") | nindent 4 }}
+data:
+  # The owner's OpenShift user name only; empty: no emails file, the SAR decides
+  emails.txt: |
+    {{- with include "oh-my-openagent.ownerEmail" . }}
+    {{ . }}
+    {{- end }}
+{{- if include "oh-my-openagent.tokenProxy" . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "oh-my-openagent.name" . }}-token-proxy
+  namespace: {{ include "oh-my-openagent.namespace" . }}
+  labels:
+    {{- include "oh-my-openagent.labels" (dict "root" . "component" "server") | nindent 4 }}
+data:
+  token-proxy.py: |
+{{ .Files.Get "files/token-proxy.py" | indent 4 }}
+{{- end }}
