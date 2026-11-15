@@ -797,13 +797,13 @@ nextcloud:
     periodSeconds: 10
     timeoutSeconds: 10
     failureThreshold: 60
-  # outlast a 60 to 90 second stall of network storage before a restart
+  # outlast a five-minute stall of network storage before a restart
   livenessProbe:
     enabled: true
     initialDelaySeconds: 10
     periodSeconds: 10
     timeoutSeconds: 10
-    failureThreshold: 12
+    failureThreshold: 30
   readinessProbe:
     enabled: true
     initialDelaySeconds: 10
