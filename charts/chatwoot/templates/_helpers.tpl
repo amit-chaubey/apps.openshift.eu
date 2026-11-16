@@ -326,8 +326,9 @@ serviceAccountName: chatwoot-route
 - name: ACTIVE_STORAGE_SERVICE
   value: local
 {{- end }}
-{{- if and .Values.agentBot.enabled (not .Values.agentBridge.remoteUrl) }}
-# the chart initializer lets webhooks to this address alone reach a private address
+{{- if or .Values.draftAgent.enabled (and .Values.agentBot.enabled (not .Values.agentBridge.remoteUrl)) }}
+# the chart initializer lets webhooks to this address alone reach a private address:
+# the bot webhook and the draft webhook (/draft) both go to the bridge here
 - name: CHART_AGENT_BOT_URL
   value: {{ include "wrapper.agentBotUrl" . }}
 {{- end }}

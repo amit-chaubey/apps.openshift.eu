@@ -227,6 +227,7 @@ check "draft bridge env" 'env("chatwoot-agent-bridge", "agent-bot")["DRAFT_INBOX
 check "draft client secret" 'env("chatwoot-agent-bridge", "agent-bot")["A2A_AUTH"] == "clientSecret" and env("chatwoot-agent-bridge", "agent-bot")["A2A_CLIENT_SECRET_FILE"] == "/var/run/secrets/agent/client-secret" and secret("chatwoot-agent-client", "agent-client-secret") == "s" and not any(v.get("projected") for v in pod("chatwoot-agent-bridge")["volumes"])'
 check "draft secrets" 'len(secret("chatwoot-draft", "draft-token")) == 48 and len(secret("chatwoot-draft", "draft-webhook-secret")) == 48'
 check "draft job" 'env("chatwoot-prepare-1", "prepare")["CHATWOOT_DRAFT_WEBHOOK_URL"] == "http://chatwoot-agent-bridge:8080/draft" and env("chatwoot-prepare-1", "prepare")["CHATWOOT_DRAFT_EMAIL"] == "ai-draft@chatwoot.invalid"'
+check "draft webhook may reach the bridge" 'all(env(n, c)["CHART_AGENT_BOT_URL"] == "http://chatwoot-agent-bridge:8080/" for n, c in (("chatwoot-web", "web"), ("chatwoot-worker", "worker"))) and env("chatwoot-prepare-1", "prepare")["CHATWOOT_DRAFT_WEBHOOK_URL"].startswith(env("chatwoot-worker", "worker")["CHART_AGENT_BOT_URL"])'
 check "draft network" 'obj("NetworkPolicy", "chatwoot-agent-bridge") and "chatwoot-agent-bridge" in refs(obj("NetworkPolicy", "chatwoot-web"))'
 OUT=$(render "${DRAFT[@]}" --set secrets.type=externalSecret --set secrets.externalSecret.storeName=vault)
 check "draft external secrets" '{"chatwoot-draft", "chatwoot-agent-client"} <= {e["metadata"]["name"] for e in objs("ExternalSecret")}'
