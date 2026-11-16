@@ -17,7 +17,15 @@ identity provider can deliver to or verify, so no login of a person can match it
 {{/* Stops a render whose values cannot work. */}}
 {{- define "wrapper.validate" -}}
 {{- if .Values.draftAgent.enabled }}
-{{- fail "draftAgent.enabled is reserved for a later chart version" }}
+{{- if or .Values.agentBridge.remoteUrl .Values.agentBridge.standalone.enabled }}
+{{- fail "draftAgent.enabled needs the bridge in this release: no agentBridge.remoteUrl or agentBridge.standalone.enabled" }}
+{{- end }}
+{{- if not .Values.draftAgent.inboxes }}
+{{- fail "draftAgent.inboxes is required with draftAgent.enabled (\"*\" is every inbox)" }}
+{{- end }}
+{{- if not (regexMatch "^[a-z0-9._+-]+@([a-z0-9-]+\\.)+invalid$" .Values.draftAgent.email) }}
+{{- fail "draftAgent.email must be an address under the reserved domain .invalid" }}
+{{- end }}
 {{- end }}
 {{- if .Values.odoo.enabled }}
 {{- if .Values.agentBridge.standalone.enabled }}
@@ -59,14 +67,14 @@ identity provider can deliver to or verify, so no login of a person can match it
 {{- fail "agent.url, an http or https address, is required with agentBot.enabled or copilotPanel.enabled" }}
 {{- end }}
 {{- $auth := .Values.agent.auth }}
-{{- if not (has $auth.type (list "none" "serviceAccountToken" "clientAssertion")) }}
-{{- fail "agent.auth.type is none, serviceAccountToken or clientAssertion" }}
+{{- if not (has $auth.type (list "none" "serviceAccountToken" "clientAssertion" "clientSecret")) }}
+{{- fail "agent.auth.type is none, serviceAccountToken, clientAssertion or clientSecret" }}
 {{- end }}
-{{- if and (ne $auth.type "none") (not $auth.audience) }}
-{{- fail "agent.auth.audience is required unless agent.auth.type is none" }}
+{{- if and (include "wrapper.saToken" .) (not $auth.audience) }}
+{{- fail "agent.auth.audience is required with agent.auth.type serviceAccountToken or clientAssertion" }}
 {{- end }}
-{{- if and (eq $auth.type "clientAssertion") (not (and $auth.tokenUrl $auth.clientId)) }}
-{{- fail "agent.auth.tokenUrl and agent.auth.clientId are required with agent.auth.type clientAssertion" }}
+{{- if and (has $auth.type (list "clientAssertion" "clientSecret")) (not (and $auth.tokenUrl $auth.clientId)) }}
+{{- fail (printf "agent.auth.tokenUrl and agent.auth.clientId are required with agent.auth.type %s" $auth.type) }}
 {{- end }}
 {{- end }}
 {{- if and .Values.copilotPanel.enabled (not .Values.sso.enabled) (not $b.standalone.enabled) }}
@@ -94,9 +102,14 @@ identity provider can deliver to or verify, so no login of a person can match it
 {{- end }}
 {{- end -}}
 
-{{/* Non-empty when the bot or the panel is on. */}}
+{{/* Non-empty when the bot, the panel or the drafts are on. */}}
 {{- define "wrapper.agentBridge" -}}
-{{- if or .Values.agentBot.enabled .Values.copilotPanel.enabled }}true{{ end }}
+{{- if or .Values.agentBot.enabled .Values.copilotPanel.enabled .Values.draftAgent.enabled }}true{{ end }}
+{{- end -}}
+
+{{/* Non-empty when the agent gets a ServiceAccount token (directly or as client assertion). */}}
+{{- define "wrapper.saToken" -}}
+{{- if has .Values.agent.auth.type (list "serviceAccountToken" "clientAssertion") }}true{{ end }}
 {{- end -}}
 
 {{/* Non-empty for a release of the bridge alone. */}}
@@ -111,7 +124,7 @@ identity provider can deliver to or verify, so no login of a person can match it
 
 {{/* Non-empty when the bot's bridge Deployment is part of this release. */}}
 {{- define "wrapper.bridgeHere" -}}
-{{- if and .Values.agentBot.enabled (or .Values.agentBridge.standalone.enabled (not .Values.agentBridge.remoteUrl)) }}true{{ end }}
+{{- if or .Values.draftAgent.enabled (and .Values.agentBot.enabled (or .Values.agentBridge.standalone.enabled (not .Values.agentBridge.remoteUrl))) }}true{{ end }}
 {{- end -}}
 
 {{/* Address of the bridge's webhook port that Chatwoot calls. */}}
@@ -132,11 +145,15 @@ http://chatwoot-agent-bridge:8080/
   value: {{ $a.timeoutSeconds | quote }}
 - name: A2A_AUTH
   value: {{ $a.auth.type | quote }}
-{{- if ne $a.auth.type "none" }}
+{{- if include "wrapper.saToken" . }}
 - name: A2A_TOKEN_FILE
   value: /var/run/secrets/agent/token
 {{- end }}
-{{- if eq $a.auth.type "clientAssertion" }}
+{{- if eq $a.auth.type "clientSecret" }}
+- name: A2A_CLIENT_SECRET_FILE
+  value: /var/run/secrets/agent/client-secret
+{{- end }}
+{{- if has $a.auth.type (list "clientAssertion" "clientSecret") }}
 - name: A2A_TOKEN_URL
   value: {{ $a.auth.tokenUrl | quote }}
 - name: A2A_CLIENT_ID
@@ -150,7 +167,7 @@ http://chatwoot-agent-bridge:8080/
 
 {{/* The ServiceAccount token the agent gets, renewed by the kubelet. */}}
 {{- define "wrapper.agentTokenVolume" -}}
-{{- if ne .Values.agent.auth.type "none" }}
+{{- if include "wrapper.saToken" . }}
 - name: agent-token
   projected:
     defaultMode: 0440
@@ -159,6 +176,14 @@ http://chatwoot-agent-bridge:8080/
         audience: {{ .Values.agent.auth.audience | quote }}
         expirationSeconds: 3600
         path: token
+{{- else if eq .Values.agent.auth.type "clientSecret" }}
+- name: agent-token
+  secret:
+    secretName: chatwoot-agent-client
+    defaultMode: 0440
+    items:
+    - key: agent-client-secret
+      path: client-secret
 {{- end }}
 {{- end }}
 

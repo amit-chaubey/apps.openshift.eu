@@ -16,6 +16,13 @@ With PANEL_FORWARD_URL that panel asks nobody itself: it hands each request to a
 the agent's cluster, with the staff member's access token from oauth2-proxy, and that
 bridge (STAFF_ISSUER set) checks the token's signature, issuer, client and group.
 
+With DRAFT_TOKEN_FILE it writes AI drafts: an account webhook of Chatwoot (message_created,
+signed with its own secret) arrives on /draft; for an incoming customer message in one of
+the listed inboxes the agent drafts the next reply from the conversation's transcript, and
+the draft goes into the conversation as a private note. Staff read it, edit it and send it
+themselves. Every write of the draft path passes PrivateNotes, which refuses any message
+that is not private: a draft can never reach the customer.
+
 Standard library only; prints no credential.
 """
 import base64
@@ -60,6 +67,7 @@ class Config:
         self.token_file = env.get("A2A_TOKEN_FILE", "")
         self.token_url = env.get("A2A_TOKEN_URL", "")
         self.client_id = env.get("A2A_CLIENT_ID", "")
+        self.client_secret_file = env.get("A2A_CLIENT_SECRET_FILE", "")
         self.scope = env.get("A2A_SCOPE", "")
         self.instructions = env.get("INSTRUCTIONS", "")
         self.keywords = {normalize(k) for k in env.get("HANDOFF_KEYWORDS", "").split(",") if k.strip()}
@@ -68,12 +76,21 @@ class Config:
         self.failure_message = env.get("FAILURE_MESSAGE", "")
         self.context_attribute = env.get("CONTEXT_ATTRIBUTE", "a2a_context_id")
         self.port = int(env.get("LISTEN_PORT", "8080"))
-        if self.auth not in ("none", "serviceAccountToken", "clientAssertion"):
-            raise ValueError(f"A2A_AUTH {self.auth!r} is none, serviceAccountToken or clientAssertion")
-        if self.auth != "none" and not self.token_file:
+        # AI drafts as private notes; without the token file the draft path is off
+        self.draft_token_file = env.get("DRAFT_TOKEN_FILE", "")
+        self.draft_secret_file = env.get("DRAFT_WEBHOOK_SECRET_FILE", "")
+        self.drafts_enabled = bool(self.draft_token_file and self.draft_secret_file)
+        self.draft_inboxes = {i.strip() for i in env.get("DRAFT_INBOXES", "").split(",") if i.strip()}
+        self.draft_heading = env.get("DRAFT_HEADING", "AI draft").strip()
+        self.draft_instructions = env.get("DRAFT_INSTRUCTIONS", "").strip()
+        if self.auth not in ("none", "serviceAccountToken", "clientAssertion", "clientSecret"):
+            raise ValueError(f"A2A_AUTH {self.auth!r} is none, serviceAccountToken, clientAssertion or clientSecret")
+        if self.auth in ("serviceAccountToken", "clientAssertion") and not self.token_file:
             raise ValueError("A2A_TOKEN_FILE is required with A2A_AUTH " + self.auth)
-        if self.auth == "clientAssertion" and not (self.token_url and self.client_id):
-            raise ValueError("A2A_TOKEN_URL and A2A_CLIENT_ID are required with A2A_AUTH clientAssertion")
+        if self.auth in ("clientAssertion", "clientSecret") and not (self.token_url and self.client_id):
+            raise ValueError("A2A_TOKEN_URL and A2A_CLIENT_ID are required with A2A_AUTH " + self.auth)
+        if self.auth == "clientSecret" and not self.client_secret_file:
+            raise ValueError("A2A_CLIENT_SECRET_FILE is required with A2A_AUTH clientSecret")
 
 
 def normalize(text):
@@ -129,7 +146,8 @@ def answer_text(result):
 
 
 class Credentials:
-    """The bearer the agent gets: none, the projected token, or an exchanged access token."""
+    """The bearer the agent gets: none, the projected token, or an access token of a client
+    credentials grant (client assertion: the projected token; client secret: a mounted one)."""
 
     def __init__(self, config):
         self.config = config
@@ -145,12 +163,12 @@ class Credentials:
         with self.lock:
             token, expires = self.cached
             if not token or time.time() > expires - 60:
-                form = {
-                    "grant_type": "client_credentials",
-                    "client_id": c.client_id,
-                    "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-                    "client_assertion": read_file(c.token_file),
-                }
+                form = {"grant_type": "client_credentials", "client_id": c.client_id}
+                if c.auth == "clientSecret":
+                    form["client_secret"] = read_file(c.client_secret_file)
+                else:
+                    form["client_assertion_type"] = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+                    form["client_assertion"] = read_file(c.token_file)
                 if c.scope:
                     form["scope"] = c.scope
                 got = http_json(c.token_url, form, form=True)
@@ -326,6 +344,92 @@ def panel_request(bot, body, email):
     return reply
 
 
+class PrivateNotes:
+    """The only writer of the draft path: posts private notes and refuses anything else."""
+
+    def __init__(self, base_url, token_file):
+        self.base_url = base_url
+        self.token_file = token_file
+
+    def get(self, path):
+        return http_json(self.base_url + path, None, {"api_access_token": read_file(self.token_file)})
+
+    def post(self, path, body):
+        if not path.endswith("/messages") or body.get("private") is not True:
+            raise PermissionError("the draft path writes private notes only")
+        return http_json(self.base_url + path, body, {"api_access_token": read_file(self.token_file)})
+
+
+DRAFT_PROMPT = ("Write the next reply of the team to the customer in this conversation, in the "
+                "customer's language. Return the reply text only; a staff member checks, edits and "
+                "sends it.")
+
+
+class Drafts:
+    """Drafts the next reply to a customer message as a private note, for staff to send."""
+
+    def __init__(self, bot, notes=None):
+        self.bot = bot
+        c = bot.config
+        self.config = c
+        self.notes = notes or PrivateNotes(c.chatwoot_url, c.draft_token_file)
+        self.locks = {}
+        self.locks_lock = threading.Lock()
+        self.seen = []
+
+    def wanted(self, event):
+        """Incoming customer messages of the listed inboxes."""
+        conv = event.get("conversation") or {}
+        inbox = (event.get("inbox") or {}).get("name") or ""
+        inboxes = self.config.draft_inboxes
+        return (event.get("event") == "message_created"
+                and event.get("message_type") == "incoming"
+                and not event.get("private")
+                and conv.get("id") is not None
+                and ("*" in inboxes or inbox in inboxes))
+
+    def lock(self, key):
+        with self.locks_lock:
+            return self.locks.setdefault(key, threading.Lock())
+
+    def handle(self, event):
+        if not self.wanted(event):
+            return
+        message_id = event.get("id")
+        if message_id in self.seen:
+            return
+        self.seen = (self.seen + [message_id])[-1000:]
+        account = (event.get("account") or {}).get("id")
+        conv = event["conversation"]["id"]
+        with self.lock((account, conv)):
+            self.draft(account, conv, message_id)
+
+    def draft(self, account, conv, message_id):
+        path = f"/api/v1/accounts/{account}/conversations/{conv}/messages"
+        messages = self.notes.get(path).get("payload") or []
+        incoming = [m.get("id") for m in messages if m.get("message_type") in (0, "incoming") and not m.get("private")]
+        # a customer who writes again gets one draft, for the newest message
+        if incoming and incoming[-1] != message_id:
+            LOG.info("conversation %s: newer message than %s, no draft", conv, message_id)
+            return
+        heading = self.config.draft_heading
+        earlier = [m for m in messages if not (m.get("private") and (m.get("content") or "").startswith(heading))]
+        text = (self.config.draft_instructions or DRAFT_PROMPT) + "\n\nConversation:\n" + \
+            (transcript({"messages": earlier}) or "(no messages)")
+        metadata = {"chatwoot": {"draft": True, "account": account, "conversation": conv}}
+        try:
+            reply, _ = self.bot.ask(text, None, metadata)
+        except Exception as e:  # staff answer without a draft
+            LOG.warning("conversation %s: no draft, agent failed: %s", conv, e)
+            return
+        if not reply.strip():
+            LOG.info("conversation %s: agent drafted nothing", conv)
+            return
+        self.notes.post(path, {"content": heading + "\n\n" + reply.strip(),
+                               "message_type": "outgoing", "private": True})
+        LOG.info("conversation %s: draft written", conv)
+
+
 def b64url(text):
     return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
 
@@ -468,8 +572,9 @@ def make_panel_handler(bot, page, forward_url=""):
     return Handler
 
 
-def make_handler(bot, pool, staff=None):
-    """Webhooks of the bot; with staff (StaffTokens) also panel requests from elsewhere."""
+def make_handler(bot, pool, staff=None, drafts=None):
+    """Webhooks of the bot and, with drafts, of the draft path; with staff (StaffTokens) also
+    panel requests from elsewhere."""
     class Handler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -505,8 +610,9 @@ def make_handler(bot, pool, staff=None):
             self.reply(200, json.dumps({"text": text}).encode())
 
         def do_POST(self):
-            if self.path not in ("/webhook", "/agent-panel/api") or (self.path == "/webhook" and not bot.config.bot_enabled) \
-                    or (self.path == "/agent-panel/api" and staff is None):
+            served = {"/webhook": bot.config.bot_enabled, "/agent-panel/api": staff is not None,
+                      "/draft": drafts is not None}
+            if not served.get(self.path):
                 return self.reply(404)
             length = int(self.headers.get("Content-Length") or 0)
             if length <= 0 or length > MAX_BODY:
@@ -514,17 +620,18 @@ def make_handler(bot, pool, staff=None):
             body = self.rfile.read(length)
             if self.path == "/agent-panel/api":
                 return self.panel(body)
-            secret = read_file(bot.config.webhook_secret_file)
-            if not verify(secret, self.headers.get("X-Chatwoot-Timestamp"),
+            # each webhook has its own secret: the bot's cannot sign a draft request
+            secret_file = bot.config.draft_secret_file if self.path == "/draft" else bot.config.webhook_secret_file
+            if not verify(read_file(secret_file), self.headers.get("X-Chatwoot-Timestamp"),
                           self.headers.get("X-Chatwoot-Signature"), body):
-                LOG.warning("webhook refused: bad signature")
+                LOG.warning("%s refused: bad signature", self.path)
                 return self.reply(401)
             try:
                 event = json.loads(body)
             except ValueError:
                 return self.reply(400)
             # Chatwoot waits a few seconds only: answer at once, work afterwards
-            pool.submit(bot.handle, event)
+            pool.submit(drafts.handle if self.path == "/draft" else bot.handle, event)
             self.reply(200)
 
     return Handler
@@ -550,11 +657,12 @@ def main():
     if env.get("STAFF_ISSUER"):
         staff = StaffTokens(env["STAFF_ISSUER"], env.get("STAFF_CLIENTS", "").split(","),
                             env.get("STAFF_GROUPS", "").split(","), env.get("STAFF_GROUPS_CLAIM", "groups"))
-    if bot and (bot.config.bot_enabled or staff):
+    drafts = Drafts(bot) if bot and bot.config.drafts_enabled else None
+    if bot and (bot.config.bot_enabled or staff or drafts):
         pool = ThreadPoolExecutor(max_workers=8)
-        server = http.server.ThreadingHTTPServer(("0.0.0.0", bot.config.port), make_handler(bot, pool, staff))
-        LOG.info("agent bridge listening on %s, agent %s, auth %s, bot %s, panel %s", bot.config.port,
-                 bot.config.a2a_url, bot.config.auth, bot.config.bot_enabled, staff is not None)
+        server = http.server.ThreadingHTTPServer(("0.0.0.0", bot.config.port), make_handler(bot, pool, staff, drafts))
+        LOG.info("agent bridge listening on %s, agent %s, auth %s, bot %s, panel %s, drafts %s", bot.config.port,
+                 bot.config.a2a_url, bot.config.auth, bot.config.bot_enabled, staff is not None, drafts is not None)
         server.serve_forever()
     else:
         threading.Event().wait()

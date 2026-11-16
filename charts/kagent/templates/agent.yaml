@@ -1,0 +1,109 @@
+{{- $gw := .Values.a2a.gatewayNamespace }}
+{{- range $a := .Values.agents }}
+{{- $a2a := $a.a2a | default dict }}
+{{- $exposed := and $gw $a2a.enabled }}
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: {{ $a.name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent
+  {{- if and $exposed $a2a.callers $.Values.a2a.callersAnnotation }}
+  # kagent copies the Agent's annotations onto its Service, where the gateway reads them
+  annotations:
+    {{ $.Values.a2a.callersAnnotation }}: {{ join "," $a2a.callers | quote }}
+  {{- end }}
+spec:
+  type: Declarative
+  description: {{ required "agents[].description is required" $a.description | quote }}
+  declarative:
+    modelConfig: {{ required "agents[].modelConfig is required" $a.modelConfig }}
+    systemMessage: {{ required "agents[].systemMessage is required" $a.systemMessage | quote }}
+    stream: {{ $a.stream | default false }}
+    {{- with $a.tools }}
+    tools:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $a.skills }}
+    a2aConfig:
+      skills:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    deployment:
+      replicas: 1
+      {{- if $exposed }}
+      # the gateway's route policy picks the agent's Service by these labels
+      labels:
+        kagenti.io/type: agent
+        protocol.kagenti.io/a2a: ""
+      {{- end }}
+      {{- with $a.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- if $exposed }}
+---
+# HTTPRoutes of the gateway namespace may reach this agent's Service only
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: {{ $a.name }}-a2a
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: {{ $gw }}
+  to:
+  - group: ""
+    kind: Service
+    name: {{ $a.name }}
+---
+# Bearer the gateway sends upstream. A Declarative agent checks no bearer, so this is
+# a fixed placeholder, not a secret: the gateway's caller check and the NetworkPolicy
+# below are the boundary
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $a.name }}-a2a-auth
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent
+type: Opaque
+data:
+  token: {{ printf "%s/%s" $.Release.Namespace $a.name | sha256sum | b64enc | quote }}
+{{- if $.Values.networkPolicy.enabled }}
+---
+# The gateway reaches the agent's A2A port; everything else stays at the namespace policies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $a.name }}-a2a
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: network
+spec:
+  podSelector:
+    matchLabels:
+      kagent: {{ $a.name }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 8080
+    from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ $gw }}
+{{- end }}
+{{- end }}
+{{- end }}

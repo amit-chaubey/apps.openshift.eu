@@ -98,6 +98,26 @@ spec:
               name: chatwoot-agent-bot
               key: webhook-secret
         {{- end }}
+        {{- if .Values.draftAgent.enabled }}
+        - name: CHATWOOT_DRAFT_NAME
+          value: {{ .Values.draftAgent.name | quote }}
+        - name: CHATWOOT_DRAFT_EMAIL
+          value: {{ .Values.draftAgent.email | quote }}
+        - name: CHATWOOT_DRAFT_INBOXES
+          value: {{ join "," .Values.draftAgent.inboxes | quote }}
+        - name: CHATWOOT_DRAFT_WEBHOOK_URL
+          value: http://chatwoot-agent-bridge:8080/draft
+        - name: CHATWOOT_DRAFT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: chatwoot-draft
+              key: draft-token
+        - name: CHATWOOT_DRAFT_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: chatwoot-draft
+              key: draft-webhook-secret
+        {{- end }}
         {{- if .Values.odoo.enabled }}
         - name: CHATWOOT_ODOO_BRIDGE_EMAIL
           value: odoo-bridge@chatwoot.invalid

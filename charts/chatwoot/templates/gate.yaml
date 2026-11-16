@@ -31,7 +31,7 @@ spec:
       annotations:
         checksum/scripts: {{ include (print $.Template.BasePath "/configmap-scripts.yaml") (merge (dict "checksum" true) .) | sha256sum }}
     spec:
-      {{- if and .Values.copilotPanel.enabled (not .Values.agentBridge.remoteUrl) (ne .Values.agent.auth.type "none") }}
+      {{- if and .Values.copilotPanel.enabled (not .Values.agentBridge.remoteUrl) (include "wrapper.saToken" .) }}
       # the panel asks the agent as chatwoot-agent-bridge; route-host reads the Route with it
       serviceAccountName: chatwoot-agent-bridge
       automountServiceAccountToken: {{ not .Values.route.hostname }}

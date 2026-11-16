@@ -2,7 +2,7 @@
 {{- if include "wrapper.asksAgent" . }}
 {{- /*
 The identity the agent sees for the bot and the panel: a token of this ServiceAccount, for
-agent.auth.audience, when agent.auth.type is not none.
+agent.auth.audience, when agent.auth.type is serviceAccountToken or clientAssertion.
 */}}
 apiVersion: v1
 kind: ServiceAccount
@@ -79,6 +79,20 @@ spec:
         - name: FAILURE_MESSAGE
           value: {{ .Values.agentBot.failureMessage | quote }}
         {{- end }}
+        {{- if .Values.draftAgent.enabled }}
+        {{- $d := .Values.draftAgent }}
+        # AI drafts: the account webhook arrives on /draft, drafts go out as private notes
+        - name: DRAFT_TOKEN_FILE
+          value: /etc/chatwoot-draft/draft-token
+        - name: DRAFT_WEBHOOK_SECRET_FILE
+          value: /etc/chatwoot-draft/draft-webhook-secret
+        - name: DRAFT_INBOXES
+          value: {{ join "," $d.inboxes | quote }}
+        - name: DRAFT_HEADING
+          value: {{ $d.heading | quote }}
+        - name: DRAFT_INSTRUCTIONS
+          value: {{ $d.instructions | quote }}
+        {{- end }}
         {{- if and $standalone .Values.copilotPanel.enabled }}
         {{- $s := .Values.agentBridge.standalone.staff }}
         # panel requests carry a staff member's access token of this issuer and client
@@ -104,6 +118,11 @@ spec:
           mountPath: /etc/chatwoot-agent-bot
           readOnly: true
         {{- end }}
+        {{- if .Values.draftAgent.enabled }}
+        - name: draft
+          mountPath: /etc/chatwoot-draft
+          readOnly: true
+        {{- end }}
         {{- include "wrapper.agentTokenMount" . | nindent 8 }}
         readinessProbe:
           httpGet:
@@ -126,6 +145,12 @@ spec:
         secret:
           secretName: chatwoot-agent-bot
           # readable by the pod's fsGroup: the random user id owns no file
+          defaultMode: 0440
+      {{- end }}
+      {{- if .Values.draftAgent.enabled }}
+      - name: draft
+        secret:
+          secretName: chatwoot-draft
           defaultMode: 0440
       {{- end }}
       {{- include "wrapper.agentTokenVolume" . | nindent 6 }}

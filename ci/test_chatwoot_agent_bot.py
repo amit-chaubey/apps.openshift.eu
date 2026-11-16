@@ -45,6 +45,11 @@ class Fake(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def do_GET(self):
+        s = self.state
+        s["gets"].append((self.path, self.headers.get("api_access_token")))
+        self._json(200, {"payload": s["messages"]})
+
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length)
@@ -79,7 +84,8 @@ def event(content="Where is my order?", status="pending", message_type="incoming
 class Base(unittest.TestCase):
     def setUp(self):
         logging.disable(logging.CRITICAL)
-        self.state = {"a2a": [], "chatwoot": [], "token_calls": [], "agent": lambda b: message("Tomorrow.")}
+        self.state = {"a2a": [], "chatwoot": [], "token_calls": [], "gets": [], "messages": [],
+                      "agent": lambda b: message("Tomorrow.")}
         Fake.state = self.state
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fake)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -223,11 +229,127 @@ class BotTest(Base):
         self.assertEqual(form["client_assertion"], SA_TOKEN)
         self.assertEqual([a[1] for a in self.state["a2a"]], ["Bearer access-1", "Bearer access-1"])
 
+    def test_client_secret_cached(self):
+        (self.dir / "client-secret").write_text("client-" + "c" * 40)
+        bot = self.bot(A2A_AUTH="clientSecret", A2A_CLIENT_SECRET_FILE=str(self.dir / "client-secret"),
+                       A2A_TOKEN_URL=self.base + "/token", A2A_CLIENT_ID="chatwoot-bridge")
+        bot.handle(event())
+        bot.handle(event())
+        self.assertEqual(len(self.state["token_calls"]), 1)
+        form = dict(p.split("=", 1) for p in self.state["token_calls"][0].split("&"))
+        self.assertEqual(form["grant_type"], "client_credentials")
+        self.assertEqual(form["client_id"], "chatwoot-bridge")
+        self.assertEqual(form["client_secret"], "client-" + "c" * 40)
+        self.assertNotIn("client_assertion", form)
+        self.assertEqual([a[1] for a in self.state["a2a"]], ["Bearer access-1", "Bearer access-1"])
+
     def test_config_refuses_incomplete_auth(self):
         with self.assertRaises(ValueError):
             agent_bot.Config({**self.env, "A2A_AUTH": "clientAssertion", "A2A_TOKEN_FILE": "/x"})
         with self.assertRaises(ValueError):
+            agent_bot.Config({**self.env, "A2A_AUTH": "clientSecret", "A2A_TOKEN_URL": "http://t",
+                              "A2A_CLIENT_ID": "c"})
+        with self.assertRaises(ValueError):
             agent_bot.Config({**self.env, "A2A_AUTH": "password"})
+
+
+DRAFT_TOKEN = "draft-" + "d" * 42
+DRAFT_SECRET = "draft-hook-" + "h" * 37
+
+
+def history(*items):
+    """Chatwoot messages API payload: (id, type, content[, private])."""
+    return [{"id": i, "message_type": t, "content": c, "private": bool(p and p[0])} for i, t, c, *p in items]
+
+
+class DraftTest(Base):
+    def setUp(self):
+        super().setUp()
+        (self.dir / "draft-token").write_text(DRAFT_TOKEN)
+        (self.dir / "draft-secret").write_text(DRAFT_SECRET)
+        self.env.update({"DRAFT_TOKEN_FILE": str(self.dir / "draft-token"),
+                         "DRAFT_WEBHOOK_SECRET_FILE": str(self.dir / "draft-secret"),
+                         "DRAFT_INBOXES": "Support", "DRAFT_HEADING": "AI draft"})
+        # the account webhook carries the inbox name; conversations are open (staff hold them)
+        self.drafts = agent_bot.Drafts(self.bot())
+
+    def draft_event(self, mid=21, inbox="Support", **kw):
+        e = event(mid=mid, status="open", **kw)
+        e["inbox"] = {"id": 3, "name": inbox}
+        return e
+
+    def test_draft_is_a_private_note_with_the_transcript(self):
+        self.state["messages"] = history((20, 1, "Hello, how can we help?"),
+                                         (19, 1, "AI draft\n\nold draft", True),
+                                         (18, 1, "Customer is on the gold plan", True),
+                                         (21, 0, "My sync stopped."))
+        self.drafts.handle(self.draft_event())
+        self.assertEqual(self.state["gets"], [("/api/v1/accounts/1/conversations/7/messages", DRAFT_TOKEN)])
+        prompt = self.state["a2a"][0][0]["params"]["message"]["parts"][0]["text"]
+        self.assertIn("customer: My sync stopped.", prompt)
+        self.assertIn("private note: Customer is on the gold plan", prompt)
+        self.assertNotIn("old draft", prompt)
+        path, body, token = self.state["chatwoot"][-1]
+        self.assertEqual(path, "/api/v1/accounts/1/conversations/7/messages")
+        self.assertEqual(token, DRAFT_TOKEN)
+        self.assertIs(body["private"], True)
+        self.assertEqual(body["content"], "AI draft\n\nTomorrow.")
+
+    def test_never_drafts_what_is_not_a_customer_message_of_a_listed_inbox(self):
+        self.drafts.handle(self.draft_event(inbox="Sales"))
+        self.drafts.handle(self.draft_event(message_type="outgoing"))
+        self.drafts.handle(self.draft_event(private=True))
+        self.assertEqual(self.state["a2a"], [])
+        self.assertEqual(self.state["chatwoot"], [])
+
+    def test_newer_customer_message_wins(self):
+        self.state["messages"] = history((21, 0, "First"), (22, 0, "Second"))
+        self.drafts.handle(self.draft_event(mid=21))
+        self.assertEqual(self.state["a2a"], [])
+
+    def test_agent_failure_writes_nothing(self):
+        self.state["agent"] = lambda b: 500
+        self.state["messages"] = history((21, 0, "Hi"))
+        self.drafts.handle(self.draft_event())
+        self.assertEqual(self.state["chatwoot"], [])
+
+    def test_guard_refuses_anything_but_a_private_note(self):
+        notes = agent_bot.PrivateNotes(self.base, str(self.dir / "draft-token"))
+        path = "/api/v1/accounts/1/conversations/7/messages"
+        for body in ({"content": "x", "message_type": "outgoing"},
+                     {"content": "x", "message_type": "outgoing", "private": False},
+                     {"content": "x", "message_type": "outgoing", "private": "true"}):
+            with self.assertRaises(PermissionError):
+                notes.post(path, body)
+        with self.assertRaises(PermissionError):
+            notes.post("/api/v1/accounts/1/conversations/7/toggle_status", {"status": "resolved", "private": True})
+        self.assertEqual(self.state["chatwoot"], [])
+
+    def test_webhook_needs_the_draft_secret(self):
+        self.state["messages"] = history((21, 0, "Hi"))
+        pool = ThreadPoolExecutor(max_workers=1)
+        hook = http.server.ThreadingHTTPServer(("127.0.0.1", 0),
+                                               agent_bot.make_handler(self.drafts.bot, pool, drafts=self.drafts))
+        threading.Thread(target=hook.serve_forever, daemon=True).start()
+        try:
+            body = json.dumps(self.draft_event()).encode()
+
+            def post(path, secret):
+                ts = str(int(time.time()))
+                sig = "sha256=" + hmac.new(secret.encode(), ts.encode() + b"." + body, hashlib.sha256).hexdigest()
+                conn = http.client.HTTPConnection("127.0.0.1", hook.server_port, timeout=10)
+                conn.request("POST", path, body, {"X-Chatwoot-Timestamp": ts, "X-Chatwoot-Signature": sig})
+                status = conn.getresponse().status
+                conn.close()
+                return status
+
+            self.assertEqual(post("/draft", SECRET), 401)  # the bot's secret signs no draft
+            self.assertEqual(post("/draft", DRAFT_SECRET), 200)
+            pool.shutdown(wait=True)
+            self.assertIs(self.state["chatwoot"][-1][1]["private"], True)
+        finally:
+            hook.shutdown()
+            hook.server_close()
 
 
 class WebhookTest(Base):

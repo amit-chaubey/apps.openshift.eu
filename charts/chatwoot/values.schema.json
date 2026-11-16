@@ -5,61 +5,144 @@
     "route": {
       "type": "object",
       "properties": {
-        "hostname": {"type": "string", "title": "Hostname", "description": "Leave empty for a generated hostname"},
-        "labels": {"type": "object", "additionalProperties": {"type": "string"}},
-        "annotations": {"type": "object", "additionalProperties": {"type": "string"}}
+        "hostname": {
+          "type": "string",
+          "title": "Hostname",
+          "description": "Leave empty for a generated hostname"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
       }
     },
     "account": {
       "type": "object",
       "properties": {
-        "name": {"type": "string", "minLength": 1, "title": "Account name"},
-        "id": {"type": "integer", "minimum": 1},
-        "adminEmail": {"type": "string", "title": "Super admin email", "description": "An address under .invalid; leave empty for superadmin@chatwoot.invalid"}
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "title": "Account name"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "adminEmail": {
+          "type": "string",
+          "title": "Super admin email",
+          "description": "An address under .invalid; leave empty for superadmin@chatwoot.invalid"
+        }
       }
     },
-    "web": {"type": "object", "properties": {"replicas": {"type": "integer", "minimum": 1, "title": "Web pods"}}},
+    "web": {
+      "type": "object",
+      "properties": {
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "title": "Web pods"
+        }
+      }
+    },
     "worker": {
       "type": "object",
       "properties": {
-        "replicas": {"type": "integer", "minimum": 1, "title": "Worker pods"},
-        "concurrency": {"type": "integer", "minimum": 1}
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "title": "Worker pods"
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
-    "extraEnv": {"type": "array"},
+    "extraEnv": {
+      "type": "array"
+    },
     "database": {
       "type": "object",
       "properties": {
-        "instances": {"type": "integer", "minimum": 1, "title": "Database instances", "description": "2 or more adds a standby"},
-        "size": {"type": "string", "title": "Database volume size"},
-        "storageClassName": {"type": "string", "title": "Database storage class"},
-        "imageName": {"type": "string", "minLength": 1, "description": "A PostgreSQL image with pgvector"}
+        "instances": {
+          "type": "integer",
+          "minimum": 1,
+          "title": "Database instances",
+          "description": "2 or more adds a standby"
+        },
+        "size": {
+          "type": "string",
+          "title": "Database volume size"
+        },
+        "storageClassName": {
+          "type": "string",
+          "title": "Database storage class"
+        },
+        "imageName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A PostgreSQL image with pgvector"
+        }
       }
     },
     "redis": {
       "type": "object",
       "properties": {
-        "size": {"type": "string", "title": "Store volume size"},
-        "storageClassName": {"type": "string", "title": "Store storage class"}
+        "size": {
+          "type": "string",
+          "title": "Store volume size"
+        },
+        "storageClassName": {
+          "type": "string",
+          "title": "Store storage class"
+        }
       }
     },
     "attachments": {
       "type": "object",
       "properties": {
-        "storage": {"type": "string", "enum": ["volume", "objectBucketClaim"], "title": "Attachment storage"},
+        "storage": {
+          "type": "string",
+          "enum": [
+            "volume",
+            "objectBucketClaim"
+          ],
+          "title": "Attachment storage"
+        },
         "volume": {
           "type": "object",
           "properties": {
-            "size": {"type": "string", "title": "Attachment volume size"},
-            "storageClassName": {"type": "string"}
+            "size": {
+              "type": "string",
+              "title": "Attachment volume size"
+            },
+            "storageClassName": {
+              "type": "string"
+            }
           }
         },
         "objectBucketClaim": {
           "type": "object",
           "properties": {
-            "storageClassName": {"type": "string", "title": "Bucket storage class"},
-            "region": {"type": "string"},
-            "caConfigMap": {"type": "string"}
+            "storageClassName": {
+              "type": "string",
+              "title": "Bucket storage class"
+            },
+            "region": {
+              "type": "string"
+            },
+            "caConfigMap": {
+              "type": "string"
+            }
           }
         }
       }
@@ -67,31 +150,96 @@
     "sso": {
       "type": "object",
       "properties": {
-        "enabled": {"type": "boolean", "title": "Single sign-on"},
-        "issuerUrl": {"type": "string", "title": "OIDC issuer"},
-        "clientId": {"type": "string"},
-        "scope": {"type": "string"},
-        "groupsClaim": {"type": "string"},
-        "allowedGroups": {"type": "array", "items": {"type": "string", "minLength": 1}, "title": "Groups that may log in"},
-        "adminGroups": {"type": "array", "items": {"type": "string"}, "title": "Groups that administer", "description": "An empty entry is ignored"},
-        "emailDomains": {"type": "array", "items": {"type": "string"}},
-        "deniedEmails": {"type": "array", "items": {"type": "string", "minLength": 3}, "title": "Addresses that may not log in"},
-        "extraArgs": {"type": "array", "items": {"type": "string"}},
+        "enabled": {
+          "type": "boolean",
+          "title": "Single sign-on"
+        },
+        "issuerUrl": {
+          "type": "string",
+          "title": "OIDC issuer"
+        },
+        "clientId": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "groupsClaim": {
+          "type": "string"
+        },
+        "allowedGroups": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": "Groups that may log in"
+        },
+        "adminGroups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Groups that administer",
+          "description": "An empty entry is ignored"
+        },
+        "emailDomains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deniedEmails": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3
+          },
+          "title": "Addresses that may not log in"
+        },
+        "extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "session": {
           "type": "object",
           "properties": {
-            "refresh": {"type": "string", "pattern": "^[0-9]+(s|m|h)$", "title": "Group re-check interval"},
-            "expire": {"type": "string", "pattern": "^[0-9]+(s|m|h)$", "title": "Login session lifetime"},
-            "chatwootHours": {"type": "integer", "minimum": 25, "maximum": 720, "title": "Chatwoot session hours"}
+            "refresh": {
+              "type": "string",
+              "pattern": "^[0-9]+(s|m|h)$",
+              "title": "Group re-check interval"
+            },
+            "expire": {
+              "type": "string",
+              "pattern": "^[0-9]+(s|m|h)$",
+              "title": "Login session lifetime"
+            },
+            "chatwootHours": {
+              "type": "integer",
+              "minimum": 25,
+              "maximum": 720,
+              "title": "Chatwoot session hours"
+            }
           }
         },
         "public": {
           "type": "object",
           "properties": {
-            "widget": {"type": "boolean", "title": "Website live chat widget"},
-            "inboxApi": {"type": "boolean"},
-            "surveys": {"type": "boolean"},
-            "helpCenter": {"type": "boolean"}
+            "widget": {
+              "type": "boolean",
+              "title": "Website live chat widget"
+            },
+            "inboxApi": {
+              "type": "boolean"
+            },
+            "surveys": {
+              "type": "boolean"
+            },
+            "helpCenter": {
+              "type": "boolean"
+            }
           }
         }
       }
@@ -99,27 +247,148 @@
     "networkPolicy": {
       "type": "object",
       "properties": {
-        "enabled": {"type": "boolean"},
-        "webIngressFrom": {"type": "array", "items": {"type": "object"}}
+        "enabled": {
+          "type": "boolean"
+        },
+        "webIngressFrom": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
       }
     },
-    "monitoring": {"type": "object", "title": "Monitoring", "properties": {"enabled": {"type": "boolean", "title": "ServiceMonitor of the Odoo bridge"}, "alerts": {"type": "boolean", "title": "Alert rules of the Odoo bridge"}, "namespaceLabels": {"type": "object", "additionalProperties": {"type": "string"}}}},
-    "odoo": {"type": "object", "title": "Odoo bridge", "properties": {"enabled": {"type": "boolean", "title": "Mirror Odoo tickets and leads", "description": "Odoo tickets and leads as conversations in Chatwoot API inboxes; needs route.hostname"}, "url": {"type": "string", "title": "Odoo address", "pattern": "^(https://.*)?$"}, "database": {"type": "string", "title": "Odoo database"}, "ticketInbox": {"type": "string", "title": "Inbox of tickets"}, "leadInbox": {"type": "string", "title": "Inbox of leads", "description": "Empty: leads are not mirrored"}, "solvedStage": {"type": "string", "title": "Stage of a resolved ticket"}, "bridge": {"type": "object", "properties": {"image": {"type": "string"}, "resources": {"type": "object"}}}}},
-    "draftAgent": {"type": "object", "properties": {"enabled": {"type": "boolean", "description": "Reserved for a later version; must stay false"}}},
+    "monitoring": {
+      "type": "object",
+      "title": "Monitoring",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "ServiceMonitor of the Odoo bridge"
+        },
+        "alerts": {
+          "type": "boolean",
+          "title": "Alert rules of the Odoo bridge"
+        },
+        "namespaceLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "odoo": {
+      "type": "object",
+      "title": "Odoo bridge",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "title": "Mirror Odoo tickets and leads",
+          "description": "Odoo tickets and leads as conversations in Chatwoot API inboxes; needs route.hostname"
+        },
+        "url": {
+          "type": "string",
+          "title": "Odoo address",
+          "pattern": "^(https://.*)?$"
+        },
+        "database": {
+          "type": "string",
+          "title": "Odoo database"
+        },
+        "ticketInbox": {
+          "type": "string",
+          "title": "Inbox of tickets"
+        },
+        "leadInbox": {
+          "type": "string",
+          "title": "Inbox of leads",
+          "description": "Empty: leads are not mirrored"
+        },
+        "solvedStage": {
+          "type": "string",
+          "title": "Stage of a resolved ticket"
+        },
+        "bridge": {
+          "type": "object",
+          "properties": {
+            "image": {
+              "type": "string"
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "draftAgent": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "AI drafts of the next reply as private notes"
+        },
+        "inboxes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "heading": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instructions": {
+          "type": "string"
+        }
+      }
+    },
     "agent": {
       "type": "object",
       "title": "A2A agent of the bot and the panel",
       "properties": {
-        "url": {"type": "string", "title": "Agent address", "description": "JSON-RPC address of the A2A agent", "pattern": "^(https?://.*)?$"},
-        "timeoutSeconds": {"type": "integer", "minimum": 10},
+        "url": {
+          "type": "string",
+          "title": "Agent address",
+          "description": "JSON-RPC address of the A2A agent",
+          "pattern": "^(https?://.*)?$"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 10
+        },
         "auth": {
           "type": "object",
           "properties": {
-            "type": {"type": "string", "enum": ["none", "serviceAccountToken", "clientAssertion"], "title": "Credential"},
-            "audience": {"type": "string"},
-            "tokenUrl": {"type": "string"},
-            "clientId": {"type": "string"},
-            "scope": {"type": "string"}
+            "type": {
+              "type": "string",
+              "enum": [
+                "none",
+                "serviceAccountToken",
+                "clientAssertion",
+                "clientSecret"
+              ],
+              "title": "Credential"
+            },
+            "audience": {
+              "type": "string"
+            },
+            "tokenUrl": {
+              "type": "string"
+            },
+            "clientId": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            }
           }
         }
       }
@@ -128,34 +397,126 @@
       "type": "object",
       "title": "Agent Bot",
       "properties": {
-        "enabled": {"type": "boolean", "description": "Answer customers through the agent until a person takes over"},
-        "name": {"type": "string"},
-        "inboxes": {"type": "array", "items": {"type": "string"}, "description": "Inbox names; * is every inbox"},
-        "instructions": {"type": "string"},
-        "handoff": {"type": "object", "properties": {"keywords": {"type": "array", "items": {"type": "string"}}, "marker": {"type": "string"}, "message": {"type": "string"}}},
-        "failureMessage": {"type": "string"}
+        "enabled": {
+          "type": "boolean",
+          "description": "Answer customers through the agent until a person takes over"
+        },
+        "name": {
+          "type": "string"
+        },
+        "inboxes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Inbox names; * is every inbox"
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "handoff": {
+          "type": "object",
+          "properties": {
+            "keywords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "marker": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        },
+        "failureMessage": {
+          "type": "string"
+        }
       }
     },
     "copilotPanel": {
       "type": "object",
       "title": "Agent panel",
       "properties": {
-        "enabled": {"type": "boolean", "description": "A sidebar panel where staff ask the agent; needs sso.enabled"},
-        "title": {"type": "string"}
+        "enabled": {
+          "type": "boolean",
+          "description": "A sidebar panel where staff ask the agent; needs sso.enabled"
+        },
+        "title": {
+          "type": "string"
+        }
       }
     },
     "secrets": {
       "type": "object",
       "properties": {
-        "type": {"type": "string", "enum": ["kubernetes", "externalSecret"], "title": "Secret source"},
-        "secretKeyBase": {"type": "string", "description": "Leave empty to generate one. Never change it afterwards"},
-        "redisPassword": {"type": "string"},
-        "superAdminPassword": {"type": "string"},
-        "platformToken": {"type": "string"},
-        "oauthClientSecret": {"type": "string"},
-        "oauthCookieSecret": {"type": "string", "description": "16, 24 or 32 characters", "pattern": "^(.{16}|.{24}|.{32})?$"},
-        "agentBotToken": {"type": "string", "description": "Leave empty to generate one; at least 32 characters"},
-        "agentBotWebhookSecret": {"type": "string", "description": "Leave empty to generate one; at least 32 characters"}, "odooApiKey": {"type": "string", "description": "API key of the Odoo user the bridge works as; required with odoo.enabled"}, "odooEventSecret": {"type": "string", "description": "Leave empty to generate one, then give Odoo the same value; at least 32 characters", "pattern": "^(.{32,})?$"}, "odooBridgeToken": {"type": "string", "description": "Leave empty to generate one; at least 32 characters", "pattern": "^(.{32,})?$"}, "odooInboxSecret": {"type": "string", "description": "Leave empty to generate one; at least 32 characters", "pattern": "^(.{32,})?$"}
+        "type": {
+          "type": "string",
+          "enum": [
+            "kubernetes",
+            "externalSecret"
+          ],
+          "title": "Secret source"
+        },
+        "secretKeyBase": {
+          "type": "string",
+          "description": "Leave empty to generate one. Never change it afterwards"
+        },
+        "redisPassword": {
+          "type": "string"
+        },
+        "superAdminPassword": {
+          "type": "string"
+        },
+        "platformToken": {
+          "type": "string"
+        },
+        "oauthClientSecret": {
+          "type": "string"
+        },
+        "oauthCookieSecret": {
+          "type": "string",
+          "description": "16, 24 or 32 characters",
+          "pattern": "^(.{16}|.{24}|.{32})?$"
+        },
+        "agentBotToken": {
+          "type": "string",
+          "description": "Leave empty to generate one; at least 32 characters"
+        },
+        "agentBotWebhookSecret": {
+          "type": "string",
+          "description": "Leave empty to generate one; at least 32 characters"
+        },
+        "odooApiKey": {
+          "type": "string",
+          "description": "API key of the Odoo user the bridge works as; required with odoo.enabled"
+        },
+        "odooEventSecret": {
+          "type": "string",
+          "description": "Leave empty to generate one, then give Odoo the same value; at least 32 characters",
+          "pattern": "^(.{32,})?$"
+        },
+        "odooBridgeToken": {
+          "type": "string",
+          "description": "Leave empty to generate one; at least 32 characters",
+          "pattern": "^(.{32,})?$"
+        },
+        "odooInboxSecret": {
+          "type": "string",
+          "description": "Leave empty to generate one; at least 32 characters",
+          "pattern": "^(.{32,})?$"
+        },
+        "draftToken": {
+          "type": "string"
+        },
+        "draftWebhookSecret": {
+          "type": "string"
+        },
+        "agentClientSecret": {
+          "type": "string"
+        }
       }
     }
   }

@@ -219,9 +219,21 @@ monitoring:
   namespaceLabels:
     network.openshift.io/policy-group: monitoring
 
-# AI drafts as private notes: not part of this version, must stay false
+# AI drafts: for each new customer message in the inboxes below, the agent drafts the next
+# reply from the conversation and the bridge adds it as a private note, which staff check,
+# edit and send themselves. Nothing of the draft path reaches the customer. The prepare Job
+# keeps the drafts' author and an account webhook of new messages to the bridge
 draftAgent:
   enabled: false
+  # names of the inboxes whose customer messages get a draft; "*" is every inbox
+  inboxes: []
+  # the Chatwoot agent that writes the notes; the email stays under .invalid
+  name: AI draft
+  email: ai-draft@chatwoot.invalid
+  # first line of every note; also how the bridge leaves earlier drafts out of the transcript
+  heading: "AI draft (check before sending):"
+  # what the agent reads before the transcript; empty: the bridge's own instruction
+  instructions: ""
 
 # The agent behind agentBot and copilotPanel: an A2A (Agent2Agent) server
 agent:
@@ -233,15 +245,18 @@ agent:
     # none: no credential. serviceAccountToken: a token of ServiceAccount
     # chatwoot-agent-bridge for auth.audience, renewed by the kubelet. clientAssertion: that
     # token is the client assertion (RFC 7523) of a client credentials grant at
-    # auth.tokenUrl for auth.clientId, and the access token goes to the agent
+    # auth.tokenUrl for auth.clientId, and the access token goes to the agent.
+    # clientSecret: a client credentials grant with the client secret
+    # secrets.agentClientSecret (Secret chatwoot-agent-client), for an OAuth server that
+    # cannot tell this cluster's ServiceAccount tokens from another cluster's
     type: none
-    # audience of the ServiceAccount token; required unless type none
+    # audience of the ServiceAccount token, with serviceAccountToken and clientAssertion
     audience: ""
-    # token endpoint of the OAuth server, with clientAssertion
+    # token endpoint of the OAuth server, with clientAssertion and clientSecret
     tokenUrl: ""
-    # OAuth client of the bridge, with clientAssertion
+    # OAuth client of the bridge, with clientAssertion and clientSecret
     clientId: ""
-    # scope of the access token, with clientAssertion; empty: the client's default
+    # scope of the access token; empty: the client's default
     scope: ""
 
 # An Agent Bot that answers customers through the agent until a person takes over. The
@@ -339,6 +354,14 @@ secrets:
   # secret Chatwoot signs the agent bot's webhooks with, with agentBot.enabled; empty:
   # generated
   agentBotWebhookSecret: ""
+  # access token of the AI drafts' author, with draftAgent.enabled; empty: generated
+  draftToken: ""
+  # secret Chatwoot signs the drafts' account webhook with, with draftAgent.enabled; empty:
+  # generated
+  draftWebhookSecret: ""
+  # client secret of the bridge at agent.auth.tokenUrl, with agent.auth.type clientSecret;
+  # required
+  agentClientSecret: ""
   # API key of the Odoo user the bridge works as, with odoo.enabled; required
   odooApiKey: ""
   # secret Odoo signs its events with (the bridge secret of the Odoo module), with
@@ -363,6 +386,9 @@ secrets:
       cookie-secret: chatwoot-oauth-cookie
       bot-token: chatwoot-agent-bot-token
       webhook-secret: chatwoot-agent-bot-webhook
+      draft-token: chatwoot-draft-token
+      draft-webhook-secret: chatwoot-draft-webhook
+      agent-client-secret: chatwoot-agent-client-secret
       odoo-api-key: chatwoot-odoo-api-key
       odoo-event-secret: chatwoot-odoo-event-secret
       odoo-bridge-token: chatwoot-odoo-bridge-token

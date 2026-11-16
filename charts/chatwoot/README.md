@@ -53,12 +53,14 @@ a super admin.
 | `networkPolicy.webIngressFrom` | empty | Further peers that may reach Chatwoot web on port 3000. |
 | `secrets.type` | `kubernetes` | `externalSecret` reads the secrets from a secret store. |
 | `extraEnv` | empty | Further Chatwoot settings, for example the `SMTP_*` variables. |
-| `agent.url` | empty | JSON-RPC address of the A2A agent of the bot and the panel; required with either. |
-| `agent.auth.type` | `none` | `serviceAccountToken`: a token of ServiceAccount `chatwoot-agent-bridge` for `agent.auth.audience`. `clientAssertion`: that token as client assertion at `agent.auth.tokenUrl` for `agent.auth.clientId`. |
+| `agent.url` | empty | JSON-RPC address of the A2A agent of the bot, the panel and the drafts; required with any of them. |
+| `agent.auth.type` | `none` | `serviceAccountToken`: a token of ServiceAccount `chatwoot-agent-bridge` for `agent.auth.audience`. `clientAssertion`: that token as client assertion at `agent.auth.tokenUrl` for `agent.auth.clientId`. `clientSecret`: the client secret `secrets.agentClientSecret` at `agent.auth.tokenUrl` for `agent.auth.clientId`. |
 | `agentBot.enabled` | `false` | An Agent Bot answers customers through the agent until a person takes over. |
 | `agentBot.inboxes` | empty | Inbox names the bot answers in; `*` is every inbox. |
 | `agentBot.handoff.keywords` | `human`, `person`, `agent`, `staff` | A customer message that is exactly one of these hands the conversation to a person. |
 | `copilotPanel.enabled` | `false` | A panel in the conversation sidebar where staff ask the agent; needs `sso.enabled`. |
+| `draftAgent.enabled` | `false` | The agent drafts a reply to each customer message as a private note for staff. |
+| `draftAgent.inboxes` | empty | Inbox names whose customer messages get a draft; `*` is every inbox. Required with `draftAgent.enabled`. |
 | `agentBridge.remoteUrl` | empty | https address of a standalone bridge elsewhere. Empty: the bridge runs in this release. |
 | `odoo.enabled` | `false` | Odoo tickets and leads become conversations; staff replies go back to Odoo as mail. Needs `route.hostname`, `odoo.url` and `secrets.odooApiKey`. |
 | `odoo.url`, `odoo.database` | empty | https address of Odoo, and its database (empty: the server's only database). |
@@ -154,6 +156,26 @@ goes into the reply box (or the clipboard) for staff to edit and send; nothing t
 returns is sent to the customer. The panel runs in the oauth2-proxy pod on 127.0.0.1, so
 it is reachable only after the staff login.
 
+### AI drafts
+
+With `draftAgent.enabled` the agent drafts the next reply to every customer message in
+`draftAgent.inboxes`, and the bridge adds the draft to the conversation as a private note
+headed `draftAgent.heading`. Staff read it, edit it and send it themselves; the conversation
+stays with staff and no draft reaches the customer.
+
+- The prepare Job keeps a Chatwoot agent `draftAgent.name` (`draftAgent.email`, under
+  `.invalid`) with the access token of Secret `chatwoot-draft`, member of the listed inboxes
+  only, and an account webhook of `message_created` to the bridge, signed with the draft
+  webhook secret of that Secret.
+- The bridge checks the signature, reads the conversation's messages as that agent, leaves
+  earlier drafts out, and asks the agent with `draftAgent.instructions` and the transcript
+  (private notes of staff included, marked as such). Every write of the draft path goes
+  through one function that refuses any message that is not private.
+- A customer who writes again before a draft is done gets one draft, for the newest
+  message. When the agent fails or returns nothing, no note is written.
+- The bridge runs in this release: `draftAgent.enabled` excludes `agentBridge.remoteUrl`
+  and `agentBridge.standalone.enabled`.
+
 ### Bridge next to the agent
 
 When the agent trusts identities of its own cluster only, the bridge runs there, in a
@@ -245,15 +267,17 @@ flowchart LR
 | `none` | no credential: an agent inside the project, or one behind its own network rules |
 | `serviceAccountToken` | a token of ServiceAccount `chatwoot-agent-bridge` for `agent.auth.audience`, renewed by the kubelet |
 | `clientAssertion` | an access token of `agent.auth.tokenUrl`, for which that ServiceAccount token is the client assertion (RFC 7523) of client `agent.auth.clientId` |
+| `clientSecret` | an access token of `agent.auth.tokenUrl` for client `agent.auth.clientId`, granted with the client secret of Secret `chatwoot-agent-client` (`secrets.agentClientSecret`, or vault item `secrets.externalSecret.items.agent-client-secret`) |
 
-No credential of the agent is stored in the project.
+Only `clientSecret` stores a credential of the agent in the project. Use it when the OAuth
+server cannot tell this cluster's ServiceAccount tokens from those of another cluster with
+the same issuer.
 
 ### Interfaces for integrations
 
 Service `chatwoot-web` port 3000 serves the Chatwoot API (`/api/v1/accounts/...` with a
 user or bot access token) inside the project. A component in another project needs
-`networkPolicy.webIngressFrom`. `draftAgent.enabled` is reserved for a later version of
-the chart and stops the render when set.
+`networkPolicy.webIngressFrom`.
 
 `helm uninstall` deletes the database and the store, and keeps the attachment volume or
 bucket.

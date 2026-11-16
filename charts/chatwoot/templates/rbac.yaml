@@ -42,7 +42,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: chatwoot-route
-{{- if and .Values.copilotPanel.enabled (not .Values.agentBridge.remoteUrl) (ne .Values.agent.auth.type "none") }}
+{{- if and .Values.copilotPanel.enabled (not .Values.agentBridge.remoteUrl) (include "wrapper.saToken" .) }}
 # the gate pod runs as chatwoot-agent-bridge with the panel
 - kind: ServiceAccount
   name: chatwoot-agent-bridge

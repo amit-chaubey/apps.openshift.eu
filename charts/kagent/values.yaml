@@ -118,6 +118,25 @@ examples:
 # login.password) or existingSecret {name, key}
 remoteMCPServers: []
 
+# ModelConfigs of the release namespace. Each: name, model, provider (default OpenAI),
+# baseUrl (an OpenAI-compatible gateway) and apiKey: vaultItem (a remote key of
+# secrets.externalSecret.storeName, property vaultProperty, default login.password,
+# written into Secret model-<name>) or existingSecret {name, key}
+modelConfigs: []
+
+# Declarative Agents of the release namespace. Each: name, description, modelConfig,
+# systemMessage, stream (default false), tools (kagent tool list), skills (A2A skills),
+# resources, and a2a: enabled (publish on the A2A gateway, needs a2a.gatewayNamespace)
+# and callers (written into the Service annotation a2a.callersAnnotation)
+agents: []
+
+a2a:
+  # namespace of the A2A gateway's HTTPRoutes. Empty: no agent is published
+  gatewayNamespace: ""
+  # Service annotation the gateway reads the callers outside the cluster from. Empty:
+  # agents[].a2a.callers is not written
+  callersAnnotation: ""
+
 networkPolicy:
   enabled: true
   # namespaces whose agent pods reach the controller API (sessions, A2A).

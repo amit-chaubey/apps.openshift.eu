@@ -1,0 +1,57 @@
+{{- $es := .Values.secrets.externalSecret }}
+{{- range $m := .Values.modelConfigs }}
+{{- $key := $m.apiKey | default dict }}
+{{- if $key.vaultItem }}
+---
+# API key of ModelConfig {{ $m.name }} from the tenant vault
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: model-{{ $m.name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: model
+spec:
+  refreshInterval: {{ $es.refreshInterval }}
+  secretStoreRef:
+    kind: {{ $es.storeKind }}
+    name: {{ required "secrets.externalSecret.storeName is required for modelConfigs[].apiKey.vaultItem" $es.storeName }}
+  target:
+    name: model-{{ $m.name }}
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+  - secretKey: apiKey
+    remoteRef:
+      key: {{ $key.vaultItem }}
+      property: {{ $key.vaultProperty | default "login.password" }}
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+      nullBytePolicy: Ignore
+{{- end }}
+---
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: {{ $m.name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "tenant.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: model
+spec:
+  provider: {{ $m.provider | default "OpenAI" }}
+  model: {{ required "modelConfigs[].model is required" $m.model | quote }}
+  {{- if $key.vaultItem }}
+  apiKeySecret: model-{{ $m.name }}
+  apiKeySecretKey: apiKey
+  {{- else if $key.existingSecret }}
+  apiKeySecret: {{ $key.existingSecret.name }}
+  apiKeySecretKey: {{ $key.existingSecret.key }}
+  {{- end }}
+  {{- with $m.baseUrl }}
+  openAI:
+    baseUrl: {{ . | quote }}
+  {{- end }}
+{{- end }}

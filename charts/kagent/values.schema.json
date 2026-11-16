@@ -329,6 +329,130 @@
           }
         }
       }
+    },
+    "modelConfigs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "model"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+            "maxLength": 52
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "vaultItem": {
+                "type": "string"
+              },
+              "vaultProperty": {
+                "type": "string"
+              },
+              "existingSecret": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "key"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "description",
+          "modelConfig",
+          "systemMessage"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+            "maxLength": 52
+          },
+          "description": {
+            "type": "string"
+          },
+          "modelConfig": {
+            "type": "string"
+          },
+          "systemMessage": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "tools": {
+            "type": "array"
+          },
+          "skills": {
+            "type": "array"
+          },
+          "resources": {
+            "type": "object"
+          },
+          "a2a": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "callers": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9.-]+/[a-z0-9-]+/[a-z0-9-]+$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "a2a": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gatewayNamespace": {
+          "type": "string"
+        },
+        "callersAnnotation": {
+          "type": "string"
+        }
+      }
     }
   }
 }

@@ -147,7 +147,14 @@ fails "odoo without key" "odoo-api-key of Secret chatwoot-odoo has no value" "${
 fails "odoo over http" "/odoo/url" "${ODOO[@]}" --set odoo.url=http://odoo.example.org --set secrets.odooApiKey=k
 fails "odoo one inbox for both" "must differ" "${ODOO[@]}" --set secrets.odooApiKey=k --set odoo.leadInbox=Support
 fails "odoo and standalone" "exclude" "${ODOO[@]}" --set secrets.odooApiKey=k --set agentBridge.standalone.enabled=true --set agentBot.enabled=true --set agent.url=https://a.example.com/ --set agentBridge.standalone.chatwootUrl=https://cw.example.com
-fails "reserved draft agent" "reserved for a later chart version" --set draftAgent.enabled=true
+DRAFT=(--set draftAgent.enabled=true --set 'draftAgent.inboxes={Support}' --set agent.url=https://a.example.com/a2a/
+  --set agent.auth.type=clientSecret --set agent.auth.tokenUrl=https://login.example.com/token
+  --set agent.auth.clientId=chatwoot-bridge --set secrets.agentClientSecret=s)
+fails "draft without inboxes" "draftAgent.inboxes is required" --set draftAgent.enabled=true --set agent.url=https://a.example.com/
+fails "draft with a remote bridge" "needs the bridge in this release" "${DRAFT[@]}" --set agentBridge.remoteUrl=https://bridge.example.org
+fails "draft author outside .invalid" "draftAgent.email must be an address under the reserved domain .invalid" "${DRAFT[@]}" --set draftAgent.email=ai@example.com
+fails "client secret without token url" "required with agent.auth.type clientSecret" "${DRAFT[@]}" --set agent.auth.tokenUrl=
+fails "client secret without value" "agent-client-secret of Secret chatwoot-agent-client has no value" "${DRAFT[@]}" --set secrets.agentClientSecret=
 fails "bucket without class" "storageClassName is required" --set attachments.storage=objectBucketClaim
 fails "unknown storage" "value must be one of 'volume', 'objectBucketClaim'" --set attachments.storage=s3
 fails "sso without issuer" "sso.issuerUrl is required" --set sso.enabled=true
@@ -214,6 +221,16 @@ check "panel without hostname reads the Route" 'pod("chatwoot-gate")["automountS
 OUT=$(render "${SSO[@]}" --set agentBot.enabled=true --set agent.url=http://agent.acme.svc:8080/ --set secrets.type=externalSecret --set secrets.externalSecret.storeName=vault)
 check "bot secrets from a store" 'obj("ExternalSecret", "chatwoot-agent-bot")["spec"]["data"][0]["remoteRef"]["key"] == "chatwoot-agent-bot-token" and not obj("Deployment", "chatwoot-gate").get("spec", {}).get("template", {}).get("spec", {}).get("volumes", [{}])[0].get("projected")'
 # --- bridge in another release (Chatwoot side) and the standalone bridge
+# --- AI drafts: private notes through the bridge here, client secret for the agent
+OUT=$(render "${DRAFT[@]}")
+check "draft bridge env" 'env("chatwoot-agent-bridge", "agent-bot")["DRAFT_INBOXES"] == "Support" and env("chatwoot-agent-bridge", "agent-bot")["DRAFT_TOKEN_FILE"] == "/etc/chatwoot-draft/draft-token" and "BOT_TOKEN_FILE" not in env("chatwoot-agent-bridge", "agent-bot")'
+check "draft client secret" 'env("chatwoot-agent-bridge", "agent-bot")["A2A_AUTH"] == "clientSecret" and env("chatwoot-agent-bridge", "agent-bot")["A2A_CLIENT_SECRET_FILE"] == "/var/run/secrets/agent/client-secret" and secret("chatwoot-agent-client", "agent-client-secret") == "s" and not any(v.get("projected") for v in pod("chatwoot-agent-bridge")["volumes"])'
+check "draft secrets" 'len(secret("chatwoot-draft", "draft-token")) == 48 and len(secret("chatwoot-draft", "draft-webhook-secret")) == 48'
+check "draft job" 'env("chatwoot-prepare-1", "prepare")["CHATWOOT_DRAFT_WEBHOOK_URL"] == "http://chatwoot-agent-bridge:8080/draft" and env("chatwoot-prepare-1", "prepare")["CHATWOOT_DRAFT_EMAIL"] == "ai-draft@chatwoot.invalid"'
+check "draft network" 'obj("NetworkPolicy", "chatwoot-agent-bridge") and "chatwoot-agent-bridge" in refs(obj("NetworkPolicy", "chatwoot-web"))'
+OUT=$(render "${DRAFT[@]}" --set secrets.type=externalSecret --set secrets.externalSecret.storeName=vault)
+check "draft external secrets" '{"chatwoot-draft", "chatwoot-agent-client"} <= {e["metadata"]["name"] for e in objs("ExternalSecret")}'
+
 REMOTE=(--set agentBridge.remoteUrl=https://bridge.example.org --set agentBot.enabled=true --set copilotPanel.enabled=true)
 OUT=$(render "${SSO[@]}" "${REMOTE[@]}")
 check "remote: no bridge here" 'not obj("Deployment", "chatwoot-agent-bridge") and not obj("ServiceAccount", "chatwoot-agent-bridge") and obj("Secret", "chatwoot-agent-bot")'

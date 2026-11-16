@@ -13,6 +13,9 @@
 # - with CHATWOOT_ODOO_BRIDGE_TOKEN: keeps the Odoo bridge's agent with that access token,
 #   the API inboxes named in CHATWOOT_ODOO_INBOXES with their webhooks to the bridge, signed
 #   with CHATWOOT_ODOO_INBOX_SECRET, and the conversation attributes odoo_ref and odoo_url
+# - with CHATWOOT_DRAFT_TOKEN: keeps the author of AI drafts (an agent with that access
+#   token, member of the inboxes in CHATWOOT_DRAFT_INBOXES) and the account webhook of new
+#   messages to the bridge, signed with CHATWOOT_DRAFT_WEBHOOK_SECRET
 # - with CHATWOOT_AGENT_PANEL_PATH: keeps the Dashboard App of the agent panel at that path
 #   of FRONTEND_URL
 # It prints no credential.
@@ -140,6 +143,46 @@ else
     definition.attribute_display_type = type
     definition.save! if definition.changed?
   end
+end
+
+draft_token = ENV.fetch('CHATWOOT_DRAFT_TOKEN', '')
+if draft_token.empty?
+  puts 'no draft token: AI drafts not set up'
+else
+  secret = ENV.fetch('CHATWOOT_DRAFT_WEBHOOK_SECRET')
+  abort 'draft token or webhook secret shorter than 32 characters' if draft_token.length < 32 || secret.length < 32
+  # the drafts' author; under .invalid no login at the OIDC provider can match it
+  user = User.find_or_initialize_by(email: ENV.fetch('CHATWOOT_DRAFT_EMAIL'))
+  user.name = ENV.fetch('CHATWOOT_DRAFT_NAME')
+  if user.new_record?
+    user.password = "#{SecureRandom.base64(48)}-Aa1"
+    user.confirmed_at = Time.current
+  end
+  user.save! if user.changed?
+  AccountUser.find_or_create_by!(account: account, user: user) { |member| member.role = :agent }
+  access = user.access_token || user.create_access_token
+  access.reload
+  access.update!(token: draft_token) unless ActiveSupport::SecurityUtils.secure_compare(access.token.to_s, draft_token)
+  # an agent reads and writes the conversations of its inboxes only
+  wanted = ENV.fetch('CHATWOOT_DRAFT_INBOXES').split(',').map(&:strip).reject(&:empty?)
+  account.inboxes.order(:id).each do |inbox|
+    if wanted.include?('*') || wanted.include?(inbox.name)
+      InboxMember.find_or_create_by!(inbox: inbox, user: user)
+    else
+      InboxMember.where(inbox: inbox, user: user).destroy_all
+    end
+  end
+  missing = wanted - ['*'] - account.inboxes.pluck(:name)
+  puts "AI drafts: no inbox named #{missing.join(', ')}" if missing.any?
+  # the account webhook of new messages, signed with the draft secret
+  url = ENV.fetch('CHATWOOT_DRAFT_WEBHOOK_URL')
+  hook = Webhook.find_or_initialize_by(account_id: account.id, url: url)
+  hook.name = 'AI drafts (set by the chart)'
+  hook.webhook_type = :account_type
+  hook.subscriptions = ['message_created']
+  hook.secret = secret unless hook.persisted? && ActiveSupport::SecurityUtils.secure_compare(hook.secret.to_s, secret)
+  hook.save! if hook.changed?
+  puts "AI drafts: user #{user.id}, webhook #{hook.id}, inboxes #{wanted.join(', ')}"
 end
 
 panel_path = ENV.fetch('CHATWOOT_AGENT_PANEL_PATH', '')
