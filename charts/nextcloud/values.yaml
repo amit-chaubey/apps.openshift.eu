@@ -26,7 +26,7 @@ settings:
   maintenanceWindowStart: 1
   # country code for phone numbers without one, such as NL; empty: not set
   defaultPhoneRegion: ""
-  # once per version: app updates, missing database indices and expensive repair steps
+  # missing database indices at every start; app updates and expensive repair once per version
   repairOnUpgrade: true
   # seconds the setup script may take; the steps left over wait for a restart
   setupTimeout: 300
@@ -402,7 +402,7 @@ mailu:
     front:
       # a chart upgrade reloads mail-prefix.conf; equals the chart version (templates/validate.yaml)
       podAnnotations:
-        chart-version: 0.19.1
+        chart-version: 0.19.2
       extraVolumes:
       - name: dovecot-override
         configMap:
@@ -606,7 +606,7 @@ nextcloud:
   # a chart upgrade restarts Nextcloud so its start-up setup runs again; equals the chart
   # version (templates/validate.yaml refuses a render where it does not)
   podAnnotations:
-    chart-version: 0.19.1
+    chart-version: 0.19.2
   nextcloud:
     host: nextcloud.example.org
     existingSecret:

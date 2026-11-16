@@ -70,9 +70,12 @@ data:
       # a major upgrade disables store apps without a compatible release; the app
       # steps below enable them again once updated
       run 300 "app updates" php occ app:update --all
-      run 120 "missing indices" php occ db:add-missing-indices
-      run 120 "missing columns" php occ db:add-missing-columns
-      run 120 "missing primary keys" php occ db:add-missing-primary-keys
+    fi
+    # an app update adds optional indices without a new Nextcloud version: every start
+    run 120 "missing indices" php occ db:add-missing-indices
+    run 120 "missing columns" php occ db:add-missing-columns
+    run 120 "missing primary keys" php occ db:add-missing-primary-keys
+    if [ -n "$v" ] && [ ! -e "data/.chart-repair-$v" ]; then
       run 600 "expensive repair" php occ maintenance:repair --include-expensive && touch "data/.chart-repair-$v"
     fi
     {{- end }}
