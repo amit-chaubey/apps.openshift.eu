@@ -1,0 +1,37 @@
+{{- $name := include "goose.name" . }}
+{{- $ns := include "goose.namespace" . }}
+{{- range $r := list (dict "on" .Values.terminal.enabled "name" $name "host" .Values.route.host "service" (printf "%s-ui" $name) "port" "http") (dict "on" .Values.desktop.enabled "name" (printf "%s-desktop" $name) "host" .Values.desktop.host "service" (printf "%s-desktop" $name) "port" "acp") }}
+{{- if $r.on }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $r.name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "goose.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: route
+    {{- with $.Values.route.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    haproxy.router.openshift.io/timeout: {{ $.Values.route.timeout }}
+    {{- if and $r.host $.Values.route.annotations }}
+    {{- toYaml $.Values.route.annotations | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with $r.host }}
+  host: {{ . }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ $r.service }}
+    weight: 100
+  port:
+    targetPort: {{ $r.port }}
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+{{- end }}
+{{- end }}

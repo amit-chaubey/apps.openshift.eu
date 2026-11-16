@@ -1,0 +1,325 @@
+{{- $name := include "goose.name" . -}}
+{{- $ns := include "goose.namespace" . -}}
+{{- $audience := include "goose.audience" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "goose.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+  annotations:
+    app.openshift.io/custom-icon: {{ .Chart.Icon }}
+spec:
+  # one goose home per volume: the old pod stops before the new one starts
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "goose.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "goose.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/scripts: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ $name }}
+      # goose ignores SIGTERM; the kubelet kills it after this
+      terminationGracePeriodSeconds: 15
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.terminal.enabled }}
+      initContainers:
+      # ttyd as a static binary, refused unless its checksum matches
+      - name: ttyd
+        image: {{ include "goose.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - sh
+        - -ec
+        - |
+          curl -fsSL --retry 3 -o /opt/tools/ttyd "$TTYD_URL"
+          echo "$TTYD_SHA256  /opt/tools/ttyd" | sha256sum -c -
+          chmod 0555 /opt/tools/ttyd
+        env:
+        - name: TTYD_URL
+          value: {{ .Values.terminal.ttyd.url | quote }}
+        - name: TTYD_SHA256
+          value: {{ .Values.terminal.ttyd.sha256 | quote }}
+        volumeMounts:
+        - name: tools
+          mountPath: /opt/tools
+        resources:
+          {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "goose.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
+      containers:
+      # ACP over HTTP and WebSocket: goose Desktop through its Route, the A2A bridge on loopback
+      - name: goose
+        image: {{ include "goose.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+        - serve
+        - --host
+        - {{ ternary "0.0.0.0" "127.0.0.1" .Values.desktop.enabled }}
+        - --port
+        - "3284"
+        env:
+        {{- include "goose.env" . | nindent 8 }}
+        {{- if .Values.desktop.enabled }}
+        ports:
+        - name: acp
+          containerPort: 3284
+          protocol: TCP
+        {{- end }}
+        # /status needs no key; exec, because without desktop goose listens on loopback only
+        startupProbe:
+          exec:
+            command:
+            - curl
+            - -sf
+            - -o
+            - /dev/null
+            - http://127.0.0.1:3284/status
+          periodSeconds: 3
+          failureThreshold: 60
+        livenessProbe:
+          exec:
+            command:
+            - curl
+            - -sf
+            - -o
+            - /dev/null
+            - http://127.0.0.1:3284/status
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 5
+        volumeMounts:
+        - name: data
+          mountPath: /home/goose
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          {{- include "goose.containerSecurityContext" . | nindent 10 }}
+      {{- if .Values.terminal.enabled }}
+      # A terminal per browser tab, on loopback: the login proxy is the only way in
+      - name: terminal
+        image: {{ include "goose.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - /opt/tools/ttyd
+        - --interface
+        - lo
+        - --port
+        - {{ .Values.terminal.ttyd.port | quote }}
+        - --writable
+        - --cwd
+        - /home/goose
+        - --client-option
+        - titleFixed=goose
+        {{- range .Values.terminal.command }}
+        - {{ . | quote }}
+        {{- end }}
+        env:
+        {{- include "goose.env" . | nindent 8 }}
+        - name: TERM
+          value: xterm-256color
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - -sf
+            - -o
+            - /dev/null
+            - http://127.0.0.1:{{ .Values.terminal.ttyd.port }}/
+          periodSeconds: 10
+        volumeMounts:
+        - name: data
+          mountPath: /home/goose
+        - name: tools
+          mountPath: /opt/tools
+          readOnly: true
+        resources:
+          {{- toYaml .Values.terminal.resources | nindent 10 }}
+        securityContext:
+          {{- include "goose.containerSecurityContext" . | nindent 10 }}
+      # Login through the cluster OAuth server with the ServiceAccount as client
+      - name: oauth-proxy
+        image: {{ .Values.oauthProxy.image }}
+        imagePullPolicy: IfNotPresent
+        args:
+        - --provider=openshift
+        - --openshift-service-account={{ $name }}
+        - --http-address=0.0.0.0:{{ .Values.oauthProxy.port }}
+        - --https-address=
+        - --upstream=http://127.0.0.1:{{ .Values.terminal.ttyd.port }}
+        - --upstream-timeout={{ .Values.route.timeout }}
+        {{- if .Values.oauth.ownerEmail }}
+        - --authenticated-emails-file=/etc/goose/emails.txt
+        # without an email domain only the emails file admits
+        - --email-domain=
+        {{- else }}
+        - --email-domain=*
+        {{- end }}
+        {{- if or .Values.oauth.allowedGroups (not .Values.oauth.ownerEmail) }}
+        # groups: verb login, granted by the login Role only; neither: get, project editors
+        - --openshift-sar={{ list (dict "namespace" $ns "resource" "services/proxy" "resourceName" $name "verb" (include "goose.loginVerb" .)) | toJson }}
+        {{- end }}
+        - --pass-basic-auth=false
+        - --cookie-name=_{{ $name | replace "-" "_" }}
+        - --cookie-secure=true
+        - --cookie-samesite=lax
+        - --skip-provider-button=true
+        env:
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-cookie-secret
+              key: cookie-secret
+        ports:
+        - name: ui
+          containerPort: {{ .Values.oauthProxy.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: ui
+          initialDelaySeconds: 2
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /oauth/healthz
+            port: ui
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: scripts
+          mountPath: /etc/goose
+          readOnly: true
+        resources:
+          {{- toYaml .Values.oauthProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "goose.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
+      {{- if .Values.gateway.upstream }}
+      # Adds the agent's ServiceAccount token to every model call
+      - name: token-proxy
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /etc/goose/token-proxy.py
+        env:
+        - name: TOKEN_FILE
+          value: /var/run/secrets/api-token/token
+        - name: UPSTREAM
+          value: {{ .Values.gateway.upstream | quote }}
+        - name: PORT
+          value: {{ .Values.tokenProxy.port | quote }}
+        readinessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - import urllib.request; urllib.request.urlopen("http://127.0.0.1:{{ .Values.tokenProxy.port }}/healthz", timeout=2)
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        volumeMounts:
+        - name: scripts
+          mountPath: /etc/goose
+          readOnly: true
+        - name: api-token
+          mountPath: /var/run/secrets/api-token
+          readOnly: true
+        resources:
+          {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "goose.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
+      {{- if .Values.a2a.enabled }}
+      # A2A for agents of the tenant: checks the caller's JWT, runs the message as a goose turn
+      - name: a2a-bridge
+        image: {{ .Values.a2a.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /etc/goose/a2a-bridge.py
+        env:
+        - name: PORT
+          value: {{ .Values.a2a.port | quote }}
+        - name: GOOSE_URL
+          value: http://127.0.0.1:3284
+        - name: GOOSE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ $name }}-secret-key
+              key: secret-key
+        - name: TENANT
+          value: {{ include "goose.a2aTenant" . | quote }}
+        - name: JWT_ISSUERS
+          value: {{ include "goose.a2aJwtIssuers" . | quote }}
+        - name: A2A_NAME
+          value: {{ default (printf "%s.%s" $name $ns) .Values.a2a.agentName | quote }}
+        - name: A2A_DESCRIPTION
+          value: {{ include "goose.a2aDescription" . | quote }}
+        - name: A2A_PUBLIC_URL
+          value: http://{{ $name }}-a2a.{{ $ns }}.svc:{{ .Values.a2a.port }}/
+        - name: A2A_WORKDIR
+          value: /home/goose
+        - name: STATE_FILE
+          value: /home/goose/.local/share/goose/a2a-contexts.json
+        - name: TURN_TIMEOUT
+          value: {{ .Values.a2a.turnTimeout | quote }}
+        - name: GOOSE_VERSION
+          value: {{ .Chart.AppVersion | quote }}
+        ports:
+        - name: a2a
+          containerPort: {{ .Values.a2a.port }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: a2a
+          periodSeconds: 10
+        volumeMounts:
+        - name: scripts
+          mountPath: /etc/goose
+          readOnly: true
+        - name: data
+          mountPath: /home/goose
+        resources:
+          {{- toYaml .Values.a2a.resources | nindent 10 }}
+        securityContext:
+          {{- include "goose.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ $name }}-data
+      - name: scripts
+        configMap:
+          name: {{ $name }}
+      - name: tools
+        emptyDir: {}
+      {{- if .Values.gateway.upstream }}
+      # The agent's credential for the gateway, renewed by the kubelet
+      - name: api-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              {{- with $audience }}
+              audience: {{ . }}
+              {{- end }}
+              expirationSeconds: 3600
+              path: token
+      {{- end }}

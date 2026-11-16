@@ -1,0 +1,61 @@
+{{- $name := include "goose.name" . }}
+{{- $ns := include "goose.namespace" . }}
+{{- if .Values.terminal.enabled }}
+# the login proxy of the terminal; ttyd listens on loopback
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-ui
+  namespace: {{ $ns }}
+  labels:
+    {{- include "goose.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "goose.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: http
+    port: {{ .Values.oauthProxy.port }}
+    targetPort: ui
+---
+{{- end }}
+{{- if .Values.desktop.enabled }}
+# goose serve for goose Desktop; every ACP call needs the secret key
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-desktop
+  namespace: {{ $ns }}
+  labels:
+    {{- include "goose.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "goose.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: acp
+    port: 3284
+    targetPort: acp
+---
+{{- end }}
+{{- if .Values.a2a.enabled }}
+# A2A through the a2a-bridge sidecar; reached by agents of the tenant and the kagent relay
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-a2a
+  namespace: {{ $ns }}
+  labels:
+    {{- include "goose.labels" . | nindent 4 }}
+    app.kubernetes.io/component: a2a
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "goose.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: a2a
+    port: {{ .Values.a2a.port }}
+    targetPort: a2a
+{{- end }}

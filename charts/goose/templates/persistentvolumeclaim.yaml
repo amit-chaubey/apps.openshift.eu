@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "goose.name" . }}-data
+  namespace: {{ include "goose.namespace" . }}
+  labels:
+    {{- include "goose.labels" . | nindent 4 }}
+    app.kubernetes.io/component: storage
+  annotations:
+    # the goose home survives a prune or an Application delete
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+  - {{ .Values.storage.accessMode }}
+  {{- with .Values.storage.className }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size }}

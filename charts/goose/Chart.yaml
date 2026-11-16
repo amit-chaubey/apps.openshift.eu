@@ -1,0 +1,25 @@
+apiVersion: v2
+name: goose
+description: Personal goose agent with a browser terminal behind a login, a goose Desktop endpoint and A2A for other agents, with models from an OpenAI-compatible gateway
+type: application
+version: 0.1.0
+appVersion: 1.59.2
+home: https://apps.openshift.eu
+icon: https://raw.githubusercontent.com/aaif-goose/goose/v1.59.2/documentation/static/img/logo_dark.png
+keywords:
+- ai
+- agent
+- goose
+- acp
+- a2a
+sources:
+- https://github.com/aaif-goose/goose
+- https://github.com/hoolia/apps.openshift.eu
+maintainers:
+- name: GRN.CLOUD B.V.
+  url: https://apps.openshift.eu
+annotations:
+  charts.openshift.io/name: goose
+  charts.openshift.io/provider: GRN.CLOUD B.V.
+  apps.openshift.eu/category: ai-agent
+  apps.openshift.eu/vendor: AAIF

@@ -1,0 +1,43 @@
+{{- if .Values.networkPolicy.enabled }}
+# The terminal's login proxy and goose serve from the router; A2A from anywhere, the
+# bridge checks every caller's JWT
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "goose.name" . }}
+  namespace: {{ include "goose.namespace" . }}
+  labels:
+    {{- include "goose.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "goose.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  ingress:
+  {{- if or .Values.terminal.enabled .Values.desktop.enabled }}
+  - ports:
+    {{- if .Values.terminal.enabled }}
+    - protocol: TCP
+      port: {{ .Values.oauthProxy.port }}
+    {{- end }}
+    {{- if .Values.desktop.enabled }}
+    - protocol: TCP
+      port: 3284
+    {{- end }}
+    from:
+    - namespaceSelector:
+        matchLabels:
+          policy-group.network.openshift.io/ingress: ""
+    # a HostNetwork router sends from the node network
+    - namespaceSelector:
+        matchLabels:
+          policy-group.network.openshift.io/host-network: ""
+  {{- end }}
+  {{- if .Values.a2a.enabled }}
+  - ports:
+    - protocol: TCP
+      port: {{ .Values.a2a.port }}
+  {{- end }}
+{{- end }}

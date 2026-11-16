@@ -1,0 +1,194 @@
+# Team of the tenant the app serves: every object goes into <tenant>-<team>.
+# Empty: the release namespace
+team: ""
+# tenant the app belongs to; required with team
+tenant: ""
+
+image:
+  repository: ghcr.io/aaif-goose/goose
+  tag: 1.59.2
+  # the digest of that tag (linux/amd64 and arm64 index); empty: by tag
+  digest: ""
+  pullPolicy: IfNotPresent
+
+gateway:
+  # OpenAI-compatible model gateway the token proxy forwards to, for example
+  # https://api.example.com (goose calls <upstream>/v1/chat/completions)
+  upstream: ""
+  # audience of the agent's ServiceAccount token. Empty: the host of upstream
+  audience: ""
+
+llm:
+  # model name on the gateway (GOOSE_MODEL)
+  model: ""
+  # context window of that model in tokens (GOOSE_CONTEXT_LIMIT); 0: goose's own guess
+  contextLimit: 0
+  # mode of every session: auto (run tools without asking), approve, smart_approve or chat.
+  # A2A callers cannot answer a question, so they need auto
+  mode: auto
+  # extra environment of goose (name: value), see the goose environment reference
+  env: {}
+
+route:
+  # host of the terminal; empty: OpenShift assigns one under the default application domain
+  host: ""
+  # extra labels on the Routes only, for example to pick a router shard
+  labels: {}
+  # a terminal or a desktop connection stays open for long
+  timeout: 3600s
+  # used when a host is set; certificate issued by cert-manager
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt
+
+# Browser terminal running `goose session`, behind the OpenShift login
+terminal:
+  enabled: true
+  # command in the terminal; each browser tab starts its own
+  command:
+  - goose
+  - session
+  # ttyd, a static binary checked against its sha256 and kept on an emptyDir
+  ttyd:
+    url: https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
+    sha256: 8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
+    # loopback port; only the login proxy reaches it
+    port: 7681
+  resources:
+    requests:
+      cpu: 20m
+      memory: 128Mi
+    limits:
+      memory: 2Gi
+
+# goose serve (ACP over HTTPS and WebSocket) on its own Route, for goose Desktop:
+# Settings > goose Server > Use external server, URL https://<desktop host>, Secret Key from
+# Secret <release>-secret-key, key secret-key
+desktop:
+  enabled: true
+  # empty: OpenShift assigns one under the default application domain
+  host: ""
+
+oauth:
+  # OpenShift user name (an email) of the only person admitted to the terminal.
+  # Empty: allowedGroups
+  ownerEmail: ""
+  # OpenShift groups admitted (with ownerEmail: the owner must be in one).
+  # Both empty: everyone who may edit the project
+  allowedGroups: []
+  # ClusterRole holding the verb login on services/proxy that allowedGroups are bound
+  # to. Empty: the chart's own Role, which only an installer holding that verb can create
+  loginClusterRole: ""
+
+secrets:
+  # kubernetes: Secrets from the values below. externalSecret: from a secret store
+  type: kubernetes
+  # key of goose serve (GOOSE_SERVER__SECRET_KEY) that goose Desktop and the A2A bridge
+  # send. Empty: generated once and kept on upgrade
+  secretKey: ""
+  # login cookie key. Empty: generated once. A value that is not 16, 24 or 32 characters
+  # long is hashed to 32
+  cookieSecret: ""
+  externalSecret:
+    storeKind: ClusterSecretStore
+    storeName: ""
+    refreshInterval: 1h
+    # one vault item per secret; the value is read from the item's password.
+    # Empty name: <release>-<secret>
+    items:
+      secretKey: ""
+      cookieSecret: ""
+
+# Agent-to-Agent (A2A v0.3) on Service <release>-a2a, for agents of the tenant. Every A2A
+# contextId is its own goose session. Callers send their own bearer JWT; no credential is
+# stored
+a2a:
+  enabled: true
+  # port of the a2a-bridge sidecar and the Service
+  port: 8090
+  # name on the agent card; empty: <release>.<namespace>
+  agentName: ""
+  # description on the agent card and in kagent; empty: "goose agent"
+  description: ""
+  # namespace of the gateway's HTTPRoutes that may publish this agent (ReferenceGrant
+  # <release>-a2a to the kagent Service <release>). Empty: none
+  gatewayNamespace: ""
+  # seconds one A2A turn may run
+  turnTimeout: 3600
+  # admit bearer JWTs of the tenant: ServiceAccount tokens from a namespace <tenant> or
+  # <tenant>-*, OIDC tokens whose groups claim holds <tenant> or <tenant>-*
+  tenantAuth:
+    # empty: the release namespace up to its first "-"
+    tenant: ""
+    # the cluster's ServiceAccount token issuer; empty: none
+    kubernetesIssuer: https://kubernetes.default.svc
+    # OIDC issuers, for example https://login.example/realms/<realm>
+    oidcIssuers: []
+  # image that runs the bridge script
+  image: registry.access.redhat.com/ubi9/python-312-minimal
+  resources:
+    requests:
+      cpu: 5m
+      memory: 48Mi
+    limits:
+      memory: 256Mi
+  # register the agent in kagent (BYO Agent named like the release) when kagent is installed
+  kagent:
+    enabled: true
+    # the relay pod kagent runs in front of the A2A Service
+    resources:
+      requests:
+        cpu: 5m
+        memory: 32Mi
+      limits:
+        memory: 96Mi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+
+oauthProxy:
+  # OpenShift oauth-proxy in front of the terminal; the cluster keeps this tag current
+  image: image-registry.openshift-image-registry.svc:5000/openshift/oauth-proxy:v4.4
+  port: 4180
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 256Mi
+
+tokenProxy:
+  # image that runs the token proxy script
+  image: registry.access.redhat.com/ubi9/python-312-minimal
+  # loopback port goose sends model calls to
+  port: 8099
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 256Mi
+
+serviceAccount:
+  # labels on the agent's ServiceAccount
+  labels: {}
+
+storage:
+  # the goose home: config, sessions, memory, extensions
+  size: 10Gi
+  accessMode: ReadWriteOnce
+  # empty: the default storage class
+  className: ""
+
+networkPolicy:
+  # admit the terminal and goose Desktop from the router only, A2A from anywhere (callers
+  # prove themselves with a JWT)
+  enabled: true
+
+nodeSelector: {}
+affinity: {}
