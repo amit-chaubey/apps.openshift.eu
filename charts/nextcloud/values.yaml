@@ -43,6 +43,9 @@ mail:
   # domains hosted on the mail server; only users with an address in one get a mailbox.
   # Empty: mailu.upstream.domain. Never a public provider such as gmail.com
   domains: []
+  # regular expression (RE2, case-insensitive) of mail domains this installation refuses:
+  # the render stops when mailu.upstream.domain matches. Empty: every domain is accepted
+  refusedDomainPattern: ""
 
 # Strict-Transport-Security header of Nextcloud and of every Route
 hsts:
@@ -399,7 +402,7 @@ mailu:
     front:
       # a chart upgrade reloads mail-prefix.conf; equals the chart version (templates/validate.yaml)
       podAnnotations:
-        chart-version: 0.19.0
+        chart-version: 0.19.1
       extraVolumes:
       - name: dovecot-override
         configMap:
@@ -603,7 +606,7 @@ nextcloud:
   # a chart upgrade restarts Nextcloud so its start-up setup runs again; equals the chart
   # version (templates/validate.yaml refuses a render where it does not)
   podAnnotations:
-    chart-version: 0.19.0
+    chart-version: 0.19.1
   nextcloud:
     host: nextcloud.example.org
     existingSecret:

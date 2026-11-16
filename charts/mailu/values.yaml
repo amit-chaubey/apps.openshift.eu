@@ -1,3 +1,7 @@
+# regular expression (RE2, case-insensitive) of mail domains this installation refuses:
+# the render stops when upstream.domain matches. Empty: every domain is accepted
+refusedDomainPattern: ""
+
 secrets:
   # kubernetes: Secret from the values below. externalSecret: from a secret store
   type: kubernetes

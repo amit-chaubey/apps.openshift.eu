@@ -4,7 +4,7 @@ dependencies:
   version: 9.1.4
 - name: mailu
   repository: file://../mailu
-  version: 0.2.5
+  version: 0.2.6
 - name: mcp-nextcloud
   repository: file://../mcp-nextcloud
   version: 0.1.0
@@ -14,5 +14,5 @@ dependencies:
 - name: mcp-onlyoffice-live
   repository: file://../mcp-onlyoffice-live
   version: 0.2.0
-digest: sha256:c8d9f6a3028ef2cb7b234771ec8e96bf5a0e3f166de57bfc188f4260550d2b9e
-generated: "2026-11-13T13:15:46.520937871Z"
+digest: sha256:1eb75366455246f823a60e84089f7454b95e836b7c4452e77b810f707a208383
+generated: "2026-11-15T21:09:21.179914573Z"

@@ -5,20 +5,44 @@
     "upstream": {
       "type": "object",
       "properties": {
-        "domain": {"type": "string", "title": "Mail domain", "description": "The part after the @ of the mail addresses"},
-        "hostnames": {"type": "array", "items": {"type": "string"}, "title": "Hostnames of the mail server", "description": "The first one is the name in the MX record"},
+        "domain": {
+          "type": "string",
+          "title": "Mail domain",
+          "description": "The part after the @ of the mail addresses"
+        },
+        "hostnames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "Hostnames of the mail server",
+          "description": "The first one is the name in the MX record"
+        },
         "initialAccount": {
           "type": "object",
           "properties": {
-            "username": {"type": "string", "title": "Name of the first admin account"},
-            "domain": {"type": "string", "title": "Mail domain of the first admin account", "description": "Same value as the mail domain"}
+            "username": {
+              "type": "string",
+              "title": "Name of the first admin account"
+            },
+            "domain": {
+              "type": "string",
+              "title": "Mail domain of the first admin account",
+              "description": "Same value as the mail domain"
+            }
           }
         },
         "persistence": {
           "type": "object",
           "properties": {
-            "size": {"type": "string", "title": "Mail volume size"},
-            "storageClass": {"type": "string", "title": "Storage class"}
+            "size": {
+              "type": "string",
+              "title": "Mail volume size"
+            },
+            "storageClass": {
+              "type": "string",
+              "title": "Storage class"
+            }
           }
         }
       }
@@ -26,15 +50,35 @@
     "route": {
       "type": "object",
       "properties": {
-        "hostname": {"type": "string", "title": "Webmail hostname", "description": "Leave empty for a generated hostname"}
+        "hostname": {
+          "type": "string",
+          "title": "Webmail hostname",
+          "description": "Leave empty for a generated hostname"
+        }
       }
     },
     "secrets": {
       "type": "object",
       "properties": {
-        "type": {"type": "string", "enum": ["kubernetes", "externalSecret"], "title": "Secret source"},
-        "initialAdminPassword": {"type": "string", "title": "Password of the first admin account", "description": "Leave empty to generate one"}
+        "type": {
+          "type": "string",
+          "enum": [
+            "kubernetes",
+            "externalSecret"
+          ],
+          "title": "Secret source"
+        },
+        "initialAdminPassword": {
+          "type": "string",
+          "title": "Password of the first admin account",
+          "description": "Leave empty to generate one"
+        }
       }
+    },
+    "refusedDomainPattern": {
+      "type": "string",
+      "title": "Refused mail domains",
+      "description": "Regular expression (RE2, case-insensitive) of mail domains the render refuses; empty accepts every domain"
     }
   }
 }

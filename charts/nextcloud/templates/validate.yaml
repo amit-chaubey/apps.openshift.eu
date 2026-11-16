@@ -6,6 +6,13 @@
 {{- if and .Values.mailu.enabled (not (include "wrapper.mailuActive" .)) -}}
 {{- fail "mailu.enabled is true but mailu.upstream.domain is empty: give a mail domain, or set mailu.enabled false to run without mail" -}}
 {{- end -}}
+{{- $refused := trim (toString (.Values.mail.refusedDomainPattern | default "")) -}}
+{{- if and $refused (include "wrapper.mailuActive" .) -}}
+{{- $domain := trim (toString .Values.mailu.upstream.domain) -}}
+{{- if regexMatch (printf "(?i)%s" $refused) $domain -}}
+{{- fail (printf "mail domain %q is not allowed here: give a domain you own, or set mailu.enabled false to run without mail" $domain) -}}
+{{- end -}}
+{{- end -}}
 {{- if and (include "wrapper.mailuActive" .) .Values.mailRoute.enabled -}}
 {{- $f := index (.Values.mailu.upstream.front.podAnnotations | default dict) "chart-version" | toString -}}
 {{- if ne $f .Chart.Version -}}

@@ -60,7 +60,17 @@
         },
         "editFormats": {
           "type": "array",
-          "items": {"type": "string", "enum": ["odt", "ods", "odp", "rtf", "txt", "csv"]},
+          "items": {
+            "type": "string",
+            "enum": [
+              "odt",
+              "ods",
+              "odp",
+              "rtf",
+              "txt",
+              "csv"
+            ]
+          },
           "title": "Editable formats",
           "description": "Formats OnlyOffice opens for editing besides docx, xlsx and pptx; saving them may lose formatting"
         }
@@ -297,6 +307,11 @@
           },
           "title": "Mail domains",
           "description": "Domains hosted on the mail server; empty: the Mailu domain"
+        },
+        "refusedDomainPattern": {
+          "type": "string",
+          "title": "Refused mail domains",
+          "description": "Regular expression (RE2, case-insensitive) of mail domains the render refuses; empty accepts every domain"
         }
       }
     },

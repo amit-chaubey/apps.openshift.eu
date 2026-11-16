@@ -1,0 +1,6 @@
+{{- /* a mail domain this installation refuses stops the render (refusedDomainPattern) */ -}}
+{{- $refused := trim (toString (.Values.refusedDomainPattern | default "")) -}}
+{{- $domain := trim (toString (.Values.upstream.domain | default "")) -}}
+{{- if and $refused $domain (regexMatch (printf "(?i)%s" $refused) $domain) -}}
+{{- fail (printf "mail domain %q is not allowed here: give a domain you own" $domain) -}}
+{{- end -}}
