@@ -84,6 +84,60 @@ class ProfileDefaults(unittest.TestCase):
         self.assertFalse(self.api.profiles["glm-5.3-flash"]["stream"])
 
 
+LISTING = [
+    {"id": "claude/claude-opus-5-5", "context_length": 1000000, "max_input_tokens": 1000000},
+    {"id": "claude/claude-haiku-4-5", "context_length": 200000, "max_input_tokens": 200000},
+    {"id": "z-ai/glm-5.3-flash", "context_length": 262144, "max_input_tokens": None},
+    {"id": "qwen/qwen3-4b", "context_length": 16384},
+    {"id": "other/claude-opus-5-5", "context_length": 200000},
+    {"id": "no-window"},
+]
+
+
+class ContextLimits(unittest.TestCase):
+    def setUp(self):
+        ss.STATE = tempfile.mkdtemp(prefix="state-")
+        ss.DEFAULTS.clear()
+        ss.MODEL_DEFAULTS.clear()
+        ss.CONTEXT.clear()
+        self.api = FakeApi({
+            "glm-5.3-flash": {"model": "openai/vllm/glm-5.3-flash"},
+            "claude-opus-5-5": {"model": "openai/claude-proxy/claude-opus-5-5"},
+            "claude-haiku-4-5": {"model": "openai/claude-proxy/claude-haiku-4-5"},
+        })
+        ss.request = self.api.request
+        ss.call = lambda method, path, body=None: self.api.request(method, path, body)[0]
+
+    def test_share_of_window_above_minimum(self):
+        # haiku (120k) and qwen3-4b (9k) stay below the minimum; the first entry of a
+        # name wins; context_length stands in for a missing max_input_tokens
+        self.assertEqual(ss.gateway_context(LISTING, 0.6, 150000),
+                         {"claude-opus-5-5": 600000, "glm-5.3-flash": 157000})
+
+    def test_limits_reach_profiles_once(self):
+        ss.CONTEXT.update(ss.gateway_context(LISTING, 0.6, 150000))
+        ss.seed_profile_defaults(CONN)
+        self.assertEqual(self.api.profiles["claude-opus-5-5"]["max_input_tokens"], 600000)
+        self.assertEqual(self.api.profiles["glm-5.3-flash"]["max_input_tokens"], 157000)
+        self.assertNotIn("max_input_tokens", self.api.profiles["claude-haiku-4-5"])
+        # a UI edit stays until a limit changes
+        self.api.profiles["claude-opus-5-5"]["max_input_tokens"] = 800000
+        ss.seed_profile_defaults(CONN)
+        self.assertEqual(self.api.profiles["claude-opus-5-5"]["max_input_tokens"], 800000)
+
+    def test_explicit_values_win(self):
+        ss.CONTEXT.update({"claude-opus-5-5": 600000, "glm-5.3-flash": 157000})
+        ss.DEFAULTS["max_input_tokens"] = 300000
+        ss.MODEL_DEFAULTS["glm-5.3-flash"] = {"max_input_tokens": 100000}
+        self.assertEqual(ss.defaults_for("openai/claude-proxy/claude-opus-5-5")["max_input_tokens"], 300000)
+        self.assertEqual(ss.defaults_for("openai/vllm/glm-5.3-flash")["max_input_tokens"], 100000)
+
+    def test_new_profile_gets_limit(self):
+        ss.CONTEXT.update({"claude-opus-5-5": 600000})
+        self.assertEqual(ss.defaults_for("openai/claude-proxy/claude-opus-5-5"), {"max_input_tokens": 600000})
+        self.assertEqual(ss.defaults_for("openai/claude-proxy/claude-haiku-4-5"), {})
+
+
 class FakeAgentApi:
     def __init__(self, llm_profiles, active, agents):
         self.llm_profiles, self.active, self.agents = llm_profiles, active, agents

@@ -155,6 +155,10 @@ seccompProfile:
 {{- with .Values.llm.modelProfileDefaults -}}
 {{- $_ := set $llm "modelProfileDefaults" . -}}
 {{- end -}}
+{{- if .Values.llm.contextShare -}}
+{{- $_ := set $llm "contextShare" .Values.llm.contextShare -}}
+{{- $_ := set $llm "minInputTokens" (int .Values.llm.minInputTokens) -}}
+{{- end -}}
 {{- if .Values.llm.gatewayModels -}}
 {{- $_ := set $llm "gatewayModels" true -}}
 {{- end -}}

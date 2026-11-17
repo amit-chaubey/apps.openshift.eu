@@ -29,12 +29,18 @@ STATE = os.path.join(os.environ.get("HOME", "/tmp"), ".openhands", "agent-canvas
 # llm.profileDefaults and llm.modelProfileDefaults, filled from SEED_LLM in main
 DEFAULTS: dict = {}
 MODEL_DEFAULTS: dict = {}
+# max_input_tokens per model name after the last "/", from the gateway's context windows
+# (llm.contextShare), filled in main
+CONTEXT: dict = {}
 MARKER = os.path.join(STATE, ".seeded-" + os.environ.get("SEED_HASH", "none"))
 
 
 def defaults_for(model: str | None) -> dict:
-    """profileDefaults with the modelProfileDefaults of the model laid over them."""
-    return {**DEFAULTS, **MODEL_DEFAULTS.get((model or "").rsplit("/", 1)[-1], {})}
+    """The gateway's input limit of the model, profileDefaults over it and the
+    modelProfileDefaults of the model over both."""
+    name = (model or "").rsplit("/", 1)[-1]
+    limit = {"max_input_tokens": CONTEXT[name]} if name in CONTEXT else {}
+    return {**limit, **DEFAULTS, **MODEL_DEFAULTS.get(name, {})}
 
 
 def request(method: str, path: str, body: dict | None = None) -> tuple[int, object]:
@@ -138,17 +144,37 @@ def repair_agent_llm_refs() -> None:
             print(f"seed: agent profile {agent['name']} not moved to {active}", file=sys.stderr)
 
 
-def gateway_models(llm: dict, conn: dict) -> list[str]:
-    """Every model the gateway lists, in the form of llm.model (provider prefix)."""
+def gateway_listing(llm: dict) -> list[dict]:
+    """The model entries the gateway lists at /v1/models."""
     req = urllib.request.Request(llm["base_url"].rstrip("/") + "/models",
                                  headers={"Authorization": "Bearer " + llm.get("api_key", "")})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            listing = json.loads(resp.read())
-    except (OSError, ValueError) as exc:
+            return json.loads(resp.read()).get("data", [])
+    except (OSError, ValueError, AttributeError) as exc:
         print(f"seed: gateway models not listed: {exc}", file=sys.stderr)
         return []
-    return [f"{conn['provider']}/{m['id']}" for m in listing.get("data", []) if m.get("id")]
+
+
+def gateway_models(llm: dict, conn: dict) -> list[str]:
+    """Every model the gateway lists, in the form of llm.model (provider prefix)."""
+    return [f"{conn['provider']}/{m['id']}" for m in gateway_listing(llm) if m.get("id")]
+
+
+def gateway_context(listing: list[dict], share: float, minimum: int) -> dict:
+    """max_input_tokens per model name after the last "/": share of the context window
+    the gateway lists, in thousands, left out below minimum. OpenHands counts every MCP
+    tool definition against it, so a small window would condense on every step."""
+    limits: dict = {}
+    for m in listing:
+        window = m.get("max_input_tokens") or m.get("context_length")
+        if not m.get("id") or not isinstance(window, int) or window <= 0:
+            continue
+        limit = int(window * share) // 1000 * 1000
+        if limit >= minimum:
+            # the first entry of a name wins, as in preferred_model
+            limits.setdefault(m["id"].rsplit("/", 1)[-1], limit)
+    return limits
 
 
 def preferred_model(llm: dict, conn: dict, preferred: list[str]) -> str | None:
@@ -160,9 +186,15 @@ def preferred_model(llm: dict, conn: dict, preferred: list[str]) -> str | None:
 def seed_profile_defaults(conn: dict | None) -> None:
     """llm.profileDefaults and the model's modelProfileDefaults into every profile on
     the connection, once per value."""
-    if not (DEFAULTS or MODEL_DEFAULTS) or not conn:
+    if not (DEFAULTS or MODEL_DEFAULTS or CONTEXT) or not conn:
         return
-    raw = json.dumps([DEFAULTS, MODEL_DEFAULTS], sort_keys=True) if MODEL_DEFAULTS else json.dumps(DEFAULTS, sort_keys=True)
+    # the marker forms of earlier releases stay as they were while CONTEXT is empty
+    if CONTEXT:
+        raw = json.dumps([DEFAULTS, MODEL_DEFAULTS, CONTEXT], sort_keys=True)
+    elif MODEL_DEFAULTS:
+        raw = json.dumps([DEFAULTS, MODEL_DEFAULTS], sort_keys=True)
+    else:
+        raw = json.dumps(DEFAULTS, sort_keys=True)
     marker = os.path.join(STATE, ".seeded-profile-defaults-" + hashlib.sha256(raw.encode()).hexdigest()[:8])
     if os.path.exists(marker):
         return
@@ -298,6 +330,10 @@ def main() -> None:
     preferred = llm.pop("preferredModels", [])
     DEFAULTS.update(llm.pop("profileDefaults", None) or {})
     MODEL_DEFAULTS.update(llm.pop("modelProfileDefaults", None) or {})
+    share = float(llm.pop("contextShare", 0) or 0)
+    minimum = int(llm.pop("minInputTokens", 0) or 0)
+    if share > 0 and conn and llm.get("base_url"):
+        CONTEXT.update(gateway_context(gateway_listing(llm), share, minimum))
     seed_repositories()
     seed_condenser()
     if os.path.exists(MARKER):

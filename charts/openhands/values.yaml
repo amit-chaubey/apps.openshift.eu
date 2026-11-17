@@ -198,6 +198,16 @@ llm:
   #   glm-5.3-flash:
   #     reasoning_effort: low
   modelProfileDefaults: {}
+  # max_input_tokens of each profile whose model the gateway lists with a context window
+  # (by name after the last "/"): this share of that window. The conversation panel
+  # shows the context use against it, and the condenser summarizes above it. OpenHands
+  # counts the history and every MCP tool definition, also the tools the gateway defers;
+  # the rest of the window is left for the reply. profileDefaults and
+  # modelProfileDefaults win. 0: not set
+  contextShare: 0.6
+  # a smaller share is not set: the tool definitions alone can fill it and the
+  # condenser would run on every step. Such a model condenses on condenser.maxSize only
+  minInputTokens: 150000
 
 # The editor (VS Code in the browser) with a chat extension that uses the agent's own
 # models and MCP servers. Its built-in chat needs a GitHub Copilot sign-in and stays off
@@ -246,8 +256,9 @@ vscode:
 condenser:
   # summarize old events; false keeps the whole history
   enabled: true
-  # events in the history before it is condensed to about half; at least 20
-  maxSize: 120
+  # events in the history before it is condensed to about half; at least 20. A model
+  # with a token limit (llm.contextShare) usually condenses on tokens first
+  maxSize: 240
   # first events (system prompt, first task) that are never summarized
   keepFirst: 4
 
