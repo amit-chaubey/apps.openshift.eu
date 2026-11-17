@@ -360,6 +360,16 @@ class PrivateNotes:
         return http_json(self.base_url + path, body, {"api_access_token": read_file(self.token_file)})
 
 
+def contact_line(sender):
+    """'Customer: name <email>' of the message's sender, one line, or empty."""
+    sender = sender or {}
+    name = " ".join(str(sender.get("name") or "").split())[:100]
+    email = "".join(str(sender.get("email") or "").split())[:254]
+    if not (name or email):
+        return ""
+    return "Customer: " + (f"{name} <{email}>" if name and email else name or email)
+
+
 DRAFT_PROMPT = ("Write the next reply of the team to the customer in this conversation, in the "
                 "customer's language. Return the reply text only; a staff member checks, edits and "
                 "sends it.")
@@ -402,9 +412,9 @@ class Drafts:
         account = (event.get("account") or {}).get("id")
         conv = event["conversation"]["id"]
         with self.lock((account, conv)):
-            self.draft(account, conv, message_id)
+            self.draft(account, conv, message_id, event.get("sender"))
 
-    def draft(self, account, conv, message_id):
+    def draft(self, account, conv, message_id, sender=None):
         path = f"/api/v1/accounts/{account}/conversations/{conv}/messages"
         messages = self.notes.get(path).get("payload") or []
         incoming = [m.get("id") for m in messages if m.get("message_type") in (0, "incoming") and not m.get("private")]
@@ -414,9 +424,14 @@ class Drafts:
             return
         heading = self.config.draft_heading
         earlier = [m for m in messages if not (m.get("private") and (m.get("content") or "").startswith(heading))]
-        text = (self.config.draft_instructions or DRAFT_PROMPT) + "\n\nConversation:\n" + \
+        # the sender lets the agent look the customer up (Chatwoot's contact, from the mail sender)
+        customer = contact_line(sender)
+        text = (self.config.draft_instructions or DRAFT_PROMPT) + \
+            ("\n\n" + customer if customer else "") + "\n\nConversation:\n" + \
             (transcript({"messages": earlier}) or "(no messages)")
-        metadata = {"chatwoot": {"draft": True, "account": account, "conversation": conv}}
+        contact = {k: (sender or {}).get(k) for k in ("name", "email") if (sender or {}).get(k)}
+        metadata = {"chatwoot": {"draft": True, "account": account, "conversation": conv,
+                                 "contact": contact}}
         try:
             reply, _ = self.bot.ask(text, None, metadata)
         except Exception as e:  # staff answer without a draft
