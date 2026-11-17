@@ -205,9 +205,10 @@ llm:
   # the rest of the window is left for the reply. profileDefaults and
   # modelProfileDefaults win. 0: not set
   contextShare: 0.6
-  # a smaller share is not set: the tool definitions alone can fill it and the
-  # condenser would run on every step. Such a model condenses on condenser.maxSize only
-  minInputTokens: 150000
+  # a smaller share is not set: OpenHands counts every tool definition in full, about
+  # 250k tokens for 285 MCP tools, and a limit near that condenses on every step. Such a
+  # model condenses on condenser.maxSize only. Raise it with more MCP tools
+  minInputTokens: 400000
 
 # The editor (VS Code in the browser) with a chat extension that uses the agent's own
 # models and MCP servers. Its built-in chat needs a GitHub Copilot sign-in and stays off

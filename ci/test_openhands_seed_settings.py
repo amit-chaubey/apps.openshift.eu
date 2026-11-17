@@ -114,6 +114,10 @@ class ContextLimits(unittest.TestCase):
         self.assertEqual(ss.gateway_context(LISTING, 0.6, 150000),
                          {"claude-opus-5-5": 600000, "glm-5.3-flash": 157000})
 
+    def test_default_minimum_keeps_only_1m_windows(self):
+        # the chart default: a 262k window (157k) is below the tool definitions
+        self.assertEqual(ss.gateway_context(LISTING, 0.6, 400000), {"claude-opus-5-5": 600000})
+
     def test_limits_reach_profiles_once(self):
         ss.CONTEXT.update(ss.gateway_context(LISTING, 0.6, 150000))
         ss.seed_profile_defaults(CONN)
