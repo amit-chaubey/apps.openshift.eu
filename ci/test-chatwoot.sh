@@ -220,6 +220,7 @@ OUT=$(render "${SSO[@]}" "${AGENT[@]}" --set copilotPanel.enabled=true --set rou
 check "panel without hostname reads the Route" 'pod("chatwoot-gate")["automountServiceAccountToken"] is True and {"kind": "ServiceAccount", "name": "chatwoot-agent-bridge"} in obj("RoleBinding", "chatwoot-route")["subjects"]'
 OUT=$(render "${SSO[@]}" --set agentBot.enabled=true --set agent.url=http://agent.acme.svc:8080/ --set secrets.type=externalSecret --set secrets.externalSecret.storeName=vault)
 check "bot secrets from a store" 'obj("ExternalSecret", "chatwoot-agent-bot")["spec"]["data"][0]["remoteRef"]["key"] == "chatwoot-agent-bot-token" and not obj("Deployment", "chatwoot-gate").get("spec", {}).get("template", {}).get("spec", {}).get("volumes", [{}])[0].get("projected")'
+check "bridge egress to an in-cluster agent" 'obj("NetworkPolicy", "chatwoot-agent-bridge")["spec"]["egress"][3] == {"to": [{"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "acme"}}}]}'
 # --- bridge in another release (Chatwoot side) and the standalone bridge
 # --- AI drafts: private notes through the bridge here, client secret for the agent
 OUT=$(render "${DRAFT[@]}")
@@ -228,9 +229,12 @@ check "draft client secret" 'env("chatwoot-agent-bridge", "agent-bot")["A2A_AUTH
 check "draft secrets" 'len(secret("chatwoot-draft", "draft-token")) == 48 and len(secret("chatwoot-draft", "draft-webhook-secret")) == 48'
 check "draft job" 'env("chatwoot-prepare-1", "prepare")["CHATWOOT_DRAFT_WEBHOOK_URL"] == "http://chatwoot-agent-bridge:8080/draft" and env("chatwoot-prepare-1", "prepare")["CHATWOOT_DRAFT_EMAIL"] == "ai-draft@chatwoot.invalid"'
 check "draft webhook may reach the bridge" 'all(env(n, c)["CHART_AGENT_BOT_URL"] == "http://chatwoot-agent-bridge:8080/" for n, c in (("chatwoot-web", "web"), ("chatwoot-worker", "worker"))) and env("chatwoot-prepare-1", "prepare")["CHATWOOT_DRAFT_WEBHOOK_URL"].startswith(env("chatwoot-worker", "worker")["CHART_AGENT_BOT_URL"])'
+check "bridge egress to chatwoot, dns and public 443 only" 'set(obj("NetworkPolicy", "chatwoot-agent-bridge")["spec"]["policyTypes"]) == {"Ingress", "Egress"} and [r["to"] for r in obj("NetworkPolicy", "chatwoot-agent-bridge")["spec"]["egress"]][2] == [{"ipBlock": {"cidr": "0.0.0.0/0", "except": ["10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"]}}] and obj("NetworkPolicy", "chatwoot-agent-bridge")["spec"]["egress"][2]["ports"] == [{"protocol": "TCP", "port": 443}] and obj("NetworkPolicy", "chatwoot-agent-bridge")["spec"]["egress"][0]["to"] == [{"podSelector": {"matchLabels": {"app.kubernetes.io/name": "chatwoot-web"}}}] and all("Egress" not in n["spec"]["policyTypes"] for n in objs("NetworkPolicy") if n["metadata"]["name"] != "chatwoot-agent-bridge")'
 check "draft network" 'obj("NetworkPolicy", "chatwoot-agent-bridge") and "chatwoot-agent-bridge" in refs(obj("NetworkPolicy", "chatwoot-web"))'
 OUT=$(render "${DRAFT[@]}" --set secrets.type=externalSecret --set secrets.externalSecret.storeName=vault)
 check "draft external secrets" '{"chatwoot-draft", "chatwoot-agent-client"} <= {e["metadata"]["name"] for e in objs("ExternalSecret")}'
+OUT=$(render "${DRAFT[@]}" --set-json 'networkPolicy.agentEgress.to=[{"ipBlock":{"cidr":"203.0.113.7/32"}}]' --set-json 'networkPolicy.agentEgress.ports=[8443]')
+check "bridge egress to the named agent alone" 'obj("NetworkPolicy", "chatwoot-agent-bridge")["spec"]["egress"][2:] == [{"ports": [{"protocol": "TCP", "port": 8443}], "to": [{"ipBlock": {"cidr": "203.0.113.7/32"}}]}]'
 
 REMOTE=(--set agentBridge.remoteUrl=https://bridge.example.org --set agentBot.enabled=true --set copilotPanel.enabled=true)
 OUT=$(render "${SSO[@]}" "${REMOTE[@]}")

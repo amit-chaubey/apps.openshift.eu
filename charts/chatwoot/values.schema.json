@@ -255,6 +255,31 @@
           "items": {
             "type": "object"
           }
+        },
+        "dnsPeers": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "agentEgress": {
+          "type": "object",
+          "properties": {
+            "to": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "ports": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
+            }
+          }
         }
       }
     },

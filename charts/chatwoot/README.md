@@ -51,6 +51,8 @@ a super admin.
 | `sso.public.widget` | `true` | The live chat widget is reachable without a login. |
 | `sso.public.inboxApi`, `.surveys`, `.helpCenter` | `false` | Further paths without a login. |
 | `networkPolicy.webIngressFrom` | empty | Further peers that may reach Chatwoot web on port 3000. |
+| `networkPolicy.agentEgress.to` | empty | Peers the agent bridge may reach besides Chatwoot and DNS: the agent and its token endpoint. Empty: any public address on `networkPolicy.agentEgress.ports` (`443`), plus the namespace of an `agent.url` that names a Service of this cluster. |
+| `networkPolicy.dnsPeers` | namespace `openshift-dns` | Peers of the cluster DNS that the agent bridge asks. |
 | `secrets.type` | `kubernetes` | `externalSecret` reads the secrets from a secret store. |
 | `extraEnv` | empty | Further Chatwoot settings, for example the `SMTP_*` variables. |
 | `agent.url` | empty | JSON-RPC address of the A2A agent of the bot, the panel and the drafts; required with any of them. |
@@ -175,6 +177,9 @@ stays with staff and no draft reaches the customer.
   message. When the agent fails or returns nothing, no note is written.
 - The bridge runs in this release: `draftAgent.enabled` excludes `agentBridge.remoteUrl`
   and `agentBridge.standalone.enabled`.
+- The bridge reaches Chatwoot web, DNS and the agent alone (`networkPolicy.agentEgress`).
+  Name the `/32` addresses of the agent and its token endpoint there to keep the drafts
+  from any other AI endpoint.
 
 ### Bridge next to the agent
 

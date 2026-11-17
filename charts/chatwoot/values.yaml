@@ -184,6 +184,19 @@ networkPolicy:
   # further peers (NetworkPolicyPeer) that may reach Chatwoot web on port 3000, for
   # example an integration in another namespace
   webIngressFrom: []
+  # peers (NetworkPolicyPeer) of the cluster DNS that the agent bridge asks
+  dnsPeers:
+  - namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: openshift-dns
+  # where the agent bridge may connect besides Chatwoot and DNS: the agent of agent.url and
+  # its token endpoint. Name their addresses (ipBlock /32 peers) to keep the bridge from
+  # every other endpoint. Empty: any public address, no private range, plus the namespace
+  # of an agent.url that names a Service (<service>.<namespace>.svc) of this cluster
+  agentEgress:
+    to: []
+    ports:
+    - 443
 
 # Odoo tickets and leads as conversations; staff replies go back to Odoo. See the README
 odoo:

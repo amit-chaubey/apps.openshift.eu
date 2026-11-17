@@ -127,6 +127,16 @@ identity provider can deliver to or verify, so no login of a person can match it
 {{- if or .Values.draftAgent.enabled (and .Values.agentBot.enabled (or .Values.agentBridge.standalone.enabled (not .Values.agentBridge.remoteUrl))) }}true{{ end }}
 {{- end -}}
 
+{{/* The namespace of the Service that agent.url names, empty for any other address. */}}
+{{- define "wrapper.agentNamespace" -}}
+{{- with .Values.agent.url }}
+{{- $h := first (splitList ":" (urlParse .).host) | lower }}
+{{- if regexMatch "^[a-z0-9-]+\\.[a-z0-9-]+\\.svc(\\.cluster\\.local)?$" $h }}
+{{- index (splitList "." $h) 1 }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
 {{/* Address of the bridge's webhook port that Chatwoot calls. */}}
 {{- define "wrapper.agentBotUrl" -}}
 {{- if .Values.agentBridge.remoteUrl -}}

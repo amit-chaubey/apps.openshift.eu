@@ -67,6 +67,7 @@ spec:
       app.kubernetes.io/name: chatwoot-agent-bridge
   policyTypes:
   - Ingress
+  - Egress
   ingress:
   # webhooks, sent by the worker; each one is also signed
   - ports:
@@ -76,6 +77,55 @@ spec:
     - podSelector:
         matchLabels:
           app.kubernetes.io/name: chatwoot-worker
+  # the bridge reaches Chatwoot, DNS and the agent alone: no other AI endpoint
+  egress:
+  - ports:
+    - protocol: TCP
+      port: 3000
+    to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: chatwoot-web
+  - ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 5353
+    - protocol: TCP
+      port: 5353
+    to:
+    {{- toYaml .Values.networkPolicy.dnsPeers | nindent 4 }}
+  # the agent (agent.url) and its token endpoint (agent.auth.tokenUrl)
+  - ports:
+    {{- range .Values.networkPolicy.agentEgress.ports }}
+    - protocol: TCP
+      port: {{ . }}
+    {{- end }}
+    to:
+    {{- with .Values.networkPolicy.agentEgress.to }}
+    {{- toYaml . | nindent 4 }}
+    {{- else }}
+    # any public address: nothing in a private range, so no in-cluster endpoint
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.0.0.0/8
+        - 100.64.0.0/10
+        - 127.0.0.0/8
+        - 169.254.0.0/16
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+    {{- end }}
+  {{- with include "wrapper.agentNamespace" . }}
+  # an agent at a Service of this cluster (agent.url): its namespace. Any port: a policy
+  # sees the pod's port, which the Service may map from another
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ . }}
+  {{- end }}
 {{- end }}
 {{- if .Values.odoo.enabled }}
 ---
