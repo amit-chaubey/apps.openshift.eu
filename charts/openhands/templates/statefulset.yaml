@@ -25,6 +25,8 @@ spec:
         {{- include "openhands.selectorLabels" . | nindent 8 }}
       annotations:
         checksum/scripts: {{ include (print $.Template.BasePath "/configmap-scripts.yaml") . | sha256sum }}
+        # oc exec and oc logs without -c, although the token proxy is the first container
+        kubectl.kubernetes.io/default-container: agent-canvas
     spec:
       serviceAccountName: {{ $name }}
       {{- with .Values.nodeSelector }}
@@ -64,6 +66,62 @@ spec:
         securityContext:
           {{- include "openhands.containerSecurityContext" . | nindent 10 }}
       containers:
+      # first: the kubelet starts the next container only after the postStart hook of
+      # agent-canvas returns, and that hook reads the gateway through this proxy
+      {{- if .Values.gateway.upstream }}
+      - name: token-proxy
+        image: {{ .Values.tokenProxy.image }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - /app/token-proxy.py
+        env:
+        - name: TOKEN_FILE
+          value: /var/run/secrets/api-token/token
+        - name: UPSTREAM
+          value: {{ .Values.gateway.upstream | quote }}
+        - name: PORT
+          value: {{ .Values.tokenProxy.port | quote }}
+        {{- with .Values.tokenProxy.agentToken }}
+        {{- if .tokenUrl }}
+        - name: AGENT_TOKEN_URL
+          value: {{ .tokenUrl | quote }}
+        - name: AGENT_TOKEN_PATHS
+          value: {{ join "," .paths | quote }}
+        # MCP servers of the agent's issuer, written by mcp-sync: /_target/<id>
+        - name: TARGETS_FILE
+          value: /var/run/mcp-targets/targets.json
+        {{- end }}
+        {{- end }}
+        # listens on 127.0.0.1 only, so the probe runs inside the container
+        readinessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - import urllib.request; urllib.request.urlopen("http://127.0.0.1:{{ .Values.tokenProxy.port }}/healthz", timeout=2)
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+          readOnly: true
+        - name: api-token
+          mountPath: /var/run/secrets/api-token
+          readOnly: true
+        {{- if .Values.tokenProxy.agentToken.tokenUrl }}
+        - name: agent-token
+          mountPath: /var/run/secrets/agent-token
+          readOnly: true
+        - name: mcp-targets
+          mountPath: /var/run/mcp-targets
+          readOnly: true
+        {{- end }}
+        resources:
+          {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
+        securityContext:
+          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
+      {{- end }}
       - name: agent-canvas
         image: {{ include "openhands.image" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -262,60 +320,6 @@ spec:
           subPath: emails.txt
           readOnly: true
         {{- end }}
-      {{- if .Values.gateway.upstream }}
-      - name: token-proxy
-        image: {{ .Values.tokenProxy.image }}
-        imagePullPolicy: IfNotPresent
-        command:
-        - python3
-        - /app/token-proxy.py
-        env:
-        - name: TOKEN_FILE
-          value: /var/run/secrets/api-token/token
-        - name: UPSTREAM
-          value: {{ .Values.gateway.upstream | quote }}
-        - name: PORT
-          value: {{ .Values.tokenProxy.port | quote }}
-        {{- with .Values.tokenProxy.agentToken }}
-        {{- if .tokenUrl }}
-        - name: AGENT_TOKEN_URL
-          value: {{ .tokenUrl | quote }}
-        - name: AGENT_TOKEN_PATHS
-          value: {{ join "," .paths | quote }}
-        # MCP servers of the agent's issuer, written by mcp-sync: /_target/<id>
-        - name: TARGETS_FILE
-          value: /var/run/mcp-targets/targets.json
-        {{- end }}
-        {{- end }}
-        # listens on 127.0.0.1 only, so the probe runs inside the container
-        readinessProbe:
-          exec:
-            command:
-            - python3
-            - -c
-            - import urllib.request; urllib.request.urlopen("http://127.0.0.1:{{ .Values.tokenProxy.port }}/healthz", timeout=2)
-          initialDelaySeconds: 2
-          periodSeconds: 10
-        volumeMounts:
-        - name: scripts
-          mountPath: /app
-          readOnly: true
-        - name: api-token
-          mountPath: /var/run/secrets/api-token
-          readOnly: true
-        {{- if .Values.tokenProxy.agentToken.tokenUrl }}
-        - name: agent-token
-          mountPath: /var/run/secrets/agent-token
-          readOnly: true
-        - name: mcp-targets
-          mountPath: /var/run/mcp-targets
-          readOnly: true
-        {{- end }}
-        resources:
-          {{- toYaml .Values.tokenProxy.resources | nindent 10 }}
-        securityContext:
-          {{- include "openhands.containerSecurityContext" . | nindent 10 }}
-      {{- end }}
       {{- $mcp := include "openhands.mcp" . | fromJson }}
       {{- if or $mcp.enabled .Values.mcpPublish.enabled (and .Values.git.host .Values.git.uiSecretName) }}
       - name: mcp-sync

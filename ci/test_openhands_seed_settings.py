@@ -142,6 +142,61 @@ class ContextLimits(unittest.TestCase):
         self.assertEqual(ss.defaults_for("openai/claude-proxy/claude-haiku-4-5"), {})
 
 
+class GatewayStart(unittest.TestCase):
+    """The token proxy in front of the gateway may answer only after a few tries."""
+
+    def setUp(self):
+        ss.STATE = tempfile.mkdtemp(prefix="state-")
+        ss.DEFAULTS.clear()
+        ss.MODEL_DEFAULTS.clear()
+        ss.CONTEXT.clear()
+        ss.CONTEXT_MISSING = False
+        ss.GATEWAY_DELAY = 0
+        self.api = FakeApi({"claude-opus-5-5": {"model": "openai/claude-proxy/claude-opus-5-5"}})
+        ss.request = self.api.request
+        ss.call = lambda method, path, body=None: self.api.request(method, path, body)[0]
+        self.urlopen = ss.urllib.request.urlopen
+        self.addCleanup(setattr, ss.urllib.request, "urlopen", self.urlopen)
+        self.addCleanup(ss.CONTEXT.clear)
+        self.addCleanup(setattr, ss, "CONTEXT_MISSING", False)
+
+    def gateway(self, failures):
+        """urlopen that refuses failures times, then lists LISTING."""
+        import io
+        import json
+        calls = []
+
+        def urlopen(req, timeout=None):
+            calls.append(req.full_url)
+            if len(calls) <= failures:
+                raise ConnectionRefusedError("token proxy not listening yet")
+            return io.BytesIO(json.dumps({"data": LISTING}).encode())
+        ss.urllib.request.urlopen = urlopen
+        return calls
+
+    def test_listing_after_retries(self):
+        calls = self.gateway(failures=3)
+        listing = ss.gateway_listing({"base_url": "http://127.0.0.1:8099/v1"})
+        self.assertEqual(listing, LISTING)
+        self.assertEqual(len(calls), 4)
+
+    def test_no_listing_writes_no_marker(self):
+        self.gateway(failures=ss.GATEWAY_TRIES)
+        self.assertIsNone(ss.gateway_listing({"base_url": "http://127.0.0.1:8099/v1"}))
+        # an older marker form must not count either: without the windows nothing is done
+        ss.DEFAULTS.update({"stream": True})
+        ss.CONTEXT_MISSING = True
+        ss.seed_profile_defaults(CONN)
+        self.assertEqual(self.api.posted, {})
+        self.assertEqual([f for f in os.listdir(ss.STATE) if f.startswith(".seeded-profile-defaults-")], [])
+        # the next start, with the gateway up, writes the limit and the marker
+        ss.CONTEXT_MISSING = False
+        ss.CONTEXT.update(ss.gateway_context(LISTING, 0.6, 400000))
+        ss.seed_profile_defaults(CONN)
+        self.assertEqual(self.api.profiles["claude-opus-5-5"]["max_input_tokens"], 600000)
+        self.assertEqual(len([f for f in os.listdir(ss.STATE) if f.startswith(".seeded-profile-defaults-")]), 1)
+
+
 class FakeAgentApi:
     def __init__(self, llm_profiles, active, agents):
         self.llm_profiles, self.active, self.agents = llm_profiles, active, agents

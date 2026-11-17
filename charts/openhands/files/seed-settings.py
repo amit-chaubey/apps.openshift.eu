@@ -32,6 +32,11 @@ MODEL_DEFAULTS: dict = {}
 # max_input_tokens per model name after the last "/", from the gateway's context windows
 # (llm.contextShare), filled in main
 CONTEXT: dict = {}
+# true when llm.contextShare is set and the gateway did not list its models
+CONTEXT_MISSING = False
+# tries and seconds between them while the gateway does not answer
+GATEWAY_TRIES = 30
+GATEWAY_DELAY = 2
 MARKER = os.path.join(STATE, ".seeded-" + os.environ.get("SEED_HASH", "none"))
 
 
@@ -144,21 +149,28 @@ def repair_agent_llm_refs() -> None:
             print(f"seed: agent profile {agent['name']} not moved to {active}", file=sys.stderr)
 
 
-def gateway_listing(llm: dict) -> list[dict]:
-    """The model entries the gateway lists at /v1/models."""
+def gateway_listing(llm: dict) -> list[dict] | None:
+    """The model entries the gateway lists at /v1/models, None when it does not answer.
+
+    The gateway is reached through the token proxy, which may still be starting: a
+    failed request is tried again GATEWAY_TRIES times."""
     req = urllib.request.Request(llm["base_url"].rstrip("/") + "/models",
                                  headers={"Authorization": "Bearer " + llm.get("api_key", "")})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read()).get("data", [])
-    except (OSError, ValueError, AttributeError) as exc:
-        print(f"seed: gateway models not listed: {exc}", file=sys.stderr)
-        return []
+    for attempt in range(GATEWAY_TRIES):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read()).get("data", [])
+        except (OSError, ValueError, AttributeError) as exc:
+            if attempt == GATEWAY_TRIES - 1:
+                print(f"seed: gateway models not listed: {exc}", file=sys.stderr)
+                return None
+            time.sleep(GATEWAY_DELAY)
+    return None
 
 
 def gateway_models(llm: dict, conn: dict) -> list[str]:
     """Every model the gateway lists, in the form of llm.model (provider prefix)."""
-    return [f"{conn['provider']}/{m['id']}" for m in gateway_listing(llm) if m.get("id")]
+    return [f"{conn['provider']}/{m['id']}" for m in gateway_listing(llm) or [] if m.get("id")]
 
 
 def gateway_context(listing: list[dict], share: float, minimum: int) -> dict:
@@ -187,6 +199,10 @@ def seed_profile_defaults(conn: dict | None) -> None:
     """llm.profileDefaults and the model's modelProfileDefaults into every profile on
     the connection, once per value."""
     if not (DEFAULTS or MODEL_DEFAULTS or CONTEXT) or not conn:
+        return
+    if CONTEXT_MISSING:
+        # without the context windows the limits are unknown: the next start tries again
+        print("seed: profile defaults not written, the gateway listed no models", file=sys.stderr)
         return
     # the marker forms of earlier releases stay as they were while CONTEXT is empty
     if CONTEXT:
@@ -317,6 +333,7 @@ def add_gateway_profiles(llm: dict, conn: dict) -> None:
 
 
 def main() -> None:
+    global CONTEXT_MISSING
     for _ in range(120):
         if call("GET", "/alive") == 200:
             break
@@ -333,7 +350,11 @@ def main() -> None:
     share = float(llm.pop("contextShare", 0) or 0)
     minimum = int(llm.pop("minInputTokens", 0) or 0)
     if share > 0 and conn and llm.get("base_url"):
-        CONTEXT.update(gateway_context(gateway_listing(llm), share, minimum))
+        listing = gateway_listing(llm)
+        if listing is None:
+            CONTEXT_MISSING = True
+        else:
+            CONTEXT.update(gateway_context(listing, share, minimum))
     seed_repositories()
     seed_condenser()
     if os.path.exists(MARKER):
