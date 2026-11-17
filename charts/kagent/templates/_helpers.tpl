@@ -95,9 +95,14 @@ app.kubernetes.io/instance: {{ .Release.Name | quote }}
 {{- if dig "kagent-tools" "enabled" false .Values.upstream -}}
 {{- fail "upstream.kagent-tools binds cluster-admin; team namespaces get tools from the platform, the example agents from examples.enabled" -}}
 {{- end -}}
+{{- $ownToolServer := false -}}
+{{- range .Values.remoteMCPServers -}}{{- if eq .name "kagent-tool-server" -}}{{- $ownToolServer = true -}}{{- end -}}{{- end -}}
+{{- if and $ownToolServer .Values.examples.enabled -}}
+{{- fail "remoteMCPServers kagent-tool-server and examples.enabled both make RemoteMCPServer kagent-tool-server: choose one" -}}
+{{- end -}}
 {{- range $agent := list "k8s-agent" "kgateway-agent" "istio-agent" "promql-agent" "observability-agent" "argo-rollouts-agent" "helm-agent" "cilium-policy-agent" "cilium-manager-agent" "cilium-debug-agent" -}}
-{{- if and (dig $agent "enabled" false $.Values.upstream) (not $.Values.examples.enabled) -}}
-{{- fail (printf "upstream.%s needs examples.enabled: it calls the example tool server kagent-tool-server" $agent) -}}
+{{- if and (dig $agent "enabled" false $.Values.upstream) (not $.Values.examples.enabled) (not $ownToolServer) -}}
+{{- fail (printf "upstream.%s needs examples.enabled or a remoteMCPServers entry kagent-tool-server: it calls RemoteMCPServer kagent-tool-server" $agent) -}}
 {{- end -}}
 {{- end -}}
 {{- range .Values.remoteMCPServers -}}

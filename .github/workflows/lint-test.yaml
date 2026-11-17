@@ -52,6 +52,8 @@ jobs:
       run: python3 -m unittest ci/test_hermes_seed_config.py
     - name: Test chatwoot chart
       run: ci/test-chatwoot.sh
+    - name: Test kagent chart
+      run: ci/test-kagent.sh
     - name: Test nextcloud silent login
       run: ci/test-nextcloud-silent-login.sh
     - name: Install promtool
