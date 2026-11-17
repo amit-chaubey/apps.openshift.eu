@@ -174,7 +174,7 @@ data:
     # sso switched off: the provider that sso.sh set up goes
     sso_state="$(php occ config:system:get datadirectory)/.chart-sso"
     if [ -e "$sso_state" ]; then
-      run 30 "remove sso provider" php occ user_oidc:provider:delete {{ .Values.oidc.identifier | quote }} -f && rm -f "$sso_state"
+      run 30 "remove sso provider" php occ user_oidc:provider:delete {{ .Values.oidc.identifier | quote }} -f && rm -f "$sso_state" config/.chart-sso-provider
     fi
     {{- end }}
     {{- if include "wrapper.oidcActive" . }}
@@ -193,6 +193,7 @@ data:
       {{- end }}
       --check-bearer={{ ternary 1 0 $o.bearer }} --bearer-provisioning={{ ternary 1 0 $o.bearer }} \
       --send-id-token-hint=1
+    run 30 "oidc provider id" sh /opt/nextcloud-chart/provider-id.sh {{ $o.identifier | quote }}
     {{- end }}
     exit 0
   # occ-secret.php <secret file> <occ arguments>: occ in this php process, with @SECRET@ in
@@ -208,6 +209,78 @@ data:
     $_SERVER['argv'] = $argv;
     $_SERVER['argc'] = $argc = count($argv);
     require '/var/www/html/console.php';
+  # provider-id.sh <identifier>: writes the id of that user_oidc provider to
+  # config/.chart-sso-provider for silent-login.php (the web server serves nothing of config/)
+  provider-id.sh: |
+    #!/bin/sh
+    cd /var/www/html
+    php occ user_oidc:provider --output=json 2>/dev/null | php -r '
+      foreach (json_decode(stream_get_contents(STDIN), true) ?: [] as $p) {
+        if (($p["identifier"] ?? "") === $argv[1]) {
+          file_put_contents("config/.chart-sso-provider.new", (string) $p["id"]);
+          rename("config/.chart-sso-provider.new", "config/.chart-sso-provider");
+          exit(0);
+        }
+      }
+      exit(1);' "$1"
+  # oidc.silentLogin, run before every PHP request (auto_prepend_file in phpConfigs, so always
+  # present). A browser that opens the login page goes once per 5 minutes (cookie
+  # nc_sso_tried) to the provider with prompt=none: with a session there it comes back
+  # logged in; without one the provider answers login_required and the login page shows.
+  # The login button (no silent=1) stays a normal login with the provider's login page
+  silent-login.php: |
+    <?php
+    {{- if and .Values.oidc.silentLogin (or .Values.sso.enabled (include "wrapper.oidcActive" .)) }}
+    (static function (): void {
+        if (PHP_SAPI === 'cli' || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+            return;
+        }
+        $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+        $path = (string) preg_replace('#^/index\.php(?=/)#', '', $path);
+        if ($path === '/login') {
+            // only a page the user opens; never ?direct=1, never twice within 5 minutes
+            if (($_SERVER['HTTP_SEC_FETCH_MODE'] ?? '') !== 'navigate' || ($_GET['direct'] ?? '') === '1'
+                || isset($_COOKIE['nc_sso_tried'])) {
+                return;
+            }
+            // the provider id, written by the setup when it set the provider up
+            $id = trim((string) @file_get_contents('/var/www/html/config/.chart-sso-provider'));
+            if (!ctype_digit($id)) {
+                return;
+            }
+            setcookie('nc_sso_tried', '1', ['expires' => time() + 300, 'path' => '/', 'secure' => true,
+                'httponly' => true, 'samesite' => 'Lax']);
+            $to = '/index.php/apps/user_oidc/login/' . $id . '?silent=1';
+            $back = $_GET['redirect_url'] ?? '';
+            if (is_string($back) && $back !== '') {
+                $to .= '&redirectUrl=' . rawurlencode($back);
+            }
+            header('Location: ' . $to, true, 302);
+            exit;
+        }
+        if (preg_match('#^/apps/user_oidc/login/\d+$#', $path) && ($_GET['silent'] ?? '') === '1') {
+            // user_oidc takes prompt from system config only: add it to this redirect
+            header_register_callback(static function (): void {
+                foreach (headers_list() as $h) {
+                    if (stripos($h, 'Location:') !== 0) {
+                        continue;
+                    }
+                    $loc = trim(substr($h, 9));
+                    if (str_contains($loc, 'response_type=code') && !preg_match('/[?&]prompt=/', $loc)) {
+                        header('Location: ' . $loc . '&prompt=none', true);
+                    }
+                }
+            });
+            return;
+        }
+        // no session at the provider: back to the login page, which the cookie now shows
+        if ($path === '/apps/user_oidc/code' && in_array($_GET['error'] ?? '',
+            ['login_required', 'interaction_required', 'consent_required', 'account_selection_required'], true)) {
+            header('Location: /index.php/login', true, 302);
+            exit;
+        }
+    })();
+    {{- end }}
   # the cron sidecar: waits until Nextcloud serves, then runs the background jobs
   cron.sh: |
     #!/bin/sh
@@ -245,7 +318,7 @@ data:
       [ -s "$s/sso-$k" ] && continue
       # the platform withdrew the client: so goes the provider
       if [ -e "$state" ] && php occ user_oidc:provider:delete {{ $o.identifier | quote }} -f >/dev/null 2>&1; then
-        rm -f "$state"; echo "sso: provider {{ $o.identifier }} removed, no Secret public-nextcloud"
+        rm -f "$state" config/.chart-sso-provider; echo "sso: provider {{ $o.identifier }} removed, no Secret public-nextcloud"
       fi
       exit 0
     done
@@ -283,8 +356,11 @@ data:
       if [ "$ok" = 1 ]; then
         echo "$sum" > "$state"
         echo "sso: login button '${label:-Login with {{ $o.identifier }}}', store login tokens $token"
+        sh /opt/nextcloud-chart/provider-id.sh {{ $o.identifier | quote }}
       fi
     fi
+    # oidc.silentLogin finds the provider by this file; an instance set up before it has none
+    [ -s config/.chart-sso-provider ] || sh /opt/nextcloud-chart/provider-id.sh {{ $o.identifier | quote }}
     # administrators: members of the admin groups (id or display name) and the users with an
     # admin email address join group admin; only users added here leave it when they no
     # longer match. Users appear at their first login, so this runs every time

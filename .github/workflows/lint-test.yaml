@@ -52,6 +52,8 @@ jobs:
       run: python3 -m unittest ci/test_hermes_seed_config.py
     - name: Test chatwoot chart
       run: ci/test-chatwoot.sh
+    - name: Test nextcloud silent login
+      run: ci/test-nextcloud-silent-login.sh
     - name: Install promtool
       run: |
         curl -sSLf -o /tmp/prometheus.tgz https://github.com/prometheus/prometheus/releases/download/v3.5.0/prometheus-3.5.0.linux-amd64.tar.gz

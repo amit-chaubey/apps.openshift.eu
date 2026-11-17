@@ -305,6 +305,11 @@ oidc:
   # with sso.enabled: keep the user's provider tokens after login (user_oidc "Store login
   # tokens"), so apps can call other services of the provider as that user
   storeLoginToken: true
+  # a browser that opens the login page first asks the provider without a prompt
+  # (prompt=none): with a session there the user is logged in without a click, without one
+  # the login page shows as usual (local users, the login button). Once per 5 minutes per
+  # browser; /login?direct=1 skips it
+  silentLogin: true
   # with sso.enabled: users kept in the Nextcloud group admin: the members of these groups
   # (group id or display name) and the users with these email addresses. The Secret keys
   # sso-admin-groups and sso-admin-emails (space separated) add to them. Only users this
@@ -402,7 +407,7 @@ mailu:
     front:
       # a chart upgrade reloads mail-prefix.conf; equals the chart version (templates/validate.yaml)
       podAnnotations:
-        chart-version: 0.19.2
+        chart-version: 0.20.0
       extraVolumes:
       - name: dovecot-override
         configMap:
@@ -606,7 +611,7 @@ nextcloud:
   # a chart upgrade restarts Nextcloud so its start-up setup runs again; equals the chart
   # version (templates/validate.yaml refuses a render where it does not)
   podAnnotations:
-    chart-version: 0.19.2
+    chart-version: 0.20.0
   nextcloud:
     host: nextcloud.example.org
     existingSecret:
@@ -715,6 +720,9 @@ nextcloud:
         max_input_time 3600
         max_execution_time 3600
         opcache.memory_consumption=256
+      # oidc.silentLogin; the file does nothing while it is off
+      silent-login.ini: |-
+        auto_prepend_file=/opt/nextcloud-chart/silent-login.php
   phpClientHttpsFix:
     enabled: true
     protocol: https
