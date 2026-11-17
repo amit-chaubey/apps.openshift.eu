@@ -37,6 +37,7 @@ import signal
 import sys
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -360,11 +361,21 @@ class PrivateNotes:
         return http_json(self.base_url + path, body, {"api_access_token": read_file(self.token_file)})
 
 
-def contact_line(sender):
-    """'Customer: name <email>' of the message's sender, one line, or empty."""
-    sender = sender or {}
-    name = " ".join(str(sender.get("name") or "").split())[:100]
-    email = "".join(str(sender.get("email") or "").split())[:254]
+def clean_contact(sender):
+    """Name and email of the message's sender as plain one-line text: no control or format
+    characters, no angle brackets, capped. The sender is whatever the customer's mail says."""
+    def plain(value, joiner, limit):
+        text = value if isinstance(value, str) else ""
+        text = "".join(" " if unicodedata.category(ch).startswith(("C", "Z")) else ch for ch in text)
+        return joiner.join(text.replace("<", " ").replace(">", " ").split())[:limit]
+    sender = sender if isinstance(sender, dict) else {}
+    contact = {"name": plain(sender.get("name"), " ", 100), "email": plain(sender.get("email"), "", 254)}
+    return {k: v for k, v in contact.items() if v}
+
+
+def contact_line(contact):
+    """'Customer: name <email>' of a cleaned contact, or empty."""
+    name, email = contact.get("name", ""), contact.get("email", "")
     if not (name or email):
         return ""
     return "Customer: " + (f"{name} <{email}>" if name and email else name or email)
@@ -425,11 +436,11 @@ class Drafts:
         heading = self.config.draft_heading
         earlier = [m for m in messages if not (m.get("private") and (m.get("content") or "").startswith(heading))]
         # the sender lets the agent look the customer up (Chatwoot's contact, from the mail sender)
-        customer = contact_line(sender)
+        contact = clean_contact(sender)
+        customer = contact_line(contact)
         text = (self.config.draft_instructions or DRAFT_PROMPT) + \
             ("\n\n" + customer if customer else "") + "\n\nConversation:\n" + \
             (transcript({"messages": earlier}) or "(no messages)")
-        contact = {k: (sender or {}).get(k) for k in ("name", "email") if (sender or {}).get(k)}
         metadata = {"chatwoot": {"draft": True, "account": account, "conversation": conv,
                                  "contact": contact}}
         try:
