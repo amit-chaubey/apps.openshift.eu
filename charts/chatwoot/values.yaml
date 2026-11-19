@@ -197,6 +197,12 @@ networkPolicy:
     to: []
     ports:
     - 443
+  # where the agent bridge may reach the Kubernetes API, with tenantFacts.enabled: the
+  # endpoints of Service kubernetes in namespace default. Empty: any address on these ports
+  apiServerEgress:
+    to: []
+    ports:
+    - 6443
 
 # Odoo tickets and leads as conversations; staff replies go back to Odoo. See the README
 odoo:
@@ -247,6 +253,69 @@ draftAgent:
   heading: "AI draft (check before sending):"
   # what the agent reads before the transcript; empty: the bridge's own instruction
   instructions: ""
+  # how often the bridge looks at the open conversations of the inboxes above for what a
+  # webhook missed (a restart, an agent that was down): a customer message without a draft
+  # and, with triage, a conversation not sorted yet. 0: never
+  sweepSeconds: 60
+  # conversations without activity for longer than this are left alone
+  sweepMaxAgeHours: 24
+
+# AI triage: before the draft, the agent sorts each new conversation of the draftAgent
+# inboxes into one of the categories below. The bridge labels the conversation with the
+# category, gives it to the category's team (Chatwoot assigns an online member of the team)
+# and adds a private note with a summary. A conversation that already has a team or an
+# assignee keeps it. An answer without a known category, or no answer, takes the fallback
+# category. Removing the label of triage.label from a conversation sorts it again. The
+# prepare Job switches Chatwoot's own auto assignment off in the draftAgent inboxes: it
+# would give each new conversation to any online member before the triage. Needs
+# draftAgent.enabled
+triage:
+  enabled: false
+  # one per kind of question: name is the label (a-z, 0-9, - and _), team the Chatwoot team
+  # that takes the conversation (empty: none), description tells the agent what belongs
+  # there. For example
+  #   - name: engineering
+  #     team: engineering
+  #     description: outages, errors, backups, access to a service
+  categories: []
+  # category of an answer that names no category, or of no answer; one of the names above
+  fallback: ""
+  # members of a team by email, for example engineering: [ann@example.com]. The prepare Job
+  # keeps the teams of the categories and adds each listed member that has a Chatwoot user
+  # (a user appears at the first login, and joins at the next install or upgrade), also to
+  # the draftAgent inboxes, so the team can take conversations there. Members added in
+  # Chatwoot stay
+  teams: {}
+  # label of every sorted conversation; the bridge sorts each conversation without it
+  label: ai-triaged
+  # first line of the triage note; must not start like draftAgent.heading
+  heading: "AI triage:"
+  # what the agent reads before the categories; empty: the bridge's own instruction
+  instructions: ""
+
+# Facts about the customer's tenant in the triage note, and so in the draft, read by the
+# bridge from the Kubernetes API of this cluster: pods that are not ready, CronJobs, volume
+# claims that are not bound, recent warning events and the Velero backups of each namespace
+# of the tenant. The tenant comes from the conversation contact's email alone: the
+# namespaces whose annotation emailAnnotation holds that email name the tenant in their
+# label tenantLabel, and every namespace with that label belongs to it. The bridge reads no
+# Secret and no ConfigMap. The sender's address is not verified: staff check it before they
+# pass a fact on. ServiceAccount chatwoot-agent-bridge needs list on namespaces, pods,
+# events, persistentvolumeclaims and cronjobs in every namespace and on velero.io schedules
+# and backups in veleroNamespace; a chart creates no cluster role, so the cluster
+# administrator binds one (see the README). Needs triage.enabled
+tenantFacts:
+  enabled: false
+  # namespace annotation with the customer's email (several separated by commas); required
+  emailAnnotation: ""
+  # namespace label that names the tenant; required
+  tenantLabel: ""
+  # namespace of the Velero Schedules and Backups; empty: no backup facts
+  veleroNamespace: ""
+  # warning events of the last this many hours
+  eventHours: 24
+  # reasons of warning events that are no news to staff, for example PolicyViolation
+  ignoreEventReasons: []
 
 # The agent behind agentBot and copilotPanel: an A2A (Agent2Agent) server
 agent:

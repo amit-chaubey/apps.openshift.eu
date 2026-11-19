@@ -280,6 +280,25 @@
               }
             }
           }
+        },
+        "apiServerEgress": {
+          "type": "object",
+          "properties": {
+            "to": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "ports": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
+            }
+          }
         }
       }
     },
@@ -372,6 +391,93 @@
         },
         "instructions": {
           "type": "string"
+        },
+        "sweepSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sweepMaxAgeHours": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "triage": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "A category label, a team and a summary note for each new conversation of the draft inboxes"
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9_-]{1,64}$"
+              },
+              "team": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "fallback": {
+          "type": "string"
+        },
+        "teams": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "label": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]{1,64}$"
+        },
+        "heading": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instructions": {
+          "type": "string"
+        }
+      }
+    },
+    "tenantFacts": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Facts about the contact's tenant from the Kubernetes API in the triage note"
+        },
+        "emailAnnotation": {
+          "type": "string"
+        },
+        "tenantLabel": {
+          "type": "string"
+        },
+        "veleroNamespace": {
+          "type": "string"
+        },
+        "eventHours": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "ignoreEventReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

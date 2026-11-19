@@ -18,6 +18,11 @@
 #   messages to the bridge, signed with CHATWOOT_DRAFT_WEBHOOK_SECRET
 # - with CHATWOOT_AGENT_PANEL_PATH: keeps the Dashboard App of the agent panel at that path
 #   of FRONTEND_URL
+# - with CHATWOOT_TRIAGE_LABELS: keeps those labels, and the teams of CHATWOOT_TRIAGE_TEAMS
+#   (JSON, team name to member emails) with auto assignment; adds each listed member that
+#   has a user to the team and to the CHATWOOT_DRAFT_INBOXES, so the team's conversations
+#   there can be assigned to them, and switches the inboxes' own auto assignment off.
+#   Members and labels added in Chatwoot stay
 # It prints no credential.
 
 conn = ActiveRecord::Base.connection
@@ -183,6 +188,49 @@ else
   hook.secret = secret unless hook.persisted? && ActiveSupport::SecurityUtils.secure_compare(hook.secret.to_s, secret)
   hook.save! if hook.changed?
   puts "AI drafts: user #{user.id}, webhook #{hook.id}, inboxes #{wanted.join(', ')}"
+end
+
+triage_labels = ENV.fetch('CHATWOOT_TRIAGE_LABELS', '').split(',').map(&:strip).reject(&:empty?)
+if triage_labels.empty?
+  puts 'no triage labels: AI triage not set up'
+else
+  triage_labels.each do |title|
+    label = Label.find_or_initialize_by(account: account, title: title.downcase)
+    next if label.persisted?
+
+    label.description = 'AI triage (set by the chart)'
+    label.color = '#1f93ff' if label.color.blank?
+    label.show_on_sidebar = true
+    label.save!
+    puts "label #{label.title} created"
+  end
+  wanted = ENV.fetch('CHATWOOT_DRAFT_INBOXES', '').split(',').map(&:strip).reject(&:empty?)
+  inboxes = wanted.include?('*') ? account.inboxes.to_a : account.inboxes.where(name: wanted).to_a
+  # Chatwoot's own round robin would give a new conversation to any online member before the
+  # triage names its team; the team's auto assignment works without it
+  inboxes.select(&:enable_auto_assignment).each do |inbox|
+    inbox.update!(enable_auto_assignment: false)
+    puts "inbox #{inbox.name}: auto assignment off, the triage assigns"
+  end
+  JSON.parse(ENV.fetch('CHATWOOT_TRIAGE_TEAMS', '{}')).each do |name, emails|
+    team = Team.find_or_initialize_by(account: account, name: name.strip.downcase)
+    if team.new_record?
+      team.description = 'AI triage (set by the chart)'
+      team.allow_auto_assign = true
+      team.save!
+      puts "team #{team.name} created"
+    end
+    Array(emails).each do |email|
+      user = account.users.find_by(email: email.to_s.strip.downcase)
+      if user.nil?
+        puts "team #{team.name}: no user #{email} yet; joins at the next upgrade after a first login"
+        next
+      end
+      TeamMember.find_or_create_by!(team: team, user: user)
+      inboxes.each { |inbox| InboxMember.find_or_create_by!(inbox: inbox, user: user) }
+    end
+    puts "team #{team.name}: #{team.members.count} member(s)"
+  end
 end
 
 panel_path = ENV.fetch('CHATWOOT_AGENT_PANEL_PATH', '')

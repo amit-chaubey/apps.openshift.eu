@@ -23,9 +23,28 @@ the draft goes into the conversation as a private note. Staff read it, edit it a
 themselves. Every write of the draft path passes PrivateNotes, which refuses any message
 that is not private: a draft can never reach the customer.
 
+With TRIAGE_CATEGORIES the draft path sorts each new conversation first: the agent names one
+of the categories and sums the conversation up, and the bridge labels the conversation with
+the category and the label TRIAGE_LABEL, gives it to the category's team (Chatwoot assigns
+an online member) and adds the summary as a private note. A conversation that already has a
+team or an assignee keeps it. An answer without a known category, or no answer, takes the
+category TRIAGE_FALLBACK, so every conversation reaches a team. The label TRIAGE_LABEL marks
+the conversation as sorted; it is the last write, so a failed triage is done again.
+
+With FACTS_EMAIL_ANNOTATION the triage note carries facts about the customer's tenant, read
+from the Kubernetes API: the namespaces whose annotation holds the contact's email name the
+tenant (label FACTS_TENANT_LABEL), and the bridge reads pods, CronJobs, volume claims,
+warning events and Velero backups of that tenant's namespaces. The tenant comes from the
+contact's email, never from what the customer writes; no Secret or ConfigMap is read.
+
+With SWEEP_SECONDS the bridge looks at the open conversations of its inboxes that often and
+does what a webhook missed: the triage of a conversation without TRIAGE_LABEL, and a draft
+for a customer message that waits without one. After a failure it waits longer each time.
+
 Standard library only; prints no credential.
 """
 import base64
+import datetime
 import hashlib
 import hmac
 import http.server
@@ -34,6 +53,7 @@ import logging
 import os
 import re
 import signal
+import ssl
 import sys
 import threading
 import time
@@ -84,6 +104,37 @@ class Config:
         self.draft_inboxes = {i.strip() for i in env.get("DRAFT_INBOXES", "").split(",") if i.strip()}
         self.draft_heading = env.get("DRAFT_HEADING", "AI draft").strip()
         self.draft_instructions = env.get("DRAFT_INSTRUCTIONS", "").strip()
+        # triage of each new conversation of the draft inboxes; without categories it is off
+        self.categories = parse_categories(env.get("TRIAGE_CATEGORIES", ""))
+        self.triage_enabled = bool(self.categories) and self.drafts_enabled
+        self.triage_fallback = env.get("TRIAGE_FALLBACK", "").strip().lower()
+        self.triage_label = env.get("TRIAGE_LABEL", "ai-triaged").strip().lower()
+        self.triage_heading = env.get("TRIAGE_HEADING", "AI triage:").strip()
+        self.triage_instructions = env.get("TRIAGE_INSTRUCTIONS", "").strip()
+        # the sweep of the account's open conversations; 0: off
+        self.account_id = int(env.get("CHATWOOT_ACCOUNT_ID", "1"))
+        self.sweep_seconds = int(env.get("SWEEP_SECONDS", "0"))
+        self.sweep_max_age = int(float(env.get("SWEEP_MAX_AGE_HOURS", "24")) * 3600)
+        # facts about the contact's tenant from the Kubernetes API; without the annotation off
+        self.facts_annotation = env.get("FACTS_EMAIL_ANNOTATION", "").strip()
+        self.facts_tenant_label = env.get("FACTS_TENANT_LABEL", "").strip()
+        self.facts_velero_namespace = env.get("FACTS_VELERO_NAMESPACE", "").strip()
+        self.facts_event_hours = float(env.get("FACTS_EVENT_HOURS", "24"))
+        self.facts_ignore_reasons = {r.strip() for r in env.get("FACTS_IGNORE_EVENT_REASONS", "").split(",") if r.strip()}
+        self.kube_url = env.get("KUBE_URL", "https://kubernetes.default.svc").rstrip("/")
+        self.kube_token_file = env.get("KUBE_TOKEN_FILE", "")
+        self.kube_ca_file = env.get("KUBE_CA_FILE", "")
+        if self.triage_enabled:
+            names = [c["name"] for c in self.categories]
+            if self.triage_fallback not in names:
+                raise ValueError(f"TRIAGE_FALLBACK {self.triage_fallback!r} is not one of the categories")
+            if not CATEGORY.match(self.triage_label) or self.triage_label in names:
+                raise ValueError(f"TRIAGE_LABEL {self.triage_label!r} is a label that is no category")
+            if not self.triage_heading or self.triage_heading.startswith(self.draft_heading) \
+                    or self.draft_heading.startswith(self.triage_heading):
+                raise ValueError("TRIAGE_HEADING and DRAFT_HEADING must not start alike")
+        if self.facts_annotation and not (self.facts_tenant_label and self.kube_token_file):
+            raise ValueError("FACTS_TENANT_LABEL and KUBE_TOKEN_FILE are required with FACTS_EMAIL_ANNOTATION")
         if self.auth not in ("none", "serviceAccountToken", "clientAssertion", "clientSecret"):
             raise ValueError(f"A2A_AUTH {self.auth!r} is none, serviceAccountToken, clientAssertion or clientSecret")
         if self.auth in ("serviceAccountToken", "clientAssertion") and not self.token_file:
@@ -96,6 +147,30 @@ class Config:
 
 def normalize(text):
     return " ".join(re.sub(r"[^\w\s]", " ", text.lower()).split())
+
+
+# a category is a label the bridge sets; LABEL is any label of Chatwoot (letters, digits, - and _)
+CATEGORY = re.compile(r"^[a-z0-9_-]{1,64}$")
+LABEL = re.compile(r"^[\w-]{1,255}$")
+
+
+def parse_categories(raw):
+    """The categories of TRIAGE_CATEGORIES, a JSON list of {name, team, description}."""
+    items = json.loads(raw) if raw.strip() else []
+    if not isinstance(items, list):
+        raise ValueError("TRIAGE_CATEGORIES is a JSON list")
+    out = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("a category is an object with name, team and description")
+        name = str(item.get("name") or "").strip().lower()
+        if not CATEGORY.match(name):
+            raise ValueError(f"category {name!r} is no label: a-z, 0-9, - and _")
+        team = str(item.get("team") or "").strip().lower()
+        out.append({"name": name, "team": team, "description": " ".join(str(item.get("description") or "").split())})
+    if len({c["name"] for c in out}) != len(out):
+        raise ValueError("TRIAGE_CATEGORIES names a category twice")
+    return out
 
 
 def verify(secret, timestamp, signature, body, now=None):
@@ -346,7 +421,9 @@ def panel_request(bot, body, email):
 
 
 class PrivateNotes:
-    """The only writer of the draft path: posts private notes and refuses anything else."""
+    """The only writer of the draft and triage paths: private notes, the labels of a
+    conversation and its team. It refuses anything else: no message the customer sees, no
+    status, no person as assignee."""
 
     def __init__(self, base_url, token_file):
         self.base_url = base_url
@@ -355,19 +432,37 @@ class PrivateNotes:
     def get(self, path):
         return http_json(self.base_url + path, None, {"api_access_token": read_file(self.token_file)})
 
+    def send(self, path, body):
+        return http_json(self.base_url + path, body, {"api_access_token": read_file(self.token_file)})
+
     def post(self, path, body):
         if not path.endswith("/messages") or body.get("private") is not True:
             raise PermissionError("the draft path writes private notes only")
-        return http_json(self.base_url + path, body, {"api_access_token": read_file(self.token_file)})
+        return self.send(path, body)
+
+    def label(self, path, labels):
+        """Sets the conversation's whole label list: Chatwoot replaces it."""
+        if not path.endswith("/labels") or not isinstance(labels, list) \
+                or not all(isinstance(x, str) and LABEL.match(x) for x in labels):
+            raise PermissionError("the triage path sets a list of labels only")
+        return self.send(path, {"labels": labels})
+
+    def team(self, path, team_id):
+        if not path.endswith("/assignments") or type(team_id) is not int or team_id <= 0:
+            raise PermissionError("the triage path assigns a team only")
+        return self.send(path, {"team_id": team_id})
+
+
+def plain(value, joiner, limit):
+    """Text as one plain line: no control or format characters, no angle brackets, capped."""
+    text = value if isinstance(value, str) else ""
+    text = "".join(" " if unicodedata.category(ch).startswith(("C", "Z")) else ch for ch in text)
+    return joiner.join(text.replace("<", " ").replace(">", " ").split())[:limit]
 
 
 def clean_contact(sender):
     """Name and email of the message's sender as plain one-line text: no control or format
     characters, no angle brackets, capped. The sender is whatever the customer's mail says."""
-    def plain(value, joiner, limit):
-        text = value if isinstance(value, str) else ""
-        text = "".join(" " if unicodedata.category(ch).startswith(("C", "Z")) else ch for ch in text)
-        return joiner.join(text.replace("<", " ").replace(">", " ").split())[:limit]
     sender = sender if isinstance(sender, dict) else {}
     contact = {"name": plain(sender.get("name"), " ", 100), "email": plain(sender.get("email"), "", 254)}
     return {k: v for k, v in contact.items() if v}
@@ -386,10 +481,19 @@ DRAFT_PROMPT = ("Write the next reply of the team to the customer in this conver
                 "sends it.")
 
 
-class Drafts:
-    """Drafts the next reply to a customer message as a private note, for staff to send."""
+def waiting(messages):
+    """True when the newest message between customer and staff is the customer's: a template of
+    Chatwoot itself, such as the widget's question for an email address, answers nobody."""
+    public = [m for m in messages if not m.get("private")
+              and m.get("message_type") in (0, 1, "incoming", "outgoing")]
+    return bool(public) and public[-1].get("message_type") in (0, "incoming")
 
-    def __init__(self, bot, notes=None):
+
+class Drafts:
+    """Drafts the next reply to a customer message as a private note, for staff to send; with
+    triage on, sorts each new conversation first."""
+
+    def __init__(self, bot, notes=None, facts=None):
         self.bot = bot
         c = bot.config
         self.config = c
@@ -397,6 +501,9 @@ class Drafts:
         self.locks = {}
         self.locks_lock = threading.Lock()
         self.seen = []
+        # conversation -> (failures, not before): the sweep waits longer after each failure
+        self.retry = {}
+        self.triage = Triage(self, facts) if c.triage_enabled else None
 
     def wanted(self, event):
         """Incoming customer messages of the listed inboxes."""
@@ -423,16 +530,87 @@ class Drafts:
         account = (event.get("account") or {}).get("id")
         conv = event["conversation"]["id"]
         with self.lock((account, conv)):
-            self.draft(account, conv, message_id, event.get("sender"))
+            try:
+                if self.process(account, conv, message_id, event.get("sender")):
+                    self.retry.pop((account, conv), None)
+            except Exception as e:  # the sweep tries again
+                LOG.warning("conversation %s: not done: %s", conv, e)
 
-    def draft(self, account, conv, message_id, sender=None):
-        path = f"/api/v1/accounts/{account}/conversations/{conv}/messages"
-        messages = self.notes.get(path).get("payload") or []
+    def unfinished(self, conv):
+        """A conversation of Chatwoot's list without the triage label, or whose newest message
+        is the customer's: the sweep looks at it."""
+        if self.triage and self.config.triage_label not in (conv.get("labels") or []):
+            return True
+        last = conv.get("last_non_activity_message") or {}
+        # after a template the customer may still wait: process() reads the messages
+        return last.get("message_type") in (0, 3, "incoming", "template") and not last.get("private")
+
+    def sweep(self, account, conv):
+        """The sweep's turn on one conversation: skipped while a webhook works on it, and for a
+        while after a failure (1, 2, 4 ... minutes, at most an hour)."""
+        lock = self.lock((account, conv))
+        if not lock.acquire(blocking=False):
+            return
+        try:
+            failures, until = self.retry.get((account, conv), (0, 0.0))
+            if time.time() < until:
+                return
+            try:
+                done = self.process(account, conv)
+            except Exception as e:  # tried again after the pause
+                LOG.warning("conversation %s: sweep failed: %s", conv, e)
+                done = False
+            if done:
+                self.retry.pop((account, conv), None)
+            else:
+                self.retry[(account, conv)] = (failures + 1, time.time() + min(60 * 2 ** failures, 3600))
+        finally:
+            lock.release()
+
+    def drafted(self, messages, newest):
+        """True when a draft follows the customer's newest message."""
+        heading = self.config.draft_heading
+        return any(m.get("private") and (m.get("content") or "").startswith(heading)
+                   and isinstance(m.get("id"), int) and m["id"] > newest for m in messages)
+
+    def process(self, account, conv, message_id=None, sender=None):
+        """The triage of a conversation without the triage label, then a draft for the newest
+        customer message unless it has one. message_id is the webhook's message, drafted only
+        while it is the newest; without it (the sweep) a draft is written only while the
+        customer waits. False when the agent failed."""
+        base = f"/api/v1/accounts/{int(account)}/conversations/{int(conv)}"
+        messages = self.notes.get(base + "/messages").get("payload") or []
         incoming = [m.get("id") for m in messages if m.get("message_type") in (0, "incoming") and not m.get("private")]
+        newest = incoming[-1] if incoming else None
         # a customer who writes again gets one draft, for the newest message
+        if message_id is not None and newest != message_id:
+            LOG.info("conversation %s: newer message than %s, no draft", conv, message_id)
+            return True
+        # the sweep leaves a conversation alone once staff answered the customer
+        if newest is None or (message_id is None and not waiting(messages)):
+            return True
+        wanted = not self.drafted(messages, newest)
+        done = True
+        if self.triage:
+            conversation = self.notes.get(base)
+            if self.triage.needed(conversation):
+                contact = clean_contact(sender or (conversation.get("meta") or {}).get("sender"))
+                done = self.triage.run(account, conv, conversation, messages, contact)
+                # the draft reads the triage note, with the tenant facts
+                messages = None
+        if not wanted:
+            return done
+        return self.draft(account, conv, newest, sender, messages) and done
+
+    def draft(self, account, conv, message_id, sender=None, messages=None):
+        """Writes the draft; False when the agent failed."""
+        path = f"/api/v1/accounts/{int(account)}/conversations/{int(conv)}/messages"
+        if messages is None:
+            messages = self.notes.get(path).get("payload") or []
+        incoming = [m.get("id") for m in messages if m.get("message_type") in (0, "incoming") and not m.get("private")]
         if incoming and incoming[-1] != message_id:
             LOG.info("conversation %s: newer message than %s, no draft", conv, message_id)
-            return
+            return True
         heading = self.config.draft_heading
         earlier = [m for m in messages if not (m.get("private") and (m.get("content") or "").startswith(heading))]
         # the sender lets the agent look the customer up (Chatwoot's contact, from the mail sender)
@@ -447,13 +625,359 @@ class Drafts:
             reply, _ = self.bot.ask(text, None, metadata)
         except Exception as e:  # staff answer without a draft
             LOG.warning("conversation %s: no draft, agent failed: %s", conv, e)
-            return
+            return False
         if not reply.strip():
             LOG.info("conversation %s: agent drafted nothing", conv)
-            return
+            return True
         self.notes.post(path, {"content": heading + "\n\n" + reply.strip(),
                                "message_type": "outgoing", "private": True})
         LOG.info("conversation %s: draft written", conv)
+        return True
+
+
+TRIAGE_PROMPT = ("Sort this customer conversation for the team. Answer with exactly these two lines "
+                 "and nothing else:\nCATEGORY: <one name of the list below>\nSUMMARY: <one or two "
+                 "sentences in English for the staff member who takes over: what the customer asks or "
+                 "reports, and what is still open>")
+MAX_SUMMARY = 600
+
+
+def parse_triage(answer, names):
+    """The category and summary in the agent's answer; the category is None when the answer
+    names none of names."""
+    category, summary, next_summary = None, "", False
+    for line in (answer or "").splitlines():
+        line = line.replace("*", "").replace("`", "").strip()
+        if next_summary and line:
+            summary, next_summary = plain(line, " ", MAX_SUMMARY), False
+            continue
+        key, sep, value = line.partition(":")
+        key = key.strip().lower()
+        if not sep:
+            continue
+        if key == "category" and category is None:
+            word = re.match(r"\s*([\w-]+)", value)
+            if word and word.group(1).lower() in names:
+                category = word.group(1).lower()
+        elif key == "summary" and not summary:
+            summary = plain(value, " ", MAX_SUMMARY)
+            next_summary = not summary
+    return category, summary
+
+
+class Triage:
+    """Sorts a new conversation: a category label, the category's team and a private note with
+    a summary and the tenant facts. The triage label is set last: it marks the work done."""
+
+    def __init__(self, drafts, facts=None):
+        self.bot = drafts.bot
+        self.config = drafts.config
+        self.notes = drafts.notes
+        self.facts = facts
+
+    def needed(self, conversation):
+        return self.config.triage_label not in (conversation.get("labels") or [])
+
+    def ask(self, account, conv, messages, contact, facts):
+        """(category or None, summary, failure) of the agent's answer."""
+        c = self.config
+        own = (c.draft_heading, c.triage_heading)
+        earlier = [m for m in messages if not (m.get("private") and (m.get("content") or "").startswith(own))]
+        kinds = "\n".join("- " + k["name"] + (": " + k["description"] if k["description"] else "") for k in c.categories)
+        customer = contact_line(contact)
+        text = (c.triage_instructions or TRIAGE_PROMPT) + "\n\nCategories:\n" + kinds + \
+            ("\n\n" + customer if customer else "") + ("\n\n" + facts if facts else "") + \
+            "\n\nConversation:\n" + (transcript({"messages": earlier}) or "(no messages)")
+        metadata = {"chatwoot": {"triage": True, "account": account, "conversation": conv, "contact": contact}}
+        try:
+            answer, _ = self.bot.ask(text, None, metadata)
+        except Exception as e:  # the fallback team takes it
+            LOG.warning("conversation %s: no triage, agent failed: %s", conv, e)
+            return None, "", "the agent did not answer"
+        category, summary = parse_triage(answer, [k["name"] for k in c.categories])
+        return category, summary, "" if category else "the agent named no category"
+
+    def route(self, account, conv, conversation, team):
+        """Gives the conversation to the team; a team or assignee it already has stays."""
+        if not team:
+            return "no team"
+        meta = conversation.get("meta") or {}
+        if meta.get("team"):
+            return "team kept: " + plain((meta["team"] or {}).get("name"), " ", 60)
+        if meta.get("assignee"):
+            return "assignee kept"
+        teams = self.notes.get(f"/api/v1/accounts/{int(account)}/teams")
+        teams = teams if isinstance(teams, list) else teams.get("payload") or []
+        ids = [t.get("id") for t in teams if isinstance(t, dict) and str(t.get("name", "")).lower() == team]
+        if not ids or type(ids[0]) is not int:
+            return f"no team {team} in Chatwoot"
+        try:
+            self.notes.team(f"/api/v1/accounts/{int(account)}/conversations/{int(conv)}/assignments", ids[0])
+        except urllib.error.HTTPError as e:
+            LOG.warning("conversation %s: team %s not set: %s", conv, team, e)
+            return f"team {team} not set (HTTP {e.code})"
+        return f"to team {team}"
+
+    def run(self, account, conv, conversation, messages, contact):
+        c = self.config
+        facts = self.facts.collect(contact.get("email")) if self.facts else ""
+        category, summary, failure = self.ask(account, conv, messages, contact, facts)
+        category = category or c.triage_fallback
+        kind = next(k for k in c.categories if k["name"] == category)
+        route = self.route(account, conv, conversation, kind["team"])
+        base = f"/api/v1/accounts/{int(account)}/conversations/{int(conv)}"
+        head = f"{c.triage_heading} {category}" + (f" (fallback: {failure})" if failure else "") + ", " + route
+        self.notes.post(base + "/messages", {
+            "content": head + "\nSummary: " + (summary or "none") + ("\n\n" + facts if facts else ""),
+            "message_type": "outgoing", "private": True})
+        labels = [x for x in conversation.get("labels") or [] if isinstance(x, str) and LABEL.match(x)]
+        labels += [x for x in (category, c.triage_label) if x not in labels]
+        self.notes.label(base + "/labels", labels)
+        LOG.info("conversation %s: triaged as %s, %s", conv, category, route)
+        return not failure.startswith("the agent did not")
+
+
+MAX_FACTS = 4000
+FACT_NAMESPACES = 8
+# one namespace's line, so the cap of MAX_FACTS keeps them all
+MAX_NAMESPACE_FACTS = 400
+
+
+def parse_time(value):
+    """Seconds since the epoch of an RFC 3339 time, or None."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def ago(then, now):
+    seconds = max(0, now - then)
+    if seconds < 3600:
+        return f"{int(seconds // 60)} min ago"
+    if seconds < 2 * 86400:
+        return f"{int(seconds // 3600)} h ago"
+    return f"{int(seconds // 86400)} days ago"
+
+
+def more(items, limit):
+    """The first limit items joined, and how many are left out."""
+    return ", ".join(items[:limit]) + (f" and {len(items) - limit} more" if len(items) > limit else "")
+
+
+class TenantFacts:
+    """Facts about the tenant of a contact's email, from the Kubernetes API of this cluster. The
+    tenant comes from the contact's email alone, never from what the customer writes; no Secret
+    and no ConfigMap is read."""
+
+    def __init__(self, config, get=None):
+        self.config = config
+        self.get = get or self.kube
+        self.cache = ([], 0.0)
+        self.lock = threading.Lock()
+
+    def kube(self, path):
+        c = self.config
+        context = ssl.create_default_context(cafile=c.kube_ca_file or None)
+        req = urllib.request.Request(c.kube_url + path, headers={
+            "Accept": "application/json", "Authorization": "Bearer " + read_file(c.kube_token_file)})
+        with urllib.request.urlopen(req, timeout=10, context=context) as resp:
+            return json.loads(resp.read())
+
+    def namespaces(self):
+        """Every namespace of the cluster, read at most every 5 minutes."""
+        with self.lock:
+            items, fetched = self.cache
+            if time.time() - fetched > 300:
+                items = self.get("/api/v1/namespaces").get("items") or []
+                self.cache = (items, time.time())
+            return items
+
+    def tenants(self, email):
+        """{tenant: its namespaces} of the namespaces whose annotation names this email."""
+        c = self.config
+        items = self.namespaces()
+        found = {}
+        for ns in items:
+            meta = ns.get("metadata") or {}
+            owners = str((meta.get("annotations") or {}).get(c.facts_annotation) or "")
+            tenant = (meta.get("labels") or {}).get(c.facts_tenant_label)
+            if tenant and email in {o.strip().lower() for o in owners.split(",")}:
+                found[tenant] = []
+        for ns in items:
+            meta = ns.get("metadata") or {}
+            tenant = (meta.get("labels") or {}).get(c.facts_tenant_label)
+            if tenant in found:
+                found[tenant].append(meta.get("name") or "")
+        return {t: sorted(n) for t, n in found.items()}
+
+    def collect(self, email):
+        """The facts as text for the triage note and the draft, or empty without an email."""
+        email = (email or "").strip().lower()
+        if "@" not in email:
+            return ""
+        head = f"Tenant facts for {email} (read from the cluster by the bridge; the sender's address is not verified):"
+        try:
+            tenants = self.tenants(email)
+        except Exception as e:  # facts help the triage, they never stop it
+            LOG.warning("tenant facts: namespaces not read: %s", e)
+            return head + "\nnot available: the cluster did not answer"
+        if not tenants:
+            return head + "\nno tenant has this email"
+        if len(tenants) > 1:
+            return head + "\nthe email belongs to several tenants, nothing read: " + more(sorted(tenants), 10)
+        (tenant, names), = tenants.items()
+        now = time.time()
+        lines = [head, f"tenant {plain(tenant, '', 63)}, namespaces " + more(names, 20)]
+        # backups first: the cap cuts from the end
+        lines += self.backups(names, now)
+        for ns in names[:FACT_NAMESPACES]:
+            parts = []
+            for read in (self.pods, self.cronjobs, self.claims, self.events):
+                try:
+                    parts += read(ns, now)
+                except Exception as e:  # one part not readable, for example without the right to list it
+                    LOG.info("tenant facts: %s of %s not read: %s", read.__name__, ns, e)
+                    parts.append(read.__name__ + " not readable")
+            line = f"- {ns}: " + "; ".join(parts)
+            lines.append(line if len(line) <= MAX_NAMESPACE_FACTS else line[:MAX_NAMESPACE_FACTS - 4] + " ...")
+        if len(names) > FACT_NAMESPACES:
+            lines.append(f"- {len(names) - FACT_NAMESPACES} more namespaces not read")
+        return "\n".join(lines)[:MAX_FACTS]
+
+    def pods(self, ns, now):
+        items = self.get(f"/api/v1/namespaces/{urllib.parse.quote(ns)}/pods").get("items") or []
+        live = [p for p in items if (p.get("status") or {}).get("phase") != "Succeeded"]
+        bad = []
+        for p in live:
+            status = p.get("status") or {}
+            containers = status.get("containerStatuses") or []
+            if status.get("phase") == "Running" and containers and all(x.get("ready") for x in containers):
+                continue
+            states = [x.get("state") or {} for x in containers]
+            reasons = [(s.get("waiting") or {}).get("reason") or (s.get("terminated") or {}).get("reason") for s in states]
+            reason = next((r for r in reasons if r), status.get("reason") or status.get("phase") or "unknown")
+            restarts = sum(int(x.get("restartCount") or 0) for x in containers)
+            name = plain((p.get("metadata") or {}).get("name"), "", 80)
+            bad.append(f"{name} {plain(reason, ' ', 40)}" + (f" ({restarts} restarts)" if restarts else ""))
+        out = [f"{len(live) - len(bad)} of {len(live)} pods ready"]
+        if bad:
+            out.append("not ready: " + more(bad, 5))
+        return out
+
+    def cronjobs(self, ns, now):
+        items = self.get(f"/apis/batch/v1/namespaces/{urllib.parse.quote(ns)}/cronjobs").get("items") or []
+        out = []
+        for j in items[:5]:
+            spec, status = j.get("spec") or {}, j.get("status") or {}
+            last = parse_time(status.get("lastSuccessfulTime"))
+            out.append(f"CronJob {plain((j.get('metadata') or {}).get('name'), '', 80)} "
+                       f"({plain(spec.get('schedule'), ' ', 40)})" + (" suspended," if spec.get("suspend") else "")
+                       + (f" last success {ago(last, now)}" if last else " no success yet"))
+        if len(items) > 5:
+            out.append(f"{len(items) - 5} more CronJobs")
+        return out
+
+    def claims(self, ns, now):
+        items = self.get(f"/api/v1/namespaces/{urllib.parse.quote(ns)}/persistentvolumeclaims").get("items") or []
+        unbound = [f"{plain((c.get('metadata') or {}).get('name'), '', 80)} {plain((c.get('status') or {}).get('phase'), '', 20)}"
+                   for c in items if (c.get("status") or {}).get("phase") != "Bound"]
+        return ["volume claims not bound: " + more(unbound, 5)] if unbound else []
+
+    def events(self, ns, now):
+        path = f"/api/v1/namespaces/{urllib.parse.quote(ns)}/events?fieldSelector=" + urllib.parse.quote("type=Warning")
+        # the same warning about the same object counts once, with its newest time
+        seen = {}
+        for e in self.get(path).get("items") or []:
+            if e.get("reason") in self.config.facts_ignore_reasons:
+                continue
+            when = parse_time(e.get("lastTimestamp")) or parse_time(e.get("eventTime")) \
+                or parse_time((e.get("metadata") or {}).get("creationTimestamp"))
+            if not when or now - when > self.config.facts_event_hours * 3600:
+                continue
+            obj = e.get("involvedObject") or {}
+            text = (f"warning {plain(e.get('reason'), ' ', 40)} {plain(obj.get('kind'), '', 30)}/"
+                    f"{plain(obj.get('name'), '', 80)}: {plain(e.get('message'), ' ', 160)}")
+            last, count = seen.get(text, (0, 0))
+            seen[text] = (max(last, when), count + int(e.get("count") or 1))
+        recent = sorted(seen.items(), key=lambda x: -x[1][0])
+        out = [f"{text} ({count}x, {ago(when, now)})" for text, (when, count) in recent[:4]]
+        if len(recent) > 4:
+            out.append(f"{len(recent) - 4} more warnings")
+        return out
+
+    def backups(self, names, now):
+        """The Velero schedules that cover the tenant's namespaces, with their newest backup."""
+        velero = self.config.facts_velero_namespace
+        if not velero:
+            return []
+        base = f"/apis/velero.io/v1/namespaces/{urllib.parse.quote(velero)}"
+        try:
+            schedules = self.get(base + "/schedules").get("items") or []
+        except Exception as e:  # no Velero, or no right to read it
+            LOG.info("tenant facts: backup schedules not read: %s", e)
+            return ["- backups not readable"]
+        lines = []
+        for s in schedules:
+            spec = s.get("spec") or {}
+            covered = set((spec.get("template") or {}).get("includedNamespaces") or []) & set(names)
+            if not covered:
+                continue
+            name = (s.get("metadata") or {}).get("name") or ""
+            line = f"- backup schedule {plain(name, '', 80)} ({plain(spec.get('schedule'), ' ', 40)})" \
+                + (" paused" if spec.get("paused") else "")
+            try:
+                got = self.get(base + "/backups?labelSelector=" + urllib.parse.quote("velero.io/schedule-name=" + name))
+                runs = [(parse_time((b.get("metadata") or {}).get("creationTimestamp")) or 0, b) for b in got.get("items") or []]
+            except Exception as e:  # the schedule still shows
+                LOG.info("tenant facts: backups of %s not read: %s", name, e)
+                runs = None
+            if runs is None:
+                line += ": backups not readable"
+            elif not runs:
+                line += ": no backup yet"
+            else:
+                created, newest = max(runs, key=lambda r: r[0])
+                status = newest.get("status") or {}
+                done = parse_time(status.get("completionTimestamp")) or created
+                line += f": newest backup {plain(status.get('phase') or 'unknown', '', 30)}, {ago(done, now)}"
+            lines.append(line)
+            if len(lines) == 8:
+                break
+        return lines or ["- no backup schedule covers these namespaces"]
+
+
+class Sweeper:
+    """Looks at the open conversations of the draft inboxes every SWEEP_SECONDS and does what a
+    webhook missed: a restart, a lost delivery, an agent that was down."""
+
+    def __init__(self, drafts):
+        self.drafts = drafts
+        self.config = drafts.config
+        self.notes = drafts.notes
+
+    def run_once(self):
+        c = self.config
+        account = c.account_id
+        inboxes = self.notes.get(f"/api/v1/accounts/{account}/inboxes").get("payload") or []
+        wanted = {i.get("id") for i in inboxes if "*" in c.draft_inboxes or i.get("name") in c.draft_inboxes}
+        # updated_within lists every open conversation changed since then, unpaged
+        got = self.notes.get(f"/api/v1/accounts/{account}/conversations?status=open&updated_within={c.sweep_max_age}")
+        now = time.time()
+        for conv in (got.get("data") or {}).get("payload") or []:
+            if conv.get("inbox_id") in wanted and isinstance(conv.get("id"), int) \
+                    and now - (conv.get("last_activity_at") or 0) <= c.sweep_max_age and self.drafts.unfinished(conv):
+                self.drafts.sweep(account, conv["id"])
+
+    def loop(self):
+        while True:
+            time.sleep(self.config.sweep_seconds)
+            try:
+                self.run_once()
+            except Exception as e:  # the thread must live on for the next round
+                LOG.warning("sweep failed: %s", e)
 
 
 def b64url(text):
@@ -683,12 +1207,17 @@ def main():
     if env.get("STAFF_ISSUER"):
         staff = StaffTokens(env["STAFF_ISSUER"], env.get("STAFF_CLIENTS", "").split(","),
                             env.get("STAFF_GROUPS", "").split(","), env.get("STAFF_GROUPS_CLAIM", "groups"))
-    drafts = Drafts(bot) if bot and bot.config.drafts_enabled else None
+    facts = TenantFacts(bot.config) if bot and bot.config.facts_annotation else None
+    drafts = Drafts(bot, facts=facts) if bot and bot.config.drafts_enabled else None
+    sweep = bool(drafts and bot.config.sweep_seconds > 0)
+    if sweep:
+        threading.Thread(target=Sweeper(drafts).loop, daemon=True).start()
     if bot and (bot.config.bot_enabled or staff or drafts):
         pool = ThreadPoolExecutor(max_workers=8)
         server = http.server.ThreadingHTTPServer(("0.0.0.0", bot.config.port), make_handler(bot, pool, staff, drafts))
-        LOG.info("agent bridge listening on %s, agent %s, auth %s, bot %s, panel %s, drafts %s", bot.config.port,
-                 bot.config.a2a_url, bot.config.auth, bot.config.bot_enabled, staff is not None, drafts is not None)
+        LOG.info("agent bridge listening on %s, agent %s, auth %s, bot %s, panel %s, drafts %s, triage %s, "
+                 "facts %s, sweep %s", bot.config.port, bot.config.a2a_url, bot.config.auth, bot.config.bot_enabled,
+                 staff is not None, drafts is not None, bool(drafts and drafts.triage), facts is not None, sweep)
         server.serve_forever()
     else:
         threading.Event().wait()

@@ -126,6 +126,18 @@ spec:
         matchLabels:
           kubernetes.io/metadata.name: {{ . }}
   {{- end }}
+  {{- if .Values.tenantFacts.enabled }}
+  # the Kubernetes API, for the tenant facts
+  - ports:
+    {{- range .Values.networkPolicy.apiServerEgress.ports }}
+    - protocol: TCP
+      port: {{ . }}
+    {{- end }}
+    {{- with .Values.networkPolicy.apiServerEgress.to }}
+    to:
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
 {{- end }}
 {{- if .Values.odoo.enabled }}
 ---

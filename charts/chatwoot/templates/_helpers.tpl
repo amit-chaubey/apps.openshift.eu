@@ -27,6 +27,42 @@ identity provider can deliver to or verify, so no login of a person can match it
 {{- fail "draftAgent.email must be an address under the reserved domain .invalid" }}
 {{- end }}
 {{- end }}
+{{- $t := .Values.triage }}
+{{- if $t.enabled }}
+{{- if not .Values.draftAgent.enabled }}
+{{- fail "triage.enabled needs draftAgent.enabled: the triage runs before each draft" }}
+{{- end }}
+{{- if not $t.categories }}
+{{- fail "triage.categories is required with triage.enabled" }}
+{{- end }}
+{{- $names := list }}
+{{- range $t.categories }}
+{{- if not (regexMatch "^[a-z0-9_-]{1,64}$" (toString .name)) }}
+{{- fail (printf "triage.categories: name %q is no label of a-z, 0-9, - and _" (toString .name)) }}
+{{- end }}
+{{- $names = append $names .name }}
+{{- end }}
+{{- if ne (len $names) (len (uniq $names)) }}
+{{- fail "triage.categories names a category twice" }}
+{{- end }}
+{{- if not (has $t.fallback $names) }}
+{{- fail "triage.fallback must be the name of one of triage.categories" }}
+{{- end }}
+{{- if or (not (regexMatch "^[a-z0-9_-]{1,64}$" $t.label)) (has $t.label $names) }}
+{{- fail "triage.label must be a label of a-z, 0-9, - and _ that names no category" }}
+{{- end }}
+{{- if or (not $t.heading) (hasPrefix $t.heading .Values.draftAgent.heading) (hasPrefix .Values.draftAgent.heading $t.heading) }}
+{{- fail "triage.heading must not start like draftAgent.heading: the bridge tells its notes apart by them" }}
+{{- end }}
+{{- end }}
+{{- if .Values.tenantFacts.enabled }}
+{{- if not $t.enabled }}
+{{- fail "tenantFacts.enabled needs triage.enabled: the facts go into the triage note" }}
+{{- end }}
+{{- if not (and .Values.tenantFacts.emailAnnotation .Values.tenantFacts.tenantLabel) }}
+{{- fail "tenantFacts.emailAnnotation and tenantFacts.tenantLabel are required with tenantFacts.enabled" }}
+{{- end }}
+{{- end }}
 {{- if .Values.odoo.enabled }}
 {{- if .Values.agentBridge.standalone.enabled }}
 {{- fail "odoo.enabled and agentBridge.standalone.enabled exclude each other" }}

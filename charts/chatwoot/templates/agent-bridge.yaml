@@ -92,6 +92,44 @@ spec:
           value: {{ $d.heading | quote }}
         - name: DRAFT_INSTRUCTIONS
           value: {{ $d.instructions | quote }}
+        - name: CHATWOOT_ACCOUNT_ID
+          value: {{ .Values.account.id | quote }}
+        - name: SWEEP_SECONDS
+          value: {{ $d.sweepSeconds | quote }}
+        - name: SWEEP_MAX_AGE_HOURS
+          value: {{ $d.sweepMaxAgeHours | quote }}
+        {{- end }}
+        {{- if .Values.triage.enabled }}
+        {{- $t := .Values.triage }}
+        # each new conversation of the draft inboxes gets a category label, a team and a note
+        - name: TRIAGE_CATEGORIES
+          value: {{ toJson $t.categories | quote }}
+        - name: TRIAGE_FALLBACK
+          value: {{ $t.fallback | quote }}
+        - name: TRIAGE_LABEL
+          value: {{ $t.label | quote }}
+        - name: TRIAGE_HEADING
+          value: {{ $t.heading | quote }}
+        - name: TRIAGE_INSTRUCTIONS
+          value: {{ $t.instructions | quote }}
+        {{- end }}
+        {{- if .Values.tenantFacts.enabled }}
+        {{- $f := .Values.tenantFacts }}
+        # facts about the contact's tenant, read with this pod's ServiceAccount
+        - name: FACTS_EMAIL_ANNOTATION
+          value: {{ $f.emailAnnotation | quote }}
+        - name: FACTS_TENANT_LABEL
+          value: {{ $f.tenantLabel | quote }}
+        - name: FACTS_VELERO_NAMESPACE
+          value: {{ $f.veleroNamespace | quote }}
+        - name: FACTS_EVENT_HOURS
+          value: {{ $f.eventHours | quote }}
+        - name: FACTS_IGNORE_EVENT_REASONS
+          value: {{ join "," $f.ignoreEventReasons | quote }}
+        - name: KUBE_TOKEN_FILE
+          value: /var/run/secrets/kube/token
+        - name: KUBE_CA_FILE
+          value: /var/run/secrets/kube/ca.crt
         {{- end }}
         {{- if and $standalone .Values.copilotPanel.enabled }}
         {{- $s := .Values.agentBridge.standalone.staff }}
@@ -123,6 +161,11 @@ spec:
           mountPath: /etc/chatwoot-draft
           readOnly: true
         {{- end }}
+        {{- if .Values.tenantFacts.enabled }}
+        - name: kube
+          mountPath: /var/run/secrets/kube
+          readOnly: true
+        {{- end }}
         {{- include "wrapper.agentTokenMount" . | nindent 8 }}
         readinessProbe:
           httpGet:
@@ -152,6 +195,21 @@ spec:
         secret:
           secretName: chatwoot-draft
           defaultMode: 0440
+      {{- end }}
+      {{- if .Values.tenantFacts.enabled }}
+      # a token of the ServiceAccount for the Kubernetes API, renewed by the kubelet
+      - name: kube
+        projected:
+          defaultMode: 0440
+          sources:
+          - serviceAccountToken:
+              expirationSeconds: 3600
+              path: token
+          - configMap:
+              name: kube-root-ca.crt
+              items:
+              - key: ca.crt
+                path: ca.crt
       {{- end }}
       {{- include "wrapper.agentTokenVolume" . | nindent 6 }}
 ---

@@ -264,4 +264,33 @@ fails "panel without sso" "copilotPanel.enabled needs sso.enabled" --set copilot
 fails "assertion without client" "tokenUrl and agent.auth.clientId are required" --set agentBot.enabled=true --set agent.url=https://a.example.com/ --set agent.auth.type=clientAssertion --set agent.auth.audience=x
 fails "token without audience" "agent.auth.audience is required" --set agentBot.enabled=true --set agent.url=https://a.example.com/ --set agent.auth.type=serviceAccountToken
 
+# --- AI triage: categories, teams and tenant facts on the draft path
+TRIAGE=("${DRAFT[@]}" --set triage.enabled=true --set triage.fallback=engineering
+  --set-json 'triage.categories=[{"name":"engineering","team":"Engineering","description":"errors"},{"name":"general"}]'
+  --set-json 'triage.teams={"engineering":["ann@example.com"],"sales":["bob@example.com"]}')
+FACTS=(--set tenantFacts.enabled=true --set tenantFacts.emailAnnotation=example.com/email --set tenantFacts.tenantLabel=example.com/tenant)
+OUT=$(render "${DRAFT[@]}")
+check "sweep with drafts" 'env("chatwoot-agent-bridge", "agent-bot")["SWEEP_SECONDS"] == "60" and env("chatwoot-agent-bridge", "agent-bot")["CHATWOOT_ACCOUNT_ID"] == "1" and "TRIAGE_CATEGORIES" not in env("chatwoot-agent-bridge", "agent-bot") and "CHATWOOT_TRIAGE_LABELS" not in env("chatwoot-prepare-1", "prepare")'
+check "no kube access without facts" 'not any(v["name"] == "kube" for v in pod("chatwoot-agent-bridge")["volumes"]) and pod("chatwoot-agent-bridge")["automountServiceAccountToken"] is False and "6443" not in refs(obj("NetworkPolicy", "chatwoot-agent-bridge"))'
+OUT=$(render "${TRIAGE[@]}")
+check "triage bridge env" 'json.loads(env("chatwoot-agent-bridge", "agent-bot")["TRIAGE_CATEGORIES"])[0] == {"name": "engineering", "team": "Engineering", "description": "errors"} and env("chatwoot-agent-bridge", "agent-bot")["TRIAGE_FALLBACK"] == "engineering" and env("chatwoot-agent-bridge", "agent-bot")["TRIAGE_LABEL"] == "ai-triaged"'
+check "triage job: labels and teams" 'env("chatwoot-prepare-1", "prepare")["CHATWOOT_TRIAGE_LABELS"] == "engineering,general,ai-triaged" and json.loads(env("chatwoot-prepare-1", "prepare")["CHATWOOT_TRIAGE_TEAMS"]) == {"engineering": ["ann@example.com"], "sales": ["bob@example.com"]}'
+check "triage without facts reads no cluster" 'not any(v["name"] == "kube" for v in pod("chatwoot-agent-bridge")["volumes"]) and "FACTS_EMAIL_ANNOTATION" not in env("chatwoot-agent-bridge", "agent-bot")'
+OUT=$(render "${TRIAGE[@]}" "${FACTS[@]}" --set-json 'networkPolicy.apiServerEgress.to=[{"ipBlock":{"cidr":"172.20.0.1/32"}}]')
+check "facts env" 'env("chatwoot-agent-bridge", "agent-bot")["FACTS_EMAIL_ANNOTATION"] == "example.com/email" and env("chatwoot-agent-bridge", "agent-bot")["KUBE_TOKEN_FILE"] == "/var/run/secrets/kube/token" and env("chatwoot-agent-bridge", "agent-bot")["FACTS_VELERO_NAMESPACE"] == "" and env("chatwoot-agent-bridge", "agent-bot")["FACTS_IGNORE_EVENT_REASONS"] == ""'
+check "facts token: projected, cluster CA" '[v for v in pod("chatwoot-agent-bridge")["volumes"] if v["name"] == "kube"][0]["projected"]["sources"] == [{"serviceAccountToken": {"expirationSeconds": 3600, "path": "token"}}, {"configMap": {"name": "kube-root-ca.crt", "items": [{"key": "ca.crt", "path": "ca.crt"}]}}] and pod("chatwoot-agent-bridge")["automountServiceAccountToken"] is False'
+check "facts egress: the API alone" 'obj("NetworkPolicy", "chatwoot-agent-bridge")["spec"]["egress"][-1] == {"ports": [{"protocol": "TCP", "port": 6443}], "to": [{"ipBlock": {"cidr": "172.20.0.1/32"}}]}'
+check "facts: no cluster role from the chart" 'not objs("ClusterRole") and not objs("ClusterRoleBinding")'
+OUT=$(render "${TRIAGE[@]}" "${FACTS[@]}" --set-json 'tenantFacts.ignoreEventReasons=["PolicyViolation","FailedMount"]')
+check "facts ignored reasons" 'env("chatwoot-agent-bridge", "agent-bot")["FACTS_IGNORE_EVENT_REASONS"] == "PolicyViolation,FailedMount"'
+fails "triage without drafts" "triage.enabled needs draftAgent.enabled" --set triage.enabled=true
+fails "triage without categories" "triage.categories is required" "${DRAFT[@]}" --set triage.enabled=true
+fails "triage category no label" "does not match pattern" "${TRIAGE[@]}" --set-json 'triage.categories=[{"name":"Engi neering"}]' --set triage.fallback=x
+fails "triage category twice" "names a category twice" "${TRIAGE[@]}" --set-json 'triage.categories=[{"name":"a"},{"name":"a"}]' --set triage.fallback=a
+fails "triage fallback unknown" "triage.fallback must be the name" "${TRIAGE[@]}" --set triage.fallback=weather
+fails "triage label is a category" "names no category" "${TRIAGE[@]}" --set triage.label=general
+fails "triage heading like the draft's" "must not start like draftAgent.heading" "${TRIAGE[@]}" --set "triage.heading=AI draft (check before sending): triage"
+fails "facts without triage" "tenantFacts.enabled needs triage.enabled" "${DRAFT[@]}" "${FACTS[@]}"
+fails "facts without annotation" "tenantFacts.emailAnnotation and tenantFacts.tenantLabel are required" "${TRIAGE[@]}" --set tenantFacts.enabled=true
+
 [ $fail = 0 ] && echo "PASS charts/chatwoot render" || exit 1

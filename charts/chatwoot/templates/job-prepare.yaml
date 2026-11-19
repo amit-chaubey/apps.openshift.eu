@@ -118,6 +118,24 @@ spec:
               name: chatwoot-draft
               key: draft-webhook-secret
         {{- end }}
+        {{- if .Values.triage.enabled }}
+        {{- $labels := list }}
+        {{- $teams := dict }}
+        {{- range .Values.triage.categories }}
+        {{- $labels = append $labels .name }}
+        {{- if .team }}
+        {{- $_ := set $teams (lower .team) list }}
+        {{- end }}
+        {{- end }}
+        {{- range $team, $emails := .Values.triage.teams }}
+        {{- $_ := set $teams (lower $team) $emails }}
+        {{- end }}
+        # the labels of the categories and of sorted conversations; the teams with their members
+        - name: CHATWOOT_TRIAGE_LABELS
+          value: {{ join "," (append $labels .Values.triage.label) | quote }}
+        - name: CHATWOOT_TRIAGE_TEAMS
+          value: {{ toJson $teams | quote }}
+        {{- end }}
         {{- if .Values.odoo.enabled }}
         - name: CHATWOOT_ODOO_BRIDGE_EMAIL
           value: odoo-bridge@chatwoot.invalid

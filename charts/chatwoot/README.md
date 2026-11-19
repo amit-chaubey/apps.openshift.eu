@@ -180,6 +180,85 @@ stays with staff and no draft reaches the customer.
 - The bridge reaches Chatwoot web, DNS and the agent alone (`networkPolicy.agentEgress`).
   Name the `/32` addresses of the agent and its token endpoint there to keep the drafts
   from any other AI endpoint.
+- Every `draftAgent.sweepSeconds` the bridge lists the open conversations of the inboxes
+  that changed in the last `draftAgent.sweepMaxAgeHours` and drafts for each customer
+  message that waits without a draft: a webhook lost during a restart, or an agent that was
+  down. It skips a conversation a webhook works on, and after a failure it waits 1, 2, 4 ...
+  minutes, at most an hour, before it tries that conversation again. A conversation whose
+  newest public message is from staff is left alone.
+
+### AI triage
+
+With `triage.enabled` the agent sorts each new conversation of `draftAgent.inboxes` before
+the first draft. It answers with one of `triage.categories` and a short summary; the bridge
+then
+
+1. gives the conversation to the category's `team`, unless it already has a team or an
+   assignee. Chatwoot assigns an online member of the team who is a member of the inbox;
+   with nobody online the conversation waits in the team's view;
+2. adds a private note headed `triage.heading`: the category, where it went, the summary
+   and, with `tenantFacts.enabled`, the tenant facts. The draft that follows reads this note;
+3. adds the category label and the label `triage.label`, in that order, last. A conversation
+   without `triage.label` is sorted again, so a failed triage is repeated by the sweep, and
+   staff sort a conversation again by removing that label.
+
+An answer that names no category, or no answer at all, takes `triage.fallback`, so every
+conversation reaches a team. Customer text can steer the category, never the kind of write:
+the bridge sets a team id, labels and private notes only, never a status, a person or a
+public message.
+
+The prepare Job keeps a label per category and `triage.label`, and a team per category
+`team` and per key of `triage.teams`, created with auto assignment. It adds each email of
+`triage.teams` that has a Chatwoot user to its team and to `draftAgent.inboxes`, and it
+switches the inboxes' own auto assignment off: Chatwoot would otherwise give each new
+conversation to any online member of the inbox before the triage names its team. A user
+appears at the first login through single sign-on and joins at the next install or
+upgrade; until then an administrator adds them under Settings > Teams.
+
+### Tenant facts
+
+With `tenantFacts.enabled` the triage note carries facts about the customer's own tenant,
+read by the bridge from the Kubernetes API of this cluster:
+
+| Fact | Read from |
+| --- | --- |
+| Pods that are not ready, with reason and restarts | `pods` of each namespace |
+| Last success of each CronJob | `cronjobs` of each namespace |
+| Volume claims that are not bound | `persistentvolumeclaims` of each namespace |
+| Warning events of the last `tenantFacts.eventHours`, each once, without `tenantFacts.ignoreEventReasons` | `events` of each namespace |
+| Each Velero schedule that covers a namespace, with its newest backup | `schedules` and `backups` (`velero.io`) in `tenantFacts.veleroNamespace` |
+
+The tenant comes from the conversation contact's email alone, never from what the customer
+writes: the namespaces whose annotation `tenantFacts.emailAnnotation` holds the email
+(comma-separated for several) name the tenant in their label `tenantFacts.tenantLabel`, and
+every namespace with that label is read, at most eight. An email of no tenant or of several
+tenants gives no facts, only that line. The bridge reads no Secret and no ConfigMap. The
+sender's address of a mail or a widget form is not verified: staff check who wrote before
+they pass a fact on.
+
+A chart creates no cluster-wide role. The cluster administrator binds one to ServiceAccount
+`chatwoot-agent-bridge` of the release namespace:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chatwoot-tenant-facts
+rules:
+- apiGroups: [""]
+  resources: [namespaces, pods, events, persistentvolumeclaims]
+  verbs: [list]
+- apiGroups: [batch]
+  resources: [cronjobs]
+  verbs: [list]
+- apiGroups: [velero.io]
+  resources: [schedules, backups]
+  verbs: [list]
+```
+
+A part the bridge may not read shows as "not readable" in the note; the rest still shows.
+The bridge reaches the API through `networkPolicy.apiServerEgress`: name the endpoints of
+Service `kubernetes` in namespace `default` there.
 
 ### Bridge next to the agent
 
